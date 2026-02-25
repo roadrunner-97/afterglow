@@ -1,0 +1,53 @@
+# Build directories
+build/
+cmake-build-debug/
+cmake-build-release/
+
+# Compiled files
+*.o
+*.so
+*.a
+*.dll
+*.dylib
+
+# Qt generated files
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.moc
+*.rcc
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Executables
+lightroom_clone
+*.exe
+
+# Object files and dependency files
+*.d
+.depend/
+
+# User's recent files
+.lastOpenedPath
+
+# macOS specific
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux specific
+.directory
