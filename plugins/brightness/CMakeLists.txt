@@ -1,30 +1,21 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(BRIGHTNESS_SOURCES
-    BrightnessPlugin.cpp
-)
+add_library(brightness_effect STATIC BrightnessEffect.cpp BrightnessEffect.h)
 
-set(BRIGHTNESS_HEADERS
-    BrightnessPlugin.h
-)
+find_package(OpenCL REQUIRED)
+target_link_libraries(brightness_effect PRIVATE OpenCL::OpenCL)
+target_compile_definitions(brightness_effect PRIVATE HAVE_OPENCL)
 
-add_library(brightness_plugin SHARED ${BRIGHTNESS_SOURCES} ${BRIGHTNESS_HEADERS})
-
-target_link_libraries(brightness_plugin
+target_link_libraries(brightness_effect
     PRIVATE
         photoeditor_core
+        photoeditor_widgets
         Qt6::Core
         Qt6::Gui
 )
 
-target_include_directories(brightness_plugin
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
+target_include_directories(brightness_effect
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-set_target_properties(brightness_plugin PROPERTIES
-    AUTOMOC ON
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
-    PREFIX ""
-    SUFFIX ".so"
-)
+set_target_properties(brightness_effect PROPERTIES AUTOMOC ON)

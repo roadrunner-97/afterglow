@@ -1,1 +1,0 @@
-don't generate summary documents, i don't read them. don't lie to me, don't claim to do things you won't do, etc..

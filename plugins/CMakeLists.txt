@@ -1,5 +1,15 @@
-cmake_minimum_required(VERSION 3.16)
-
-# Add all plugin subdirectories
-add_subdirectory(grayscale)
 add_subdirectory(brightness)
+add_subdirectory(saturation)
+add_subdirectory(blur)
+add_subdirectory(grayscale)
+add_subdirectory(unsharp)
+
+# Aggregator target: link this to get all effects + their include dirs
+add_library(all_effects INTERFACE)
+target_link_libraries(all_effects INTERFACE
+    brightness_effect
+    saturation_effect
+    blur_effect
+    grayscale_effect
+    unsharp_effect
+)

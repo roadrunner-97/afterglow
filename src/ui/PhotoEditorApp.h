@@ -3,54 +3,43 @@
 
 #include <QMainWindow>
 #include <QImage>
-#include <memory>
-#include "PluginManager.h"
+#include "EffectManager.h"
+#include "ImageProcessor.h"
 
 class QLabel;
 class QScrollArea;
 class QVBoxLayout;
-class QHBoxLayout;
-class PhotoEditorPlugin;
+class QComboBox;
 
-/**
- * @brief Main application window for the photo editor
- */
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
 
 public:
-    PhotoEditorApp(QWidget *parent = nullptr);
-    ~PhotoEditorApp();
+    explicit PhotoEditorApp(EffectManager* effectManager, QWidget* parent = nullptr);
+    ~PhotoEditorApp() override = default;
 
 private slots:
     void openImage();
     void saveImage();
-    void onPluginParametersChanged();
-    void updateImagePreview();
+    void onParametersChanged();
+    void onProcessingComplete(QImage result);
 
 private:
     void setupUI();
     void setupMenuBar();
-    void createCentralWidget();
-    void loadPlugins();
-    void displayImage(const QImage &image);
-    void applyAllPlugins();
-    QImage applyPluginStack(const QImage &sourceImage);
+    void setupGpuSelector(QVBoxLayout* rightLayout);
+    void setupEffectPanels(QVBoxLayout* rightLayout);
+    void triggerReprocess();
+    void displayImage(const QImage& image);
 
-    // UI Components
-    QLabel *imageLabel;
-    QScrollArea *scrollArea;
-    QVBoxLayout *pluginControlsLayout;
-    QVBoxLayout *controlsLayout;
+    EffectManager*  m_effects;
+    ImageProcessor* m_processor;
+    QImage          m_originalImage;
+    QString         m_lastDir;
 
-    // Data members
-    QImage originalImage;
-    QImage currentImage;
-    std::unique_ptr<PluginManager> pluginManager;
-    QString lastOpenedPath;
-    
-    // Store loaded plugins in order
-    QVector<PhotoEditorPlugin*> loadedPlugins;
+    QLabel*      m_imageLabel;
+    QScrollArea* m_scrollArea;
+    QComboBox*   m_gpuSelector;
 };
 
 #endif // PHOTOEDITORAPP_H

@@ -1,4 +1,6 @@
 #include "PhotoEditorApp.h"
+#include "GpuDeviceRegistry.h"
+#include "RawLoader.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -8,288 +10,270 @@
 #include <QMenu>
 #include <QAction>
 #include <QFileDialog>
-#include <QDebug>
-#include <QDir>
+#include <QComboBox>
 #include <QFrame>
-#include <QElapsedTimer>
-#include "../core/PhotoEditorPlugin.h"
+#include <QDebug>
+#include <memory>
 
-PhotoEditorApp::PhotoEditorApp(QWidget *parent)
-    : QMainWindow(parent), pluginManager(std::make_unique<PluginManager>()) {
+PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
+    : QMainWindow(parent)
+    , m_effects(effectManager)
+    , m_processor(new ImageProcessor(this))
+    , m_imageLabel(nullptr)
+    , m_scrollArea(nullptr)
+    , m_gpuSelector(nullptr)
+{
+    connect(m_processor, &ImageProcessor::processingComplete,
+            this, &PhotoEditorApp::onProcessingComplete);
+
     setupUI();
-    loadPlugins();
-    setWindowTitle("Lightroom Clone - Photo Editor");
+    setWindowTitle("Lightroom Clone");
     setGeometry(100, 100, 1400, 900);
-}
-
-PhotoEditorApp::~PhotoEditorApp() {
 }
 
 void PhotoEditorApp::setupUI() {
     setupMenuBar();
-    createCentralWidget();
+
+    QWidget* central = new QWidget();
+    setCentralWidget(central);
+    QHBoxLayout* mainLayout = new QHBoxLayout(central);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    // ── Image view ──────────────────────────────────────────────────────────
+    m_scrollArea = new QScrollArea();
+    m_scrollArea->setStyleSheet("background-color: #1e1e1e;");
+    m_imageLabel = new QLabel("Open an image to begin");
+    m_imageLabel->setAlignment(Qt::AlignCenter);
+    m_imageLabel->setStyleSheet("background-color: #2a2a2a; color: #808080;");
+    m_scrollArea->setWidget(m_imageLabel);
+    m_scrollArea->setWidgetResizable(false);
+    m_scrollArea->setAlignment(Qt::AlignCenter);
+    mainLayout->addWidget(m_scrollArea, 3);
+
+    // ── Right panel ──────────────────────────────────────────────────────────
+    QWidget* rightPanel = new QWidget();
+    rightPanel->setStyleSheet("background-color: #252525;");
+    rightPanel->setFixedWidth(300);
+    QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(8, 8, 8, 8);
+    rightLayout->setSpacing(6);
+
+    setupGpuSelector(rightLayout);
+
+    QFrame* sep = new QFrame();
+    sep->setFrameShape(QFrame::HLine);
+    sep->setStyleSheet("color: #444444;");
+    rightLayout->addWidget(sep);
+
+    QScrollArea* effectsScroll = new QScrollArea();
+    effectsScroll->setWidgetResizable(true);
+    effectsScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
+
+    QWidget* effectsContainer = new QWidget();
+    effectsContainer->setStyleSheet("background: transparent;");
+    QVBoxLayout* effectsLayout = new QVBoxLayout(effectsContainer);
+    effectsLayout->setContentsMargins(0, 0, 0, 0);
+    effectsLayout->setSpacing(4);
+
+    setupEffectPanels(effectsLayout);
+    effectsLayout->addStretch();
+
+    effectsScroll->setWidget(effectsContainer);
+    rightLayout->addWidget(effectsScroll, 1);
+
+    mainLayout->addWidget(rightPanel);
 }
 
 void PhotoEditorApp::setupMenuBar() {
-    QMenu *fileMenu = menuBar()->addMenu("File");
+    QMenu* fileMenu = menuBar()->addMenu("File");
 
-    QAction *openAction = fileMenu->addAction("Open Image");
-    connect(openAction, &QAction::triggered, this, &PhotoEditorApp::openImage);
+    QAction* openAct = fileMenu->addAction("Open Image…");
+    openAct->setShortcut(QKeySequence::Open);
+    connect(openAct, &QAction::triggered, this, &PhotoEditorApp::openImage);
 
-    QAction *saveAction = fileMenu->addAction("Save Image");
-    connect(saveAction, &QAction::triggered, this, &PhotoEditorApp::saveImage);
+    QAction* saveAct = fileMenu->addAction("Save Image…");
+    saveAct->setShortcut(QKeySequence::Save);
+    connect(saveAct, &QAction::triggered, this, &PhotoEditorApp::saveImage);
 
     fileMenu->addSeparator();
 
-    QAction *exitAction = fileMenu->addAction("Exit");
-    connect(exitAction, &QAction::triggered, this, &QWidget::close);
+    QAction* exitAct = fileMenu->addAction("Exit");
+    connect(exitAct, &QAction::triggered, this, &QWidget::close);
+
+    // View → Effects — enable/disable individual effects
+    QMenu* viewMenu = menuBar()->addMenu("View");
+    QMenu* effectsMenu = viewMenu->addMenu("Effects");
+
+    const auto& entries = m_effects->entries();
+    for (int i = 0; i < entries.size(); ++i) {
+        QAction* act = effectsMenu->addAction(entries[i].effect->getName());
+        act->setCheckable(true);
+        act->setChecked(entries[i].enabled);
+        connect(act, &QAction::toggled, this, [this, i](bool on) {
+            m_effects->setEnabled(i, on);
+            triggerReprocess();
+        });
+    }
 }
 
-void PhotoEditorApp::createCentralWidget() {
-    QWidget *centralWidget = new QWidget();
-    setCentralWidget(centralWidget);
+void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
+    QLabel* label = new QLabel("GPU Device");
+    label->setStyleSheet("color: #a0a0a0; font-size: 10px; text-transform: uppercase;");
+    rightLayout->addWidget(label);
 
-    QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
+    m_gpuSelector = new QComboBox();
+    m_gpuSelector->setStyleSheet(
+        "QComboBox { color: #e0e0e0; background-color: #3a3a3a;"
+        "  border: 1px solid #555; border-radius: 3px; padding: 4px; }"
+        "QComboBox::drop-down { border: none; }"
+        "QComboBox QAbstractItemView { color: #e0e0e0; background-color: #3a3a3a; }");
 
-    // Left side: Image display (3/4 width)
-    scrollArea = new QScrollArea();
-    imageLabel = new QLabel();
-    imageLabel->setPixmap(QPixmap(400, 300));
-    imageLabel->setAlignment(Qt::AlignCenter);
-    imageLabel->setStyleSheet("background-color: #2a2a2a; color: white;");
-    imageLabel->setText("Open an image to start editing");
-    
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    scrollArea->setWidget(imageLabel);
-    scrollArea->setWidgetResizable(false);
-    scrollArea->setAlignment(Qt::AlignCenter);
-    scrollArea->setStyleSheet("background-color: #1e1e1e;");
+    const auto& devs = GpuDeviceRegistry::instance().devices();
+    if (devs.empty()) {
+        m_gpuSelector->addItem("No GPU devices found");
+        m_gpuSelector->setEnabled(false);
+    } else {
+        for (const auto& d : devs)
+            m_gpuSelector->addItem(d.name + " [" + d.platformName + "]");
+        m_gpuSelector->setCurrentIndex(GpuDeviceRegistry::instance().currentIndex());
+    }
 
-    mainLayout->addWidget(scrollArea, 3);
+    connect(m_gpuSelector, QOverload<int>::of(&QComboBox::activated), this, [this](int idx) {
+        GpuDeviceRegistry::instance().setDevice(idx);
+        triggerReprocess();
+    });
 
-    // Right side: Plugin controls vertical list (1/4 width)
-    QWidget *controlPanel = new QWidget();
-    controlsLayout = new QVBoxLayout(controlPanel);
+    rightLayout->addWidget(m_gpuSelector);
+}
 
-    // Header
-    controlsLayout->addWidget(new QLabel("<b>Plugin Controls:</b>"), 0);
+void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
+    const auto& entries = m_effects->entries();
+    for (int i = 0; i < entries.size(); ++i) {
+        PhotoEditorEffect* effect = entries[i].effect;
 
-    // Scrollable area for plugins
-    QScrollArea *pluginScrollArea = new QScrollArea();
-    pluginScrollArea->setWidgetResizable(true);
-    pluginScrollArea->setStyleSheet("QScrollArea { background-color: #2a2a2a; }");
-    
-    QWidget *pluginContainer = new QWidget();
-    pluginControlsLayout = new QVBoxLayout(pluginContainer);
-    pluginControlsLayout->setSpacing(10);
-    pluginControlsLayout->setContentsMargins(0, 0, 0, 0);
-    
-    pluginScrollArea->setWidget(pluginContainer);
-    controlsLayout->addWidget(pluginScrollArea, 1);
+        // Container
+        QWidget* panel = new QWidget();
+        panel->setStyleSheet(
+            "QWidget { background-color: #333333; border-radius: 4px; }");
+        QVBoxLayout* panelLayout = new QVBoxLayout(panel);
+        panelLayout->setContentsMargins(6, 4, 6, 6);
+        panelLayout->setSpacing(4);
 
-    controlsLayout->addStretch();
+        // Title bar
+        QWidget* titleBar = new QWidget();
+        titleBar->setStyleSheet("background: transparent;");
+        QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+        titleLayout->setContentsMargins(0, 0, 0, 0);
 
-    mainLayout->addWidget(controlPanel, 1);
+        QLabel* title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
+        title->setStyleSheet("color: #e0e0e0; background: transparent;");
+        titleLayout->addWidget(title, 1);
+
+        QPushButton* collapseBtn = new QPushButton("−");
+        collapseBtn->setStyleSheet(
+            "QPushButton { background:#555; color:#fff; border:none;"
+            "  border-radius:3px; padding:1px 5px; font-weight:bold; }"
+            "QPushButton:hover { background:#777; }");
+        collapseBtn->setMaximumWidth(28);
+        titleLayout->addWidget(collapseBtn);
+        panelLayout->addWidget(titleBar);
+
+        // Controls
+        QWidget* controls = effect->createControlsWidget();
+        if (controls) {
+            panelLayout->addWidget(controls);
+        }
+
+        // Collapse toggle — shared_ptr so the lambda stays valid after panel is reparented
+        auto expanded = std::make_shared<bool>(true);
+        connect(collapseBtn, &QPushButton::clicked, this,
+                [controls, collapseBtn, expanded]() {
+            *expanded = !*expanded;
+            if (controls) controls->setVisible(*expanded);
+            collapseBtn->setText(*expanded ? "−" : "+");
+        });
+
+        // Wire parametersChanged
+        connect(effect, &PhotoEditorEffect::parametersChanged,
+                this, &PhotoEditorApp::onParametersChanged);
+
+        effectsLayout->addWidget(panel);
+    }
 }
 
 void PhotoEditorApp::openImage() {
-    QString fileName = QFileDialog::getOpenFileName(this,
-        "Open Image", lastOpenedPath,
-        "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff);;All Files (*)");
+    QString fileName = QFileDialog::getOpenFileName(
+        this, "Open Image", m_lastDir,
+        "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
+        "*.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
+        "All Files (*)");
 
-    if (!fileName.isEmpty()) {
-        originalImage.load(fileName);
-        if (!originalImage.isNull()) {
-            lastOpenedPath = QFileInfo(fileName).absolutePath();
-            currentImage = originalImage;
-            applyAllPlugins();
-        }
+    if (fileName.isEmpty()) return;
+    m_lastDir = QFileInfo(fileName).absolutePath();
+
+    QImage img;
+    if (RawLoader::isRawFile(fileName)) {
+        img = RawLoader::load(fileName);
+        if (img.isNull())
+            qWarning() << "RawLoader failed for" << fileName << "— trying QImage::load";
     }
+    if (img.isNull())
+        img = QImage(fileName);
+
+    if (img.isNull()) {
+        qWarning() << "Failed to load image:" << fileName;
+        return;
+    }
+
+    m_originalImage = img;
+    triggerReprocess();
 }
 
 void PhotoEditorApp::saveImage() {
-    if (currentImage.isNull()) {
-        return;
-    }
+    if (m_originalImage.isNull()) return;
 
-    QString fileName = QFileDialog::getSaveFileName(this,
-        "Save Image", lastOpenedPath,
-        "PNG Image (*.png);;JPEG Image (*.jpg);;BMP Image (*.bmp);;All Files (*)");
+    QString fileName = QFileDialog::getSaveFileName(
+        this, "Save Image", m_lastDir,
+        "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp);;All Files (*)");
 
-    if (!fileName.isEmpty()) {
-        currentImage.save(fileName);
-        lastOpenedPath = QFileInfo(fileName).absolutePath();
-    }
+    if (fileName.isEmpty()) return;
+    // Save the last-displayed pixmap converted back — or just save originalImage
+    // if no processed result is available yet.
+    m_imageLabel->pixmap().toImage().save(fileName);
+    m_lastDir = QFileInfo(fileName).absolutePath();
 }
 
-void PhotoEditorApp::onPluginParametersChanged() {
-    // When plugin parameters change, re-apply all plugins
-    QElapsedTimer timer;
-    timer.start();
-    
-    applyAllPlugins();
-    
-    qDebug() << "Image reprocessing took" << timer.nsecsElapsed() / 1000.0 << "µs";
+void PhotoEditorApp::onParametersChanged() {
+    triggerReprocess();
 }
 
-void PhotoEditorApp::updateImagePreview() {
-    displayImage(currentImage);
+void PhotoEditorApp::triggerReprocess() {
+    if (m_originalImage.isNull()) return;
+
+    QVector<PhotoEditorEffect*> active;
+    for (const auto& e : m_effects->entries())
+        if (e.enabled) active.append(e.effect);
+
+    m_processor->processImageAsync(m_originalImage, active);
 }
 
-void PhotoEditorApp::loadPlugins() {
-    // Load all plugins from the plugins directory
-    // Try the build directory first, then fall back to ./plugins
-    QString pluginPath = "./plugins";
-    if (QDir("./build/plugins").exists()) {
-        pluginPath = "./build/plugins";
-    }
-    pluginManager->loadPluginsFromDirectory(pluginPath);
-    
-    // Get all loaded plugins
-    const auto &pluginsMap = pluginManager->getLoadedPlugins();
-    
-    int pluginCount = 0;
-    for (auto it = pluginsMap.begin(); it != pluginsMap.end(); ++it) {
-        PhotoEditorPlugin* plugin = it.value();
-        loadedPlugins.append(plugin);
-        
-        // Add separator if not the first plugin
-        if (pluginCount > 0) {
-            QFrame *separator = new QFrame();
-            separator->setFrameShape(QFrame::HLine);
-            separator->setFrameShadow(QFrame::Sunken);
-            separator->setStyleSheet("background-color: #555555; margin: 5px 0px;");
-            separator->setMaximumHeight(1);
-            pluginControlsLayout->addWidget(separator);
-        }
-        
-        // Create a container for this plugin with title and collapse button
-        QWidget *pluginWidget = new QWidget();
-        pluginWidget->setStyleSheet("background-color: #333333; border-radius: 4px;");
-        QVBoxLayout *pluginLayout = new QVBoxLayout(pluginWidget);
-        pluginLayout->setContentsMargins(5, 5, 5, 5);
-        pluginLayout->setSpacing(5);
-        
-        // Title bar with collapse button
-        QWidget *titleBarWidget = new QWidget();
-        QHBoxLayout *titleLayout = new QHBoxLayout(titleBarWidget);
-        titleLayout->setContentsMargins(0, 0, 0, 0);
-        
-        QLabel *titleLabel = new QLabel(QString("<b>%1</b>").arg(plugin->getName()));
-        titleLabel->setStyleSheet("color: #e0e0e0;");
-        titleLayout->addWidget(titleLabel, 1);
-        
-        QPushButton *collapseBtn = new QPushButton("−");
-        collapseBtn->setStyleSheet(
-            "QPushButton {"
-            "  background-color: #555555;"
-            "  color: #ffffff;"
-            "  border: none;"
-            "  border-radius: 3px;"
-            "  padding: 2px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: #777777;"
-            "}"
-        );
-        collapseBtn->setMaximumWidth(30);
-        titleLayout->addWidget(collapseBtn);
-        
-        pluginLayout->addWidget(titleBarWidget);
-        
-        // Create controls widget for this plugin
-        QWidget* controlsWidget = plugin->createControlsWidget();
-        
-        if (controlsWidget) {
-            pluginLayout->addWidget(controlsWidget);
-        } else {
-            // Empty space for plugins without controls
-            QLabel *emptyLabel = new QLabel("<i>No parameters</i>");
-            emptyLabel->setStyleSheet("color: #999999; font-size: 10pt;");
-            pluginLayout->addWidget(emptyLabel);
-        }
-        
-        // Store the controls widget and its visibility state
-        struct PluginUIState {
-            QWidget* controlsWidget;
-            bool isExpanded;
-        };
-        
-        PluginUIState* state = new PluginUIState{controlsWidget ? controlsWidget : nullptr, true};
-        
-        // Connect collapse button
-        connect(collapseBtn, &QPushButton::clicked, [state, collapseBtn]() {
-            if (state->isExpanded) {
-                // Collapse
-                if (state->controlsWidget) {
-                    state->controlsWidget->hide();
-                }
-                collapseBtn->setText("+");
-                state->isExpanded = false;
-            } else {
-                // Expand
-                if (state->controlsWidget) {
-                    state->controlsWidget->show();
-                }
-                collapseBtn->setText("−");
-                state->isExpanded = true;
-            }
-        });
-        
-        pluginControlsLayout->addWidget(pluginWidget);
-        
-        // Connect parameter changes to preview update
-        connect(plugin, &PhotoEditorPlugin::parametersChanged,
-                this, &PhotoEditorApp::onPluginParametersChanged);
-        
-        qDebug() << "Loaded plugin:" << plugin->getName();
-        pluginCount++;
-    }
-    
-    // Add stretch at the bottom so plugins don't take up all space
-    pluginControlsLayout->addStretch();
+void PhotoEditorApp::onProcessingComplete(QImage result) {
+    if (!result.isNull())
+        displayImage(result);
 }
 
-void PhotoEditorApp::displayImage(const QImage &image) {
-    QPixmap pixmap = QPixmap::fromImage(image);
-    
-    // Get available space in scroll area
-    int maxWidth = scrollArea->viewport()->width() - 10;
-    int maxHeight = scrollArea->viewport()->height() - 10;
-    
-    // Ensure we have valid dimensions
-    if (maxWidth <= 0) maxWidth = 800;
-    if (maxHeight <= 0) maxHeight = 600;
+void PhotoEditorApp::displayImage(const QImage& image) {
+    QPixmap px = QPixmap::fromImage(image);
 
-    // Scale the image to fit within the viewport while keeping aspect ratio
-    if (pixmap.width() > maxWidth || pixmap.height() > maxHeight) {
-        pixmap = pixmap.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    }
+    int maxW = m_scrollArea->viewport()->width()  - 4;
+    int maxH = m_scrollArea->viewport()->height() - 4;
+    if (maxW <= 0) maxW = 800;
+    if (maxH <= 0) maxH = 600;
 
-    // Set the pixmap and size the label to fit
-    imageLabel->setPixmap(pixmap);
-    imageLabel->setFixedSize(pixmap.width(), pixmap.height());
-}
+    if (px.width() > maxW || px.height() > maxH)
+        px = px.scaled(maxW, maxH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-void PhotoEditorApp::applyAllPlugins() {
-    if (originalImage.isNull()) {
-        return;
-    }
-
-    currentImage = applyPluginStack(originalImage);
-    displayImage(currentImage);
-}
-
-QImage PhotoEditorApp::applyPluginStack(const QImage &sourceImage) {
-    QImage result = sourceImage;
-    
-    // Apply each plugin in sequence
-    for (PhotoEditorPlugin* plugin : loadedPlugins) {
-        QMap<QString, QVariant> params = plugin->getParameters();
-        result = plugin->processImage(result, params);
-    }
-    
-    return result;
+    m_imageLabel->setPixmap(px);
+    m_imageLabel->setFixedSize(px.size());
 }
