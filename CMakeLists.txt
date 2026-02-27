@@ -5,6 +5,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC")
 
+# Export compile_commands.json for clangd/LSP
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# ccache
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+    message(STATUS "ccache found — using ${CCACHE_PROGRAM}")
+else()
+    message(STATUS "ccache not found — builds will not be cached")
+endif()
+
 find_package(Qt6 COMPONENTS Core Gui Widgets Concurrent REQUIRED)
 find_package(OpenCL REQUIRED)
 

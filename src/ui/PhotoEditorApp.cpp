@@ -194,6 +194,13 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
             collapseBtn->setText(*expanded ? "−" : "+");
         });
 
+        // Show/hide panel when effect is toggled from the View menu
+        panel->setVisible(entries[i].enabled);
+        connect(m_effects, &EffectManager::effectToggled, panel,
+                [panel, i](int idx, bool on) {
+            if (idx == i) panel->setVisible(on);
+        });
+
         // Wire parametersChanged
         connect(effect, &PhotoEditorEffect::parametersChanged,
                 this, &PhotoEditorApp::onParametersChanged);
