@@ -13,6 +13,7 @@
 #include <QComboBox>
 #include <QFrame>
 #include <QResizeEvent>
+#include <QToolBar>
 #include <QDebug>
 #include <memory>
 
@@ -27,9 +28,30 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     connect(m_processor, &ImageProcessor::processingComplete,
             this, &PhotoEditorApp::onProcessingComplete);
 
+    setupToolBar();
     setupUI();
     setWindowTitle("Lightroom Clone");
     setGeometry(100, 100, 1400, 900);
+}
+
+void PhotoEditorApp::setupToolBar() {
+    QToolBar* toolbar = addToolBar("Preview");
+    toolbar->setMovable(false);
+    toolbar->setStyleSheet(
+        "QToolBar { background: #1e1e1e; border-bottom: 1px solid #444; spacing: 6px; padding: 2px 6px; }"
+        "QToolButton { color: #c0c0c0; background: #333; border: 1px solid #555;"
+        "  border-radius: 3px; padding: 3px 10px; }"
+        "QToolButton:checked { color: #fff; background: #2a6496; border-color: #3a87c8; }"
+        "QToolButton:hover { background: #444; }");
+
+    QAction* liveAct = new QAction("Live Preview", this);
+    liveAct->setCheckable(true);
+    liveAct->setChecked(false);
+    liveAct->setToolTip("Update preview in real-time while dragging sliders");
+    connect(liveAct, &QAction::toggled, this, [this](bool on) {
+        m_liveUpdate = on;
+    });
+    toolbar->addAction(liveAct);
 }
 
 void PhotoEditorApp::setupUI() {
@@ -202,9 +224,11 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
             if (idx == i) panel->setVisible(on);
         });
 
-        // Wire parametersChanged
+        // Wire parametersChanged (committed) and liveParametersChanged (drag)
         connect(effect, &PhotoEditorEffect::parametersChanged,
                 this, &PhotoEditorApp::onParametersChanged);
+        connect(effect, &PhotoEditorEffect::liveParametersChanged,
+                this, &PhotoEditorApp::onLiveParametersChanged);
 
         effectsLayout->addWidget(panel);
     }
@@ -254,6 +278,10 @@ void PhotoEditorApp::saveImage() {
 
 void PhotoEditorApp::onParametersChanged() {
     triggerReprocess();
+}
+
+void PhotoEditorApp::onLiveParametersChanged() {
+    if (m_liveUpdate) triggerReprocess();
 }
 
 void PhotoEditorApp::triggerReprocess() {

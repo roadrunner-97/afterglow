@@ -25,10 +25,12 @@ private slots:
     void openImage();
     void saveImage();
     void onParametersChanged();
+    void onLiveParametersChanged();
     void onProcessingComplete(QImage result);
 
 private:
     void setupUI();
+    void setupToolBar();
     void setupMenuBar();
     void setupGpuSelector(QVBoxLayout* rightLayout);
     void setupEffectPanels(QVBoxLayout* rightLayout);
@@ -39,6 +41,7 @@ private:
     ImageProcessor* m_processor;
     QImage          m_originalImage;
     QString         m_lastDir;
+    bool            m_liveUpdate = false;
 
     QLabel*      m_imageLabel;
     QScrollArea* m_scrollArea;
