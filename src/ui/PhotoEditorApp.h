@@ -5,9 +5,8 @@
 #include <QImage>
 #include "EffectManager.h"
 #include "ImageProcessor.h"
+#include "ViewportWidget.h"
 
-class QLabel;
-class QScrollArea;
 class QVBoxLayout;
 class QComboBox;
 
@@ -34,8 +33,8 @@ private:
     void setupMenuBar();
     void setupGpuSelector(QVBoxLayout* rightLayout);
     void setupEffectPanels(QVBoxLayout* rightLayout);
-    void triggerReprocess();
-    void displayImage(const QImage& image);
+    void triggerReprocess();       // full pipeline run (effects + downsample)
+    void triggerViewportUpdate();  // viewport-only run (downsample only, no effects)
 
     EffectManager*  m_effects;
     ImageProcessor* m_processor;
@@ -43,9 +42,12 @@ private:
     QString         m_lastDir;
     bool            m_liveUpdate = false;
 
-    QLabel*      m_imageLabel;
-    QScrollArea* m_scrollArea;
-    QComboBox*   m_gpuSelector;
+    ViewportWidget* m_viewport        = nullptr;
+    QComboBox*      m_gpuSelector     = nullptr;
+    // True from the moment triggerReprocess() is called until the resulting
+    // processingComplete() delivers a non-null image.  While set, viewport
+    // changes also trigger full reruns so pan/zoom never shows a stale frame.
+    bool            m_pendingFullRun  = false;
 };
 
 #endif // PHOTOEDITORAPP_H

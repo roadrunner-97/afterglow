@@ -18,7 +18,8 @@ else()
     message(STATUS "ccache not found — builds will not be cached")
 endif()
 
-find_package(Qt6 COMPONENTS Core Gui Widgets Concurrent REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Widgets Concurrent OpenGLWidgets REQUIRED)
+find_package(OpenGL REQUIRED)
 find_package(OpenCL REQUIRED)
 
 # Optional: LibRaw for RAW file support
@@ -104,6 +105,8 @@ set_target_properties(photoeditor_core PROPERTIES
 add_library(photoeditor_ui SHARED
     src/ui/PhotoEditorApp.cpp
     src/ui/PhotoEditorApp.h
+    src/ui/ViewportWidget.cpp
+    src/ui/ViewportWidget.h
 )
 
 target_link_libraries(photoeditor_ui
@@ -111,6 +114,12 @@ target_link_libraries(photoeditor_ui
         photoeditor_core
         Qt6::Widgets
         Qt6::Gui
+        Qt6::OpenGLWidgets
+        OpenGL::GL
+)
+
+target_include_directories(photoeditor_ui
+    PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/ui>
 )
 
 set_target_properties(photoeditor_ui PROPERTIES
@@ -138,6 +147,7 @@ target_link_libraries(lightroom_clone
         all_effects
         Qt6::Widgets
         Qt6::Core
+        Qt6::OpenGLWidgets
 )
 
 set_target_properties(lightroom_clone PROPERTIES

@@ -3,7 +3,6 @@
 
 #include <QObject>
 #include <QImage>
-#include <QSize>
 #include <QVector>
 #include <atomic>
 #include <memory>
@@ -24,7 +23,8 @@ public:
 
     void processImageAsync(const QImage& originalImage,
                            const QVector<PhotoEditorEffect*>& effects,
-                           QSize previewSize = {});
+                           ViewportRequest viewport = {},
+                           bool viewportOnly = false);
 
     void cancelProcessing();
 

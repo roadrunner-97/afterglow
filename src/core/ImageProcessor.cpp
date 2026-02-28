@@ -16,7 +16,8 @@ void ImageProcessor::cancelProcessing() {
 
 void ImageProcessor::processImageAsync(const QImage &originalImage,
                                        const QVector<PhotoEditorEffect*> &effects,
-                                       QSize previewSize) {
+                                       ViewportRequest viewport,
+                                       bool viewportOnly) {
     auto genPtr = generationPtr;
     uint64_t myGen = ++(*genPtr);
 
@@ -58,16 +59,16 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
         auto pipeline = m_pipeline;
         watcher->setFuture(QtConcurrent::run(
             [image = originalImage, calls = std::move(gpuCalls),
-             genPtr, myGen, pipeline, previewSize]() -> QImage {
+             genPtr, myGen, pipeline, viewport, viewportOnly]() -> QImage {
                 if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
-                return pipeline->run(image, calls, ViewportRequest{previewSize});
+                return pipeline->run(image, calls, viewport, viewportOnly);
             }
         ));
     } else {
         // Fallback: per-effect QImage chain (upload + readback per effect).
         watcher->setFuture(QtConcurrent::run(
             [image = originalImage, calls = std::move(imageCalls),
-             genPtr, myGen, timer, previewSize]() -> QImage {
+             genPtr, myGen, timer, viewport]() -> QImage {
                 QImage result = image;
                 for (const auto &call : calls) {
                     if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
@@ -77,8 +78,8 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
                     qDebug() << "  [pipeline]" << call.first->getName()
                              << ":" << (t1 - t0) << "µs  (at" << t0 << "µs)";
                 }
-                if (previewSize.isValid() && !result.isNull())
-                    result = result.scaled(previewSize, Qt::KeepAspectRatio,
+                if (viewport.displaySize.isValid() && !result.isNull())
+                    result = result.scaled(viewport.displaySize, Qt::KeepAspectRatio,
                                            Qt::SmoothTransformation);
                 return result;
             }

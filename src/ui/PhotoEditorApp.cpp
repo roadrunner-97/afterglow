@@ -3,7 +3,6 @@
 #include "RawLoader.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QMenuBar>
@@ -12,6 +11,7 @@
 #include <QFileDialog>
 #include <QComboBox>
 #include <QFrame>
+#include <QLabel>
 #include <QResizeEvent>
 #include <QToolBar>
 #include <QDebug>
@@ -21,9 +21,6 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     : QMainWindow(parent)
     , m_effects(effectManager)
     , m_processor(new ImageProcessor(this))
-    , m_imageLabel(nullptr)
-    , m_scrollArea(nullptr)
-    , m_gpuSelector(nullptr)
 {
     connect(m_processor, &ImageProcessor::processingComplete,
             this, &PhotoEditorApp::onProcessingComplete);
@@ -64,15 +61,10 @@ void PhotoEditorApp::setupUI() {
     mainLayout->setSpacing(0);
 
     // ── Image view ──────────────────────────────────────────────────────────
-    m_scrollArea = new QScrollArea();
-    m_scrollArea->setStyleSheet("background-color: #1e1e1e;");
-    m_imageLabel = new QLabel("Open an image to begin");
-    m_imageLabel->setAlignment(Qt::AlignCenter);
-    m_imageLabel->setStyleSheet("background-color: #2a2a2a; color: #808080;");
-    m_scrollArea->setWidget(m_imageLabel);
-    m_scrollArea->setWidgetResizable(false);
-    m_scrollArea->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(m_scrollArea, 3);
+    m_viewport = new ViewportWidget();
+    connect(m_viewport, &ViewportWidget::viewportChanged,
+            this, &PhotoEditorApp::triggerViewportUpdate);
+    mainLayout->addWidget(m_viewport, 3);
 
     // ── Right panel ──────────────────────────────────────────────────────────
     QWidget* rightPanel = new QWidget();
@@ -259,6 +251,8 @@ void PhotoEditorApp::openImage() {
     }
 
     m_originalImage = img;
+    m_viewport->setImageSize(img.size());
+    m_viewport->resetView();
     triggerReprocess();
 }
 
@@ -270,9 +264,7 @@ void PhotoEditorApp::saveImage() {
         "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp);;All Files (*)");
 
     if (fileName.isEmpty()) return;
-    // Save the last-displayed pixmap converted back — or just save originalImage
-    // if no processed result is available yet.
-    m_imageLabel->pixmap().toImage().save(fileName);
+    m_viewport->currentImage().save(fileName);
     m_lastDir = QFileInfo(fileName).absolutePath();
 }
 
@@ -287,23 +279,41 @@ void PhotoEditorApp::onLiveParametersChanged() {
 void PhotoEditorApp::triggerReprocess() {
     if (m_originalImage.isNull()) return;
 
+    m_pendingFullRun = true;
+
     QVector<PhotoEditorEffect*> active;
     for (const auto& e : m_effects->entries())
         if (e.enabled) active.append(e.effect);
 
-    QSize previewSize = m_scrollArea->viewport()->size();
-    m_processor->processImageAsync(m_originalImage, active, previewSize);
+    m_processor->processImageAsync(m_originalImage, active, m_viewport->viewportRequest());
+}
+
+void PhotoEditorApp::triggerViewportUpdate() {
+    if (m_originalImage.isNull()) return;
+
+    // If a full reprocess is already in-flight (params changed), promote this
+    // viewport change to a full run so the displayed result is never stale.
+    if (m_pendingFullRun) {
+        triggerReprocess();
+        return;
+    }
+
+    QVector<PhotoEditorEffect*> active;
+    for (const auto& e : m_effects->entries())
+        if (e.enabled) active.append(e.effect);
+
+    m_processor->processImageAsync(m_originalImage, active,
+                                   m_viewport->viewportRequest(),
+                                   /*viewportOnly=*/true);
 }
 
 void PhotoEditorApp::onProcessingComplete(QImage result) {
-    if (!result.isNull())
-        displayImage(result);
-}
-
-void PhotoEditorApp::displayImage(const QImage& image) {
-    QPixmap px = QPixmap::fromImage(image);
-    m_imageLabel->setPixmap(px);
-    m_imageLabel->setFixedSize(px.size());
+    if (result.isNull()) {
+        m_viewport->update();   // CL-GL path: result already in GL texture
+    } else {
+        m_pendingFullRun = false;
+        m_viewport->setImage(result);
+    }
 }
 
 void PhotoEditorApp::resizeEvent(QResizeEvent* event) {

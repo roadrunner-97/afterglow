@@ -9,6 +9,7 @@
 #include "PhotoEditorEffect.h"
 #include <QImage>
 #include <QMap>
+#include <QPointF>
 #include <QSize>
 #include <QVariant>
 #include <QVector>
@@ -21,8 +22,9 @@ struct GpuPipelineCall {
 };
 
 struct ViewportRequest {
-    QSize displaySize;
-    // future pan/zoom: QRectF sourceRegion; // normalised [0,1]² crop rect
+    QSize   displaySize;
+    float   zoom   = 1.0f;
+    QPointF center = {0.5, 0.5};
 };
 
 /**
@@ -31,11 +33,11 @@ struct ViewportRequest {
  * Owned as a shared_ptr by ImageProcessor so the QtConcurrent worker lambda
  * can safely capture it.
  *
- * On image load: run() detects the new constBits() pointer and uploads the
- * image to srcBuf (once per unique image).  On every pipeline run it copies
- * srcBuf→workBuf (GPU-to-GPU, no PCIe), chains all effect kernels, issues a
- * single queue.finish(), then downsamples to the viewport size on-GPU and
- * reads back only the small preview buffer.
+ * run() detects the new constBits() pointer and uploads the image to srcBuf
+ * (once per unique image).  On every pipeline run it copies srcBuf→workBuf
+ * (GPU-to-GPU, no PCIe), chains all effect kernels, issues a single
+ * queue.finish(), downsamples to the viewport size on-GPU, then reads the
+ * preview buffer back to the CPU as a QImage.
  *
  * Thread safety: run() is serialised by an internal mutex.
  */
@@ -43,10 +45,14 @@ class GpuPipeline {
 public:
     GpuPipeline() = default;
 
-    // Run the full pipeline.  Returns {} on failure; caller falls back to
-    // the per-effect QImage chain.
+    // Run the pipeline.  Returns {} on failure.
+    //
+    // viewportOnly=true: skip the effects chain and re-downsample from the
+    // last processed frame already in m_workBuf.  Falls back to a full run
+    // automatically if no valid processed frame exists yet (first frame, device
+    // change, new image).  Safe to call on every pan/zoom event.
     QImage run(const QImage& image, const QVector<GpuPipelineCall>& calls,
-               const ViewportRequest& viewport);
+               const ViewportRequest& viewport, bool viewportOnly = false);
 
 private:
     // All must be called with m_mutex held.
@@ -64,9 +70,9 @@ private:
     cl::Buffer m_auxBuf;   // scratch for multi-pass effects (blur, unsharp)
 
     // Preview downsampling
-    cl::Kernel m_previewKernel8;   // 8-bit source → 8-bit preview
-    cl::Kernel m_previewKernel16;  // 16-bit source → 8-bit preview
-    cl::Buffer m_previewBuf;       // write-only; always 8-bit ARGB
+    cl::Kernel m_previewKernel8;   // 8-bit source → 8-bit RGBA preview
+    cl::Kernel m_previewKernel16;  // 16-bit source → 8-bit RGBA preview
+    cl::Buffer m_previewBuf;       // RGBA staging buffer; always 8-bit
     int        m_previewW = 0;
     int        m_previewH = 0;
 
@@ -76,9 +82,10 @@ private:
     size_t m_bufBytes = 0;
     bool   m_is16bit  = false;
 
-    bool        m_available = false;
-    int         m_revision  = -1;
-    const void* m_lastBits  = nullptr;  // detect image changes between runs
+    bool        m_available            = false;
+    bool        m_processedFrameValid  = false; // m_workBuf has valid effects result
+    int         m_revision             = -1;
+    const void* m_lastBits             = nullptr;  // detect image changes between runs
 
     // Tracks which IGpuEffect instances have had initGpuKernels() called for
     // the current context.  Cleared on device change so re-enabled effects
