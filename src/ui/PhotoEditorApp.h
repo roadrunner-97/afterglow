@@ -18,6 +18,9 @@ public:
     explicit PhotoEditorApp(EffectManager* effectManager, QWidget* parent = nullptr);
     ~PhotoEditorApp() override = default;
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private slots:
     void openImage();
     void saveImage();

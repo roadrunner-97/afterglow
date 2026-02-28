@@ -12,6 +12,7 @@
 #include <QFileDialog>
 #include <QComboBox>
 #include <QFrame>
+#include <QResizeEvent>
 #include <QDebug>
 #include <memory>
 
@@ -262,7 +263,8 @@ void PhotoEditorApp::triggerReprocess() {
     for (const auto& e : m_effects->entries())
         if (e.enabled) active.append(e.effect);
 
-    m_processor->processImageAsync(m_originalImage, active);
+    QSize previewSize = m_scrollArea->viewport()->size();
+    m_processor->processImageAsync(m_originalImage, active, previewSize);
 }
 
 void PhotoEditorApp::onProcessingComplete(QImage result) {
@@ -272,15 +274,11 @@ void PhotoEditorApp::onProcessingComplete(QImage result) {
 
 void PhotoEditorApp::displayImage(const QImage& image) {
     QPixmap px = QPixmap::fromImage(image);
-
-    int maxW = m_scrollArea->viewport()->width()  - 4;
-    int maxH = m_scrollArea->viewport()->height() - 4;
-    if (maxW <= 0) maxW = 800;
-    if (maxH <= 0) maxH = 600;
-
-    if (px.width() > maxW || px.height() > maxH)
-        px = px.scaled(maxW, maxH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
     m_imageLabel->setPixmap(px);
     m_imageLabel->setFixedSize(px.size());
+}
+
+void PhotoEditorApp::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    triggerReprocess();
 }
