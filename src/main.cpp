@@ -9,6 +9,7 @@
 #include "BlurEffect.h"
 #include "GrayscaleEffect.h"
 #include "UnsharpEffect.h"
+#include "DenoiseEffect.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -23,6 +24,7 @@ int main(int argc, char *argv[]) {
     effects->addEffect(new BlurEffect());
     effects->addEffect(new GrayscaleEffect());
     effects->addEffect(new UnsharpEffect());
+    effects->addEffect(new DenoiseEffect());
 
     for (const auto& e : effects->entries())
         e.effect->initialize();
