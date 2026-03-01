@@ -451,6 +451,7 @@ QWidget* ExposureEffect::createControlsWidget() {
 
     // Tone curve graph — sits at the top; updated via setParams() on every drag
     auto* curve = new ToneCurveWidget();
+    curve->setToolTip("Live tone curve showing the combined effect of all zone sliders.\nThe white line is the output response; the dashed line is neutral (no adjustment).\nZone bands from left to right: Blacks, Shadows, Highlights, Whites.");
     layout->addWidget(curve);
 
     // Helper: re-reads all slider values and pushes them to the curve widget
@@ -474,23 +475,28 @@ QWidget* ExposureEffect::createControlsWidget() {
 
     // Global exposure — range ±5 EV, 0.1 steps
     exposureParam = new ParamSlider("Exposure (EV)", -5.0, 5.0, 0.1, 1);
+    exposureParam->setToolTip("Overall exposure offset in stops. +1 EV = one stop brighter, −1 EV = one stop darker.\nApplied in linear light (sRGB decode → scale → re-encode).");
     connectSlider(exposureParam);
     layout->addWidget(exposureParam);
 
     // Tonal zone offsets — range ±3 EV, 0.1 steps (bright → dark order)
     whitesParam = new ParamSlider("Whites", -3.0, 3.0, 0.1, 1);
+    whitesParam->setToolTip("Exposure adjustment for the brightest tones (top 15% of the tonal range).\nPull down to recover blown highlights; push up to brighten paper whites.");
     connectSlider(whitesParam);
     layout->addWidget(whitesParam);
 
     highlightsParam = new ParamSlider("Highlights", -3.0, 3.0, 0.1, 1);
+    highlightsParam->setToolTip("Exposure adjustment for the upper midtones and bright areas (50–85% brightness).\nUse to manage sky or facial highlight detail.");
     connectSlider(highlightsParam);
     layout->addWidget(highlightsParam);
 
     shadowsParam = new ParamSlider("Shadows", -3.0, 3.0, 0.1, 1);
+    shadowsParam->setToolTip("Exposure adjustment for the lower midtones and darker areas (15–50% brightness).\nLift to open up shadow detail without affecting highlights.");
     connectSlider(shadowsParam);
     layout->addWidget(shadowsParam);
 
     blacksParam = new ParamSlider("Blacks", -3.0, 3.0, 0.1, 1);
+    blacksParam->setToolTip("Exposure adjustment for the darkest tones (bottom 15% of the tonal range).\nPull down to deepen blacks and add contrast; lift to reveal shadow texture.");
     connectSlider(blacksParam);
     layout->addWidget(blacksParam);
 

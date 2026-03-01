@@ -387,6 +387,7 @@ QWidget* BlurEffect::createControlsWidget() {
     blurTypeCombo = new QComboBox();
     blurTypeCombo->addItem("Gaussian");
     blurTypeCombo->addItem("Box");
+    blurTypeCombo->setToolTip("Gaussian: bell-curve weights for a soft, natural-looking blur.\nBox: uniform weights, slightly harder-edged but faster at large radii.");
     blurTypeCombo->setStyleSheet(
         "QComboBox { color: #2C2018; background-color: #F4F1EA;"
         "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
@@ -401,6 +402,7 @@ QWidget* BlurEffect::createControlsWidget() {
 
     // Radius
     radiusParam = new ParamSlider("Radius", 0, 50);
+    radiusParam->setToolTip("Neighbourhood radius in pixels. Higher values produce stronger blurring. 0 = no effect.");
     connect(radiusParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });

@@ -437,6 +437,7 @@ QWidget* UnsharpEffect::createControlsWidget() {
 
     amountParam = new ParamSlider("Amount", 0.0, 5.0, 0.1, 1);
     amountParam->setValue(1.0);
+    amountParam->setToolTip("Sharpening strength. 1.0 is a standard boost; values above 2 can produce visible edge halos.");
     connect(amountParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });
@@ -447,6 +448,7 @@ QWidget* UnsharpEffect::createControlsWidget() {
 
     radiusParam = new ParamSlider("Radius", 1, 15);
     radiusParam->setValue(2);
+    radiusParam->setToolTip("Pixel radius of the blur used to find edges. Larger values sharpen broader features; smaller values target fine detail.");
     connect(radiusParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });
@@ -457,6 +459,7 @@ QWidget* UnsharpEffect::createControlsWidget() {
 
     thresholdParam = new ParamSlider("Threshold", 0, 20);
     thresholdParam->setValue(3);
+    thresholdParam->setToolTip("Minimum per-channel difference required before sharpening is applied. Increase to avoid sharpening noise in flat areas.");
     connect(thresholdParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });

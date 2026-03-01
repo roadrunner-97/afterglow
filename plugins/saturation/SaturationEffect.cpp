@@ -340,6 +340,7 @@ QWidget* SaturationEffect::createControlsWidget() {
     layout->setSpacing(10);
 
     saturationParam = new ParamSlider("Saturation", -20.0, 20.0, 0.1, 1);
+    saturationParam->setToolTip("Globally boosts or reduces colour intensity across all hues equally.");
     connect(saturationParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });
@@ -349,6 +350,7 @@ QWidget* SaturationEffect::createControlsWidget() {
     layout->addWidget(saturationParam);
 
     vibrancyParam = new ParamSlider("Vibrancy", -20.0, 20.0, 0.1, 1);
+    vibrancyParam->setToolTip("Selectively boosts dull colours while protecting already-saturated tones and skin tones (orange/peach hues).");
     connect(vibrancyParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });

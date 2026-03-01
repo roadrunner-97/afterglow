@@ -148,6 +148,7 @@ void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
+    m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
     m_gpuSelector->setStyleSheet(
         "QComboBox { color: #2C2018; background-color: #F4F1EA;"
         "  border: 1px solid #CCC5B5; border-radius: 3px; padding: 4px; }"
@@ -200,6 +201,7 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
             "QPushButton { background: #D0C8B8; color: #2C2018; border: none;"
             "  border-radius: 3px; padding: 1px 5px; font-weight: bold; }"
             "QPushButton:hover { background: #BEB8A8; }");
+        collapseBtn->setToolTip("Collapse or expand this effect's controls.");
         collapseBtn->setMaximumWidth(28);
         titleLayout->addWidget(collapseBtn);
         panelLayout->addWidget(titleBar);

@@ -1,5 +1,6 @@
 add_subdirectory(hotpixel)
 add_subdirectory(exposure)
+add_subdirectory(whitebalance)
 add_subdirectory(brightness)
 add_subdirectory(saturation)
 add_subdirectory(blur)
@@ -12,6 +13,7 @@ add_library(all_effects INTERFACE)
 target_link_libraries(all_effects INTERFACE
     hotpixel_effect
     exposure_effect
+    whitebalance_effect
     brightness_effect
     saturation_effect
     blur_effect

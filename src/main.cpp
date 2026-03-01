@@ -4,6 +4,7 @@
 #include "core/GpuDeviceRegistry.h"
 #include "HotPixelEffect.h"
 #include "ExposureEffect.h"
+#include "WhiteBalanceEffect.h"
 #include "BrightnessEffect.h"
 #include "SaturationEffect.h"
 #include "BlurEffect.h"
@@ -19,6 +20,7 @@ int main(int argc, char *argv[]) {
     EffectManager* effects = new EffectManager();
     effects->addEffect(new HotPixelEffect());
     effects->addEffect(new ExposureEffect());
+    effects->addEffect(new WhiteBalanceEffect());
     effects->addEffect(new BrightnessEffect());
     effects->addEffect(new SaturationEffect());
     effects->addEffect(new BlurEffect());

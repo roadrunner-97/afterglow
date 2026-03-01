@@ -258,6 +258,7 @@ QWidget* BrightnessEffect::createControlsWidget() {
     layout->setSpacing(8);
 
     brightnessParam = new ParamSlider("Brightness", -100, 100);
+    brightnessParam->setToolTip("Shifts all pixel values brighter (positive) or darker (negative).");
     connect(brightnessParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });
@@ -267,6 +268,7 @@ QWidget* BrightnessEffect::createControlsWidget() {
     layout->addWidget(brightnessParam);
 
     contrastParam = new ParamSlider("Contrast", -50, 50);
+    contrastParam->setToolTip("Expands (positive) or compresses (negative) the tonal range around the midpoint (128).");
     connect(contrastParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
     });

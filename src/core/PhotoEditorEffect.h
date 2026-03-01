@@ -7,6 +7,7 @@
 #include <QVariant>
 #include <QObject>
 #include <QWidget>
+#include "ImageMetadata.h"
 
 /**
  * @brief Abstract base class for all photo editing effects.
@@ -31,6 +32,10 @@ public:
 
     virtual QWidget* createControlsWidget() { return nullptr; }
     virtual QMap<QString, QVariant> getParameters() const { return {}; }
+
+    // Called after a new image is loaded.  Effects that want to adapt their
+    // defaults to the image's metadata (e.g. white balance) override this.
+    virtual void onImageLoaded(const ImageMetadata& /*meta*/) {}
 
     // Returns true if this effect implements IGpuEffect and can participate
     // in the shared GPU pipeline (single upload + single readback).

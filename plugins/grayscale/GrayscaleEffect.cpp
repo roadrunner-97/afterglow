@@ -191,6 +191,7 @@ QWidget* GrayscaleEffect::createControlsWidget() {
 
     QCheckBox* check = new QCheckBox("Convert to Grayscale");
     check->setStyleSheet("color: #2C2018;");
+    check->setToolTip("Converts the image to grayscale using the perceptual luminosity formula:\n29.9% red + 58.7% green + 11.4% blue.");
     check->setChecked(m_active);
     connect(check, &QCheckBox::toggled, this, [this](bool on) {
         m_active = on;
