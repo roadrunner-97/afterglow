@@ -15,97 +15,32 @@ find_package(Qt6 COMPONENTS Test REQUIRED)
 #   - RUNTIME_OUTPUT_DIRECTORY in build/bin/tests
 # ---------------------------------------------------------------------------
 
-# Brightness
-add_executable(test_brightness test_brightness.cpp)
-target_link_libraries(test_brightness PRIVATE
-    brightness_effect
-    photoeditor_core
-    Qt6::Test Qt6::Gui Qt6::Core
-)
-set_target_properties(test_brightness PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_Brightness COMMAND test_brightness)
+# ---------------------------------------------------------------------------
+# Helper macro — all effect tests now use QTEST_MAIN (QApplication) with
+# QT_QPA_PLATFORM=offscreen so createControlsWidget() can run without a display.
+# ---------------------------------------------------------------------------
+macro(add_effect_test name src effect_lib)
+    add_executable(${name} ${src})
+    target_link_libraries(${name} PRIVATE
+        ${effect_lib}
+        photoeditor_core
+        photoeditor_widgets
+        Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core
+    )
+    set_target_properties(${name} PROPERTIES
+        AUTOMOC ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+    )
+    add_test(NAME ${ARGV3} COMMAND ${name})
+    set_tests_properties(${ARGV3} PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+endmacro()
 
-# Saturation
-add_executable(test_saturation test_saturation.cpp)
-target_link_libraries(test_saturation PRIVATE
-    saturation_effect
-    photoeditor_core
-    Qt6::Test Qt6::Gui Qt6::Core
-)
-set_target_properties(test_saturation PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_Saturation COMMAND test_saturation)
-
-# Grayscale — requires full QApplication for QWidget; uses offscreen platform.
-add_executable(test_grayscale test_grayscale.cpp)
-target_link_libraries(test_grayscale PRIVATE
-    grayscale_effect
-    photoeditor_core
-    photoeditor_widgets
-    Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core
-)
-set_target_properties(test_grayscale PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_Grayscale COMMAND test_grayscale)
-set_tests_properties(Effects_Grayscale PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-)
-
-# Blur
-add_executable(test_blur test_blur.cpp)
-target_link_libraries(test_blur PRIVATE
-    blur_effect
-    photoeditor_core
-    Qt6::Test Qt6::Gui Qt6::Core
-)
-set_target_properties(test_blur PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_Blur COMMAND test_blur)
-
-# Exposure
-add_executable(test_exposure test_exposure.cpp)
-target_link_libraries(test_exposure PRIVATE
-    exposure_effect
-    photoeditor_core
-    Qt6::Test Qt6::Gui Qt6::Core
-)
-set_target_properties(test_exposure PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_Exposure COMMAND test_exposure)
-
-# HotPixel
-add_executable(test_hotpixel test_hotpixel.cpp)
-target_link_libraries(test_hotpixel PRIVATE
-    hotpixel_effect
-    photoeditor_core
-    Qt6::Test Qt6::Gui Qt6::Core
-)
-set_target_properties(test_hotpixel PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_HotPixel COMMAND test_hotpixel)
-
-# Unsharp
-add_executable(test_unsharp test_unsharp.cpp)
-target_link_libraries(test_unsharp PRIVATE
-    unsharp_effect
-    photoeditor_core
-    Qt6::Test Qt6::Gui Qt6::Core
-)
-set_target_properties(test_unsharp PROPERTIES
-    AUTOMOC ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
-)
-add_test(NAME Effects_Unsharp COMMAND test_unsharp)
+add_effect_test(test_brightness test_brightness.cpp brightness_effect Effects_Brightness)
+add_effect_test(test_saturation test_saturation.cpp saturation_effect Effects_Saturation)
+add_effect_test(test_grayscale  test_grayscale.cpp  grayscale_effect  Effects_Grayscale)
+add_effect_test(test_blur       test_blur.cpp       blur_effect       Effects_Blur)
+add_effect_test(test_exposure   test_exposure.cpp   exposure_effect   Effects_Exposure)
+add_effect_test(test_hotpixel   test_hotpixel.cpp   hotpixel_effect   Effects_HotPixel)
+add_effect_test(test_unsharp    test_unsharp.cpp    unsharp_effect    Effects_Unsharp)

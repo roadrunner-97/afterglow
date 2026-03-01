@@ -6,6 +6,28 @@ find_package(Qt6 COMPONENTS Test REQUIRED)
 add_executable(test_effect_manager
     core/test_effect_manager.cpp
 )
+
+# ---------------------------------------------------------------------------
+# GpuPipeline tests — exercises run(), initGpuKernels(), enqueueGpu() for
+# all 7 effects plus the viewportOnly fast path.
+# ---------------------------------------------------------------------------
+add_executable(test_gpu_pipeline
+    core/test_gpu_pipeline.cpp
+)
+target_link_libraries(test_gpu_pipeline PRIVATE
+    photoeditor_core
+    photoeditor_widgets
+    all_effects
+    Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core
+)
+set_target_properties(test_gpu_pipeline PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME GpuPipeline COMMAND test_gpu_pipeline)
+set_tests_properties(GpuPipeline PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
 target_link_libraries(test_effect_manager
     PRIVATE
         photoeditor_core

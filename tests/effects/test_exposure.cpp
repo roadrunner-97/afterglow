@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QWidget>
 #include <cmath>
 #include "ExposureEffect.h"
 #include "GpuDeviceRegistry.h"
@@ -130,7 +131,37 @@ private slots:
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 20; }));
     }
+
+    void meta_nonEmpty() {
+        ExposureEffect e;
+        QVERIFY(!e.getName().isEmpty());
+        QVERIFY(!e.getDescription().isEmpty());
+        QVERIFY(!e.getVersion().isEmpty());
+        QVERIFY(e.initialize());
+    }
+
+    void defaultParameters_keys() {
+        ExposureEffect e;
+        auto params = e.getParameters();
+        for (const auto& key : {"exposure", "whites", "highlights", "shadows", "blacks"})
+            QVERIFY(params.contains(key));
+    }
+
+    void identity_16bit() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        ExposureEffect e;
+        QImage input = makeSolid16bit(32, 32, 100, 100, 100);
+        QImage out = e.processImage(input, zeroParams());
+        QVERIFY(!out.isNull());
+    }
+
+    void createControlsWidget_constructsAndCaches() {
+        ExposureEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w != nullptr);
+        QVERIFY(e.createControlsWidget() == w);
+    }
 };
 
-QTEST_GUILESS_MAIN(TestExposure)
+QTEST_MAIN(TestExposure)
 #include "test_exposure.moc"

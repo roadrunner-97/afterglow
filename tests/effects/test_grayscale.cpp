@@ -1,5 +1,6 @@
 #include <QTest>
 #include <QCheckBox>
+#include <QWidget>
 #include "GrayscaleEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
@@ -75,6 +76,31 @@ private slots:
         // Expected: 0.299*200 + 0.587*100 + 0.114*50 + 0.5 = 124.7 → 124
         int grey = pixelR(out, 0, 0);
         QVERIFY(qAbs(grey - 124) <= 2);
+    }
+
+    void meta_nonEmpty() {
+        GrayscaleEffect e;
+        QVERIFY(!e.getName().isEmpty());
+        QVERIFY(!e.getDescription().isEmpty());
+        QVERIFY(!e.getVersion().isEmpty());
+        QVERIFY(e.initialize());
+    }
+
+    // Active grayscale on a 16-bit RGBX64 image: all output pixels must be grey (R=G=B).
+    void active_16bit() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        GrayscaleEffect e;
+        QWidget* w  = e.createControlsWidget();
+        auto*    cb = w->findChild<QCheckBox*>();
+        QVERIFY(cb);
+        cb->setChecked(true);
+
+        QImage input = makeSolid16bit(32, 32, 200, 100, 50);
+        QImage out   = e.processImage(input, {});
+        QVERIFY(!out.isNull());
+        QVERIFY(allPixels(out, [](QRgb px) {
+            return qRed(px) == qGreen(px) && qGreen(px) == qBlue(px);
+        }));
     }
 
     // Activating and then deactivating via the checkbox: subsequent processImage

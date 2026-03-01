@@ -311,7 +311,7 @@ static float cpuZoneEv(float L, const ZoneEvs& z) {
          + (      s3 - s2)             * mk1 * h;
 }
 static float cpuCurve(float L, const ZoneEvs& z) {
-    float ev = z.global + cpuZoneEv(L, z);
+    float ev = cpuZoneEv(L, z);   // zone adjustments only — global EV excluded from shape
     return cpuLinearToSrgb(cpuSrgbToLinear(L) * std::exp2(ev));
 }
 
@@ -396,6 +396,19 @@ protected:
         // Border
         p.setPen(QPen(QColor(90, 90, 90), 1));
         p.drawRect(r);
+
+        // Base exposure label — shown when global EV is set, so it's not forgotten
+        if (std::abs(m_z.global) >= 0.05f) {
+            QString label = QString("Base: %1%2 EV")
+                .arg(m_z.global > 0 ? "+" : "")
+                .arg(double(m_z.global), 0, 'f', 1);
+            p.setPen(QColor(200, 200, 200, 180));
+            QFont lf = p.font();
+            lf.setPixelSize(9);
+            p.setFont(lf);
+            QRectF lr(r.left() + 4, r.top() + 4, 80, 12);
+            p.drawText(lr, Qt::AlignLeft | Qt::AlignVCenter, label);
+        }
     }
 
 private:

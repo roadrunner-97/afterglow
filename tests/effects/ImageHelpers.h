@@ -14,6 +14,13 @@ inline QImage makeSolid(int w, int h, int r, int g, int b) {
     return img;
 }
 
+// Solid-color image in Format_RGBX64 (16-bit per channel).
+inline QImage makeSolid16bit(int w, int h, int r, int g, int b) {
+    QImage img(w, h, QImage::Format_RGBX64);
+    img.fill(QColor(r, g, b));
+    return img;
+}
+
 // Horizontal gradient: black (left) → white (right), grey values only.
 inline QImage makeGradient(int w, int h) {
     QImage img(w, h, QImage::Format_RGB32);

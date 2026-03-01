@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QWidget>
 #include "UnsharpEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
@@ -123,7 +124,46 @@ private slots:
         QCOMPARE(pixelR(out, 10,  32), 100);
         QCOMPARE(pixelR(out, 118, 32), 200);
     }
+
+    void meta_nonEmpty() {
+        UnsharpEffect e;
+        QVERIFY(!e.getName().isEmpty());
+        QVERIFY(!e.getDescription().isEmpty());
+        QVERIFY(!e.getVersion().isEmpty());
+        QVERIFY(e.initialize());
+    }
+
+    void defaultParameters_keys() {
+        UnsharpEffect e;
+        auto params = e.getParameters();
+        QVERIFY(params.contains("amount"));
+        QVERIFY(params.contains("radius"));
+        QVERIFY(params.contains("threshold"));
+        QCOMPARE(params["amount"].toDouble(),    1.0);
+        QCOMPARE(params["radius"].toInt(),       2);
+        QCOMPARE(params["threshold"].toInt(),    3);
+    }
+
+    // Solid colour 16-bit: blurred == original, so diff < threshold → unchanged.
+    void solidColour_16bit() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        UnsharpEffect e;
+        QImage input = makeSolid16bit(64, 64, 128, 128, 128);
+        QMap<QString, QVariant> params;
+        params["amount"]    = 1.0;
+        params["radius"]    = 2;
+        params["threshold"] = 3;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    void createControlsWidget_constructsAndCaches() {
+        UnsharpEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w != nullptr);
+        QVERIFY(e.createControlsWidget() == w);
+    }
 };
 
-QTEST_GUILESS_MAIN(TestUnsharp)
+QTEST_MAIN(TestUnsharp)
 #include "test_unsharp.moc"

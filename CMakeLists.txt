@@ -13,6 +13,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC \
     -Wduplicated-branches \
     -Werror")
 
+# Coverage instrumentation — overrides -O3 with -O0 for accurate results
+option(COVERAGE "Enable gcov coverage instrumentation (requires gcovr)" OFF)
+if(COVERAGE)
+    string(REPLACE "-O3" "-O0" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    add_compile_options(--coverage)
+    add_link_options(--coverage)
+endif()
+
 # Export compile_commands.json for clangd/LSP
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -169,3 +177,32 @@ set_target_properties(lightroom_clone PROPERTIES
 
 enable_testing()
 add_subdirectory(tests)
+
+# ============================================================================
+# Coverage report (gcovr)
+# ============================================================================
+
+if(COVERAGE)
+    find_program(GCOVR gcovr REQUIRED)
+    add_custom_target(coverage
+        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/coverage
+        COMMAND ${GCOVR}
+            --root ${CMAKE_SOURCE_DIR}
+            --object-directory ${CMAKE_BINARY_DIR}
+            # Generated / build artefacts
+            --exclude "${CMAKE_BINARY_DIR}/"
+            # Test sources (we measure what's tested, not the tests themselves)
+            --exclude "${CMAKE_SOURCE_DIR}/tests/"
+            # UI and app-level code that requires a display + event loop
+            --exclude "${CMAKE_SOURCE_DIR}/src/ui/"
+            --exclude "${CMAKE_SOURCE_DIR}/src/core/ImageProcessor\\.cpp"
+            --exclude "${CMAKE_SOURCE_DIR}/src/core/RawLoader\\.cpp"
+            --exclude "${CMAKE_SOURCE_DIR}/src/main\\.cpp"
+            --html-details ${CMAKE_BINARY_DIR}/coverage/index.html
+            --xml ${CMAKE_BINARY_DIR}/coverage/coverage.xml
+            --print-summary
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Generating coverage report -> build/coverage/index.html"
+    )
+endif()

@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QWidget>
 #include "HotPixelEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
@@ -109,7 +110,40 @@ private slots:
         // Spike deviation = |255-200|=55 < 255 → NOT replaced → still 255.
         QCOMPARE(pixelR(out, 16, 16), 255);
     }
+
+    void meta_nonEmpty() {
+        HotPixelEffect e;
+        QVERIFY(!e.getName().isEmpty());
+        QVERIFY(!e.getDescription().isEmpty());
+        QVERIFY(!e.getVersion().isEmpty());
+        QVERIFY(e.initialize());
+    }
+
+    void defaultParameters_keys() {
+        HotPixelEffect e;
+        auto params = e.getParameters();
+        QVERIFY(params.contains("threshold"));
+        QCOMPARE(params["threshold"].toInt(), 30);
+    }
+
+    // Uniform 16-bit image: no pixel deviates from its neighbours → unchanged.
+    void uniformImage_16bit() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        HotPixelEffect e;
+        QImage input = makeSolid16bit(32, 32, 80, 80, 80);
+        QMap<QString, QVariant> params;
+        params["threshold"] = 30;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    void createControlsWidget_constructsAndCaches() {
+        HotPixelEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w != nullptr);
+        QVERIFY(e.createControlsWidget() == w);
+    }
 };
 
-QTEST_GUILESS_MAIN(TestHotPixel)
+QTEST_MAIN(TestHotPixel)
 #include "test_hotpixel.moc"

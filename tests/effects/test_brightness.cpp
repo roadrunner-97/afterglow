@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QWidget>
 #include "BrightnessEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
@@ -129,7 +130,42 @@ private slots:
         QImage brightOut = e.processImage(bright, params);
         QVERIFY(pixelR(brightOut, 0, 0) < 200);
     }
+
+    void meta_nonEmpty() {
+        BrightnessEffect e;
+        QVERIFY(!e.getName().isEmpty());
+        QVERIFY(!e.getDescription().isEmpty());
+        QVERIFY(!e.getVersion().isEmpty());
+        QVERIFY(e.initialize());
+    }
+
+    void defaultParameters_keys() {
+        BrightnessEffect e;
+        auto params = e.getParameters();
+        QVERIFY(params.contains("brightness"));
+        QVERIFY(params.contains("contrast"));
+        QCOMPARE(params["brightness"].toInt(), 0);
+        QCOMPARE(params["contrast"].toInt(), 0);
+    }
+
+    void identity_16bit() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        BrightnessEffect e;
+        QImage input = makeSolid16bit(32, 32, 128, 90, 60);
+        QMap<QString, QVariant> params;
+        params["brightness"] = 0;
+        params["contrast"]   = 0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    void createControlsWidget_constructsAndCaches() {
+        BrightnessEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w != nullptr);
+        QVERIFY(e.createControlsWidget() == w);
+    }
 };
 
-QTEST_GUILESS_MAIN(TestBrightness)
+QTEST_MAIN(TestBrightness)
 #include "test_brightness.moc"

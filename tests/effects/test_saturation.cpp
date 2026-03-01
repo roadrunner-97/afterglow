@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QWidget>
 #include "SaturationEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
@@ -101,7 +102,42 @@ private slots:
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
         QVERIFY(gapOut > gapIn);
     }
+
+    void meta_nonEmpty() {
+        SaturationEffect e;
+        QVERIFY(!e.getName().isEmpty());
+        QVERIFY(!e.getDescription().isEmpty());
+        QVERIFY(!e.getVersion().isEmpty());
+        QVERIFY(e.initialize());
+    }
+
+    void defaultParameters_keys() {
+        SaturationEffect e;
+        auto params = e.getParameters();
+        QVERIFY(params.contains("saturation"));
+        QVERIFY(params.contains("vibrancy"));
+        QCOMPARE(params["saturation"].toDouble(), 0.0);
+        QCOMPARE(params["vibrancy"].toDouble(),   0.0);
+    }
+
+    void identity_16bit() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        SaturationEffect e;
+        QImage input = makeSolid16bit(32, 32, 128, 128, 128);
+        QMap<QString, QVariant> params;
+        params["saturation"] = 0.0;
+        params["vibrancy"]   = 0.0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    void createControlsWidget_constructsAndCaches() {
+        SaturationEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w != nullptr);
+        QVERIFY(e.createControlsWidget() == w);
+    }
 };
 
-QTEST_GUILESS_MAIN(TestSaturation)
+QTEST_MAIN(TestSaturation)
 #include "test_saturation.moc"
