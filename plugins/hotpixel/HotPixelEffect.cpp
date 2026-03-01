@@ -20,6 +20,7 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
 
 namespace {
 
@@ -111,36 +112,14 @@ __kernel void hotPixelRemove16(
 
 )CL";
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernel8;
-    cl::Kernel       kernel16;
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernel8;
+    cl::Kernel kernel16;
 
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] HotPixel: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "HotPixel")) return;
         try {
-            context  = cl::Context(device);
-            queue    = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
             kernel8  = cl::Kernel(prog, "hotPixelRemove");
@@ -156,14 +135,19 @@ private:
 
 static std::mutex gpuMutex;
 
-// threshold: 0–100 UI scale → 0–255 channel scale
-static QImage processImageGPU(const QImage& image, int thresholdPct) {
+// Single place that owns the UI (0–100) → native channel scale conversion.
+// 8-bit channels: 0–255; 16-bit channels: 0–65535.
+static float scaledThreshold(int pct, bool is16bit) {
+    return pct * (is16bit ? 655.35f : 2.55f);
+}
+
+// threshold: pre-scaled to native channel range (call scaledThreshold() first)
+static QImage processImageGPU(const QImage& image, float threshold) {
     QImage result   = image.convertToFormat(QImage::Format_RGB32);
     const int  w    = result.width();
     const int  h    = result.height();
     const int  stride = result.bytesPerLine() / 4;
     const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * h;
-    const float threshold = thresholdPct * 2.55f;
 
     try {
         std::lock_guard<std::mutex> lock(gpuMutex);
@@ -192,13 +176,13 @@ static QImage processImageGPU(const QImage& image, int thresholdPct) {
     return result;
 }
 
-static QImage processImageGPU16(const QImage& image, int thresholdPct) {
+// threshold: pre-scaled to native channel range (call scaledThreshold() first)
+static QImage processImageGPU16(const QImage& image, float threshold) {
     QImage result     = image; // already RGBX64
     const int  w      = result.width();
     const int  h      = result.height();
     const int  stride = result.bytesPerLine() / 8;
     const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * h;
-    const float threshold = thresholdPct * 655.35f;
 
     try {
         std::lock_guard<std::mutex> lock(gpuMutex);
@@ -252,8 +236,7 @@ bool HotPixelEffect::enqueueGpu(cl::CommandQueue& queue,
                                  int w, int h, int stride, bool is16bit,
                                  const QMap<QString, QVariant>& params) {
     const int   thresholdPct = params.value("threshold", 30).toInt();
-    const float threshold    = is16bit ? thresholdPct * 655.35f
-                                       : thresholdPct * 2.55f;
+    const float threshold    = scaledThreshold(thresholdPct, is16bit);
 
     cl::Kernel& k = is16bit ? m_kernel16 : m_kernel8;
     k.setArg(0, buf);
@@ -324,10 +307,12 @@ QImage HotPixelEffect::processImage(const QImage& image,
                                      const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;
 
-    const int threshold = parameters.value("threshold", 30).toInt();
-    if (threshold == 0) return image;
+    const int thresholdPct = parameters.value("threshold", 30).toInt();
+    if (thresholdPct == 0) return image;
 
-    if (image.format() == QImage::Format_RGBX64)
+    const bool is16 = image.format() == QImage::Format_RGBX64;
+    const float threshold = scaledThreshold(thresholdPct, is16);
+    if (is16)
         return processImageGPU16(image, threshold);
     return processImageGPU(image, threshold);
 }

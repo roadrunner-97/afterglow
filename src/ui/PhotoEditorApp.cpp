@@ -1,4 +1,5 @@
 #include "PhotoEditorApp.h"
+#include "Theme.h"
 #include "GpuDeviceRegistry.h"
 #include "RawLoader.h"
 #include <QVBoxLayout>
@@ -9,11 +10,15 @@
 #include <QMenu>
 #include <QAction>
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
 #include <QResizeEvent>
+#include <QCloseEvent>
 #include <QToolBar>
+#include <QSettings>
+#include <QDir>
 #include <QDebug>
 #include <memory>
 
@@ -21,25 +26,44 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     : QMainWindow(parent)
     , m_effects(effectManager)
     , m_processor(new ImageProcessor(this))
+    , m_resizeDebounce(new QTimer(this))
 {
     connect(m_processor, &ImageProcessor::processingComplete,
             this, &PhotoEditorApp::onProcessingComplete);
+    connect(m_processor, &ImageProcessor::processingStarted,
+            this, &PhotoEditorApp::onProcessingStarted);
+
+    m_resizeDebounce->setSingleShot(true);
+    m_resizeDebounce->setInterval(150);
+    connect(m_resizeDebounce, &QTimer::timeout, this, &PhotoEditorApp::triggerReprocess);
 
     setupToolBar();
     setupUI();
     setWindowTitle("Lightroom Clone");
-    setGeometry(100, 100, 1400, 900);
+
+    // Restore geometry and last-used directory from previous session
+    QSettings settings("LightroomClone", "LightroomClone");
+    if (settings.contains("geometry"))
+        restoreGeometry(settings.value("geometry").toByteArray());
+    else
+        setGeometry(100, 100, 1400, 900);
+    m_lastDir = settings.value("lastDir", QDir::homePath()).toString();
 }
+
+PhotoEditorApp::~PhotoEditorApp() = default;
 
 void PhotoEditorApp::setupToolBar() {
     QToolBar* toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
     toolbar->setStyleSheet(
-        "QToolBar { background: #F0EDE5; border-bottom: 1px solid #CCC5B5; spacing: 6px; padding: 2px 6px; }"
-        "QToolButton { color: #2C2018; background: transparent; border: 1px solid #CCC5B5;"
-        "  border-radius: 3px; padding: 3px 10px; }"
-        "QToolButton:checked { color: #F5F2EA; background: #C0802C; border-color: #C0802C; }"
-        "QToolButton:hover { background: #E0D8CC; }");
+        QString("QToolBar { background: %1; border-bottom: 1px solid %2; spacing: 6px; padding: 2px 6px; }"
+                "QToolButton { color: %3; background: transparent; border: 1px solid %2;"
+                "  border-radius: 3px; padding: 3px 10px; }"
+                "QToolButton:checked { color: %4; background: %5; border-color: %5; }"
+                "QToolButton:hover { background: %6; }")
+        .arg(Theme::BG_MAIN, Theme::BORDER,
+             Theme::TEXT_PRIMARY, Theme::CHECKED_TEXT,
+             Theme::CHECKED_BG, Theme::COLLAPSE_HOVER));
 
     QAction* liveAct = new QAction("Live Preview", this);
     liveAct->setCheckable(true);
@@ -49,13 +73,23 @@ void PhotoEditorApp::setupToolBar() {
         m_liveUpdate = on;
     });
     toolbar->addAction(liveAct);
+
+    // Spacer + processing indicator label on the right side of the toolbar
+    QWidget* spacer = new QWidget();
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    toolbar->addWidget(spacer);
+
+    m_processingLabel = new QLabel("Processing…");
+    m_processingLabel->setStyleSheet("color: #6E5E46; font-style: italic; padding: 0 6px;");
+    m_processingLabel->setVisible(false);
+    toolbar->addWidget(m_processingLabel);
 }
 
 void PhotoEditorApp::setupUI() {
     setupMenuBar();
 
     QWidget* central = new QWidget();
-    central->setStyleSheet("background: #F0EDE5;");
+    central->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
     setCentralWidget(central);
     QHBoxLayout* mainLayout = new QHBoxLayout(central);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -69,7 +103,7 @@ void PhotoEditorApp::setupUI() {
 
     // ── Right panel ──────────────────────────────────────────────────────────
     QWidget* rightPanel = new QWidget();
-    rightPanel->setStyleSheet("background-color: #EDEADE;");
+    rightPanel->setStyleSheet(QString("background-color: %1;").arg(Theme::BG_RIGHT_PANEL));
     rightPanel->setFixedWidth(300);
     QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(8, 8, 8, 8);
@@ -103,13 +137,16 @@ void PhotoEditorApp::setupUI() {
 
 void PhotoEditorApp::setupMenuBar() {
     menuBar()->setStyleSheet(
-        "QMenuBar { background: #F0EDE5; color: #2C2018; border-bottom: 1px solid #CCC5B5; }"
-        "QMenuBar::item { padding: 4px 8px; }"
-        "QMenuBar::item:selected { background: #E0D8CC; border-radius: 3px; }"
-        "QMenu { background: #F4F1EA; color: #2C2018; border: 1px solid #CCC5B5; }"
-        "QMenu::item { padding: 4px 20px; }"
-        "QMenu::item:selected { background: #C0802C; color: #F5F2EA; }"
-        "QMenu::separator { height: 1px; background: #CCC5B5; margin: 2px 0; }");
+        QString("QMenuBar { background: %1; color: %2; border-bottom: 1px solid %3; }"
+                "QMenuBar::item { padding: 4px 8px; }"
+                "QMenuBar::item:selected { background: %4; border-radius: 3px; }"
+                "QMenu { background: %5; color: %2; border: 1px solid %3; }"
+                "QMenu::item { padding: 4px 20px; }"
+                "QMenu::item:selected { background: %6; color: %7; }"
+                "QMenu::separator { height: 1px; background: %3; margin: 2px 0; }")
+        .arg(Theme::BG_MAIN, Theme::TEXT_PRIMARY, Theme::BORDER,
+             Theme::COLLAPSE_HOVER, Theme::BG_EFFECT_PANEL,
+             Theme::CHECKED_BG, Theme::CHECKED_TEXT));
 
     QMenu* fileMenu = menuBar()->addMenu("File");
 
@@ -124,6 +161,7 @@ void PhotoEditorApp::setupMenuBar() {
     fileMenu->addSeparator();
 
     QAction* exitAct = fileMenu->addAction("Exit");
+    exitAct->setShortcut(QKeySequence("Ctrl+Q"));
     connect(exitAct, &QAction::triggered, this, &QWidget::close);
 
     // View → Effects — enable/disable individual effects
@@ -144,16 +182,17 @@ void PhotoEditorApp::setupMenuBar() {
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
     QLabel* label = new QLabel("GPU Device");
-    label->setStyleSheet("color: #6E5E46; font-size: 10px; text-transform: uppercase;");
+    label->setStyleSheet(QString("color: %1; font-size: 10px; text-transform: uppercase;").arg(Theme::TEXT_SECONDARY));
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
     m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
     m_gpuSelector->setStyleSheet(
-        "QComboBox { color: #2C2018; background-color: #F4F1EA;"
-        "  border: 1px solid #CCC5B5; border-radius: 3px; padding: 4px; }"
-        "QComboBox::drop-down { border: none; }"
-        "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
+        QString("QComboBox { color: %1; background-color: %2;"
+                "  border: 1px solid %3; border-radius: 3px; padding: 4px; }"
+                "QComboBox::drop-down { border: none; }"
+                "QComboBox QAbstractItemView { color: %1; background-color: %2; }")
+        .arg(Theme::TEXT_PRIMARY, Theme::BG_EFFECT_PANEL, Theme::BORDER));
 
     const auto& devs = GpuDeviceRegistry::instance().devices();
     if (devs.empty()) {
@@ -181,7 +220,7 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
         // Container
         QWidget* panel = new QWidget();
         panel->setStyleSheet(
-            "QWidget { background-color: #F4F1EA; border-radius: 4px; }");
+            QString("QWidget { background-color: %1; border-radius: 4px; }").arg(Theme::BG_EFFECT_PANEL));
         QVBoxLayout* panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
@@ -193,14 +232,15 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
         titleLayout->setContentsMargins(0, 0, 0, 0);
 
         QLabel* title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
-        title->setStyleSheet("color: #2C2018; background: transparent;");
+        title->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::TEXT_PRIMARY));
         titleLayout->addWidget(title, 1);
 
         QPushButton* collapseBtn = new QPushButton("−");
         collapseBtn->setStyleSheet(
-            "QPushButton { background: #D0C8B8; color: #2C2018; border: none;"
-            "  border-radius: 3px; padding: 1px 5px; font-weight: bold; }"
-            "QPushButton:hover { background: #BEB8A8; }");
+            QString("QPushButton { background: %1; color: %2; border: none;"
+                    "  border-radius: 3px; padding: 1px 5px; font-weight: bold; }"
+                    "QPushButton:hover { background: %3; }")
+            .arg(Theme::COLLAPSE_BG, Theme::TEXT_PRIMARY, Theme::COLLAPSE_HOVER));
         collapseBtn->setToolTip("Collapse or expand this effect's controls.");
         collapseBtn->setMaximumWidth(28);
         titleLayout->addWidget(collapseBtn);
@@ -276,8 +316,14 @@ void PhotoEditorApp::saveImage() {
         "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp);;All Files (*)");
 
     if (fileName.isEmpty()) return;
-    m_viewport->currentImage().save(fileName);
     m_lastDir = QFileInfo(fileName).absolutePath();
+
+    if (!m_viewport->currentImage().save(fileName)) {
+        QMessageBox::warning(this, "Save Failed",
+            QString("Could not save image to:\n%1\n\n"
+                    "Check that the directory is writable and you have sufficient disk space.")
+            .arg(fileName));
+    }
 }
 
 void PhotoEditorApp::onParametersChanged() {
@@ -319,7 +365,12 @@ void PhotoEditorApp::triggerViewportUpdate() {
                                    /*viewportOnly=*/true);
 }
 
+void PhotoEditorApp::onProcessingStarted() {
+    m_processingLabel->setVisible(true);
+}
+
 void PhotoEditorApp::onProcessingComplete(QImage result) {
+    m_processingLabel->setVisible(false);
     if (result.isNull()) {
         m_viewport->update();   // CL-GL path: result already in GL texture
     } else {
@@ -330,5 +381,13 @@ void PhotoEditorApp::onProcessingComplete(QImage result) {
 
 void PhotoEditorApp::resizeEvent(QResizeEvent* event) {
     QMainWindow::resizeEvent(event);
-    triggerReprocess();
+    // Debounce: avoid firing a full GPU reprocess on every pixel of a window drag.
+    m_resizeDebounce->start();
+}
+
+void PhotoEditorApp::closeEvent(QCloseEvent* event) {
+    QSettings settings("LightroomClone", "LightroomClone");
+    settings.setValue("geometry", saveGeometry());
+    settings.setValue("lastDir",  m_lastDir);
+    QMainWindow::closeEvent(event);
 }

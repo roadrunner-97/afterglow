@@ -15,6 +15,7 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
 
 namespace {
 
@@ -148,40 +149,18 @@ static void computeWBMuls(float shotK, float targetK, float tint,
 // ---------------------------------------------------------------------------
 // GpuContext (per-effect OpenCL objects)
 // ---------------------------------------------------------------------------
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernel;
-    cl::Kernel       kernel16;
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernel;
+    cl::Kernel kernel16;
 
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] WhiteBalance: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "WhiteBalance")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
-            kernel    = cl::Kernel(prog, "applyWB");
-            kernel16  = cl::Kernel(prog, "applyWB16");
+            kernel   = cl::Kernel(prog, "applyWB");
+            kernel16 = cl::Kernel(prog, "applyWB16");
             available = true;
             qDebug() << "[GPU] WhiteBalance ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());

@@ -27,6 +27,7 @@ public:
                            bool viewportOnly = false);
 
 signals:
+    void processingStarted();
     void processingComplete(QImage result);
 
 private:

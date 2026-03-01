@@ -6,16 +6,12 @@
 #include <QElapsedTimer>
 #include <algorithm>
 
-// Preview kernels output RGBA byte order (R,G,B,A in memory on little-endian)
-// so the result is compatible with both GL_RGBA8 textures and QImage::Format_RGBA8888.
-//
-// Byte layout trick: on a LE machine a uint32 value
-//   (0xFF << 24) | (B << 16) | (G << 8) | R
-// is stored in memory as bytes [R, G, B, 0xFF] — i.e. RGBA. ✓
+// Downsample kernels output RGB32 (0xFFRRGGBB), matching QImage::Format_RGB32.
+// R and B are NOT swapped — effect kernels expect RGB32 byte order.
 // cropX0/Y0/X1/Y1 are the visible region in source image pixels (may extend
 // outside [0..srcW/H) — those pixels are output as black for letterboxing).
-static const char* PREVIEW_KERNEL_SOURCE = R"CL(
-kernel void preview_downsample_8bit(
+static const char* DOWNSAMPLE_KERNEL_SOURCE = R"CL(
+kernel void preview_downsample_8bit_rgb32(
     global const uint* src, global uint* dst,
     int srcW, int srcH, int srcStride, int dstW, int dstH,
     float cropX0, float cropY0, float cropX1, float cropY1)
@@ -37,14 +33,14 @@ kernel void preview_downsample_8bit(
         uint p = src[sy*srcStride+sx];
         r += (p>>16)&0xFF; g += (p>>8)&0xFF; b += p&0xFF; n++;
     }
-    // Output RGBA: bytes [R, G, B, 0xFF] on little-endian
+    // Output RGB32: keep R/G/B order (not swapped)
     if (n) dst[dy*dstW+dx] = 0xFF000000u
-        | ((uint)(b/n+.5f)<<16)
+        | ((uint)(r/n+.5f)<<16)
         | ((uint)(g/n+.5f)<<8)
-        |  (uint)(r/n+.5f);
+        |  (uint)(b/n+.5f);
 }
 
-kernel void preview_downsample_16bit(
+kernel void preview_downsample_16bit_rgb32(
     global const ushort* src, global uint* dst,
     int srcW, int srcH, int srcStride, int dstW, int dstH,
     float cropX0, float cropY0, float cropX1, float cropY1)
@@ -66,25 +62,24 @@ kernel void preview_downsample_16bit(
         int i = (sy*srcStride+sx)*4;
         r += src[i]; g += src[i+1]; b += src[i+2]; n++;
     }
-    // Output RGBA: bytes [R, G, B, 0xFF] on little-endian
+    // Output RGB32: keep R/G/B order (not swapped), scale 16-bit → 8-bit
     if (n) dst[dy*dstW+dx] = 0xFF000000u
-        | ((uint)(b/n/257.f+.5f)<<16)
+        | ((uint)(r/n/257.f+.5f)<<16)
         | ((uint)(g/n/257.f+.5f)<<8)
-        |  (uint)(r/n/257.f+.5f);
+        |  (uint)(b/n/257.f+.5f);
 }
 )CL";
 
 // ── run ──────────────────────────────────────────────────────────────────────
 
 QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& calls,
-                        const ViewportRequest& viewport, bool viewportOnly) {
+                        const ViewportRequest& viewport, bool /*viewportOnly*/) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     const int rev = GpuDeviceRegistry::instance().revision();
     if (!m_available || m_revision != rev) {
-        m_available           = false;
-        m_processedFrameValid = false;
-        m_lastBits            = nullptr;
+        m_available = false;
+        m_lastBits  = nullptr;
         m_initializedEffects.clear();
         m_previewW = 0;
         m_previewH = 0;
@@ -93,63 +88,34 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         m_revision = rev;
     }
 
-    // Viewport-only: skip the effects chain if we already have a processed frame.
-    // Falls back to a full run on first frame, after device change, or after
-    // a new image is loaded (m_processedFrameValid is cleared in those cases).
-    const bool doEffects = !viewportOnly || !m_processedFrameValid;
-
-    if (doEffects) {
-        // Lazily compile kernels for any effect not yet seen in this context.
-        for (const auto& call : calls) {
-            auto* g = dynamic_cast<IGpuEffect*>(call.effect);
-            if (!g) {
-                qWarning() << "[GpuPipeline]" << call.effect->getName()
-                           << "does not implement IGpuEffect — aborting pipeline";
+    // Lazily compile kernels for any effect not yet seen in this context.
+    for (const auto& call : calls) {
+        auto* g = dynamic_cast<IGpuEffect*>(call.effect);
+        if (!g) {
+            qWarning() << "[GpuPipeline]" << call.effect->getName()
+                       << "does not implement IGpuEffect — aborting pipeline";
+            return {};
+        }
+        if (m_initializedEffects.find(g) == m_initializedEffects.end()) {
+            if (!g->initGpuKernels(m_context, m_device)) {
+                qWarning() << "[GpuPipeline] initGpuKernels failed for"
+                           << call.effect->getName();
                 return {};
             }
-            if (m_initializedEffects.find(g) == m_initializedEffects.end()) {
-                if (!g->initGpuKernels(m_context, m_device)) {
-                    qWarning() << "[GpuPipeline] initGpuKernels failed for"
-                               << call.effect->getName();
-                    return {};
-                }
-                m_initializedEffects.insert(g);
-            }
+            m_initializedEffects.insert(g);
         }
-
-        if (image.constBits() != m_lastBits)
-            uploadImageLocked(image);
-
-        if (!m_available) return {};
     }
+
+    if (image.constBits() != m_lastBits)
+        uploadImageLocked(image);
+
+    if (!m_available) return {};
 
     QElapsedTimer t;
     t.start();
 
     try {
-        qint64 kernelUs = 0;
-
-        if (doEffects) {
-            // GPU-to-GPU copy of original — no PCIe transfer
-            m_queue.enqueueCopyBuffer(m_srcBuf, m_workBuf, 0, 0, m_bufBytes);
-
-            for (const auto& call : calls) {
-                auto* g = dynamic_cast<IGpuEffect*>(call.effect);
-                if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
-                                   m_width, m_height, m_stride, m_is16bit, call.params)) {
-                    qWarning() << "[GpuPipeline]" << call.effect->getName()
-                               << "enqueueGpu() failed — aborting pipeline";
-                    return {};
-                }
-            }
-
-            // Single finish for the entire kernel chain
-            m_queue.finish();
-            m_processedFrameValid = true;
-            kernelUs = (t.nsecsElapsed() + 500) / 1000;
-        }
-
-        // Output is always the full viewport size.
+        // Compute preview dimensions from viewport.
         const int previewW = viewport.displaySize.isValid() ? viewport.displaySize.width()  : m_width;
         const int previewH = viewport.displaySize.isValid() ? viewport.displaySize.height() : m_height;
 
@@ -157,7 +123,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         // Mirrors the pan/zoom math in ViewportWidget exactly.
         const float W  = m_width,  H  = m_height;
         const float Vw = previewW, Vh = previewH;
-        const float fitScale    = std::min(Vw / W, Vh / H);
+        const float fitScale     = std::min(Vw / W, Vh / H);
         const float displayScale = fitScale * viewport.zoom;
         const float regionW = Vw / displayScale;
         const float regionH = Vh / displayScale;
@@ -166,45 +132,69 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         const float cropX1 = cropX0 + regionW;
         const float cropY1 = cropY0 + regionH;
 
-        // Reallocate preview staging buffer if size changed
+        // Reallocate preview-sized work/aux buffers when dimensions change.
         if (m_previewW != previewW || m_previewH != previewH) {
-            m_previewBuf = cl::Buffer(m_context, CL_MEM_READ_WRITE,
-                                     static_cast<size_t>(previewW) * previewH * 4);
+            const size_t previewBytes = static_cast<size_t>(previewW) * previewH * 4;
+            m_workBuf  = cl::Buffer(m_context, CL_MEM_READ_WRITE, previewBytes);
+            m_auxBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE, previewBytes);
             m_previewW = previewW;
             m_previewH = previewH;
         }
 
-        // Enqueue downsample/crop kernel (output is RGBA byte order)
-        cl::Kernel& kernel = m_is16bit ? m_previewKernel16 : m_previewKernel8;
-        kernel.setArg(0, m_workBuf);
-        kernel.setArg(1, m_previewBuf);
-        kernel.setArg(2, m_width);
-        kernel.setArg(3, m_height);
-        kernel.setArg(4, m_stride);
-        kernel.setArg(5, previewW);
-        kernel.setArg(6, previewH);
-        kernel.setArg(7, cropX0);
-        kernel.setArg(8, cropY0);
-        kernel.setArg(9, cropX1);
-        kernel.setArg(10, cropY1);
-        m_queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+        // Step 1: Downsample srcBuf → workBuf (preview-sized RGB32).
+        cl::Kernel& dsKernel = m_is16bit ? m_downsampleKernel16 : m_downsampleKernel8;
+        dsKernel.setArg(0, m_srcBuf);
+        dsKernel.setArg(1, m_workBuf);
+        dsKernel.setArg(2, m_width);
+        dsKernel.setArg(3, m_height);
+        dsKernel.setArg(4, m_stride);
+        dsKernel.setArg(5, previewW);
+        dsKernel.setArg(6, previewH);
+        dsKernel.setArg(7, cropX0);
+        dsKernel.setArg(8, cropY0);
+        dsKernel.setArg(9, cropX1);
+        dsKernel.setArg(10, cropY1);
+        m_queue.enqueueNDRangeKernel(dsKernel, cl::NullRange,
                                      cl::NDRange(previewW, previewH));
-
-        // Read back to CPU
         m_queue.finish();
+        const qint64 t1 = t.nsecsElapsed();
 
-        QImage result(previewW, previewH, QImage::Format_RGBA8888);
-        m_queue.enqueueReadBuffer(m_previewBuf, CL_TRUE, 0,
+        // Scale factor: how many source pixels correspond to one preview pixel.
+        // Effects with pixel-radius parameters (blur, unsharp, denoise) divide
+        // their radii by this value so the perceptual strength stays constant
+        // regardless of zoom level.
+        const float srcPixelsPerPreviewPixel = regionW / static_cast<float>(previewW);
+
+        // Step 2: Run all effects on the preview-sized RGB32 workBuf.
+        for (const auto& call : calls) {
+            auto* g = dynamic_cast<IGpuEffect*>(call.effect);
+            QMap<QString, QVariant> scaledParams = call.params;
+            scaledParams.insert("_srcPixelsPerPreviewPixel",
+                                static_cast<double>(srcPixelsPerPreviewPixel));
+            if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
+                               previewW, previewH, previewW,
+                               /*is16bit=*/false, scaledParams)) {
+                qWarning() << "[GpuPipeline]" << call.effect->getName()
+                           << "enqueueGpu() failed — aborting pipeline";
+                return {};
+            }
+        }
+        m_queue.finish();
+        const qint64 t2 = t.nsecsElapsed();
+
+        // Step 3: Read workBuf back to CPU as RGB32.
+        QImage result(previewW, previewH, QImage::Format_RGB32);
+        m_queue.enqueueReadBuffer(m_workBuf, CL_TRUE, 0,
                                   static_cast<size_t>(previewW) * previewH * 4,
                                   result.bits());
-        qint64 totalUs = (t.nsecsElapsed() + 500) / 1000;
+        const qint64 t3 = t.nsecsElapsed();
 
         qDebug() << "[GpuPipeline]"
-                 << (doEffects ? "copy+kernels:" : "[viewport-only] kernels skipped,")
-                 << kernelUs << "µs"
-                 << " downsample+readback:" << (totalUs - kernelUs) << "µs"
-                 << " total:" << totalUs << "µs"
-                 << " preview:" << previewW << "x" << previewH;
+                 << "downsample:" << (t1 + 500) / 1000 << "µs"
+                 << " effects:"   << (t2 - t1 + 500) / 1000 << "µs"
+                 << " readback:"  << (t3 - t2 + 500) / 1000 << "µs"
+                 << " total:"     << (t3 + 500) / 1000 << "µs"
+                 << " preview:"   << previewW << "x" << previewH;
         return result;
 
     } catch (const cl::Error& e) {
@@ -232,7 +222,7 @@ bool GpuPipeline::initContext() {
         qDebug() << "[GpuPipeline] context ready on:"
                  << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
 
-        if (!initPreviewKernels()) {
+        if (!initDownsampleKernels()) {
             m_available = false;
             return false;
         }
@@ -244,18 +234,18 @@ bool GpuPipeline::initContext() {
     }
 }
 
-bool GpuPipeline::initPreviewKernels() {
+bool GpuPipeline::initDownsampleKernels() {
     try {
-        cl::Program prog(m_context, PREVIEW_KERNEL_SOURCE);
+        cl::Program prog(m_context, DOWNSAMPLE_KERNEL_SOURCE);
         prog.build({m_device});
-        m_previewKernel8  = cl::Kernel(prog, "preview_downsample_8bit");
-        m_previewKernel16 = cl::Kernel(prog, "preview_downsample_16bit");
+        m_downsampleKernel8  = cl::Kernel(prog, "preview_downsample_8bit_rgb32");
+        m_downsampleKernel16 = cl::Kernel(prog, "preview_downsample_16bit_rgb32");
         return true;
     } catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] initPreviewKernels failed:" << e.what()
+        qWarning() << "[GpuPipeline] initDownsampleKernels failed:" << e.what()
                    << "(err" << e.err() << ")";
         try {
-            cl::Program prog(m_context, PREVIEW_KERNEL_SOURCE);
+            cl::Program prog(m_context, DOWNSAMPLE_KERNEL_SOURCE);
             std::string log = prog.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
             qWarning() << "Build log:" << QString::fromStdString(log);
         } catch (...) {}
@@ -282,10 +272,8 @@ void GpuPipeline::uploadImageLocked(const QImage& image) {
     t.start();
 
     try {
-        m_srcBuf  = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                               m_bufBytes, src.bits());
-        m_workBuf = cl::Buffer(m_context, CL_MEM_READ_WRITE, m_bufBytes);
-        m_auxBuf  = cl::Buffer(m_context, CL_MEM_READ_WRITE, m_bufBytes);
+        m_srcBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                m_bufBytes, src.bits());
         m_lastBits = image.constBits();
 
         qDebug() << "[GpuPipeline] uploaded" << m_width << "x" << m_height

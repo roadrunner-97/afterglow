@@ -10,6 +10,7 @@
 #include "GpuPipeline.h"
 
 class QOpenGLShaderProgram;
+class QKeyEvent;
 
 /**
  * @brief Image display widget with scroll-wheel zoom and left-drag pan.
@@ -47,6 +48,7 @@ protected:
     void resizeGL(int w, int h) override;
     void paintGL() override;
 
+    void keyPressEvent(QKeyEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;

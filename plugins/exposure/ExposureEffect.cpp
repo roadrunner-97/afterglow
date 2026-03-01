@@ -17,6 +17,7 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
 
 namespace {
 
@@ -129,58 +130,37 @@ __kernel void adjustExposure16(__global ushort4* pixels,
     int y = get_global_id(1);
     if (x >= width || y >= height) return;
 
+    // Same structure as the 8-bit kernel: r_s/g_s/b_s are sRGB-encoded values;
+    // lum is perceptual (sRGB) luminance used for zone detection; EV adjustment
+    // is applied in linear light (srgb_to_linear → scale → linear_to_srgb).
     ushort4 px = pixels[y * stride + x];
-    float r_s = srgb_to_linear(px.s0 / 65535.0f);
-    float g_s = srgb_to_linear(px.s1 / 65535.0f);
-    float b_s = srgb_to_linear(px.s2 / 65535.0f);
+    float r_s = px.s0 / 65535.0f;
+    float g_s = px.s1 / 65535.0f;
+    float b_s = px.s2 / 65535.0f;
 
-    float lum = 0.2126f * (px.s0 / 65535.0f)
-              + 0.7152f * (px.s1 / 65535.0f)
-              + 0.0722f * (px.s2 / 65535.0f);
+    float lum = 0.2126f * r_s + 0.7152f * g_s + 0.0722f * b_s;
     float ev      = globalEv + zoneEv(lum, blacksEv, shadowsEv, highlightsEv, whitesEv);
     float evFactor = native_exp2(ev);
 
-    px.s0 = (ushort)(clamp(linear_to_srgb(r_s * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    px.s1 = (ushort)(clamp(linear_to_srgb(g_s * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    px.s2 = (ushort)(clamp(linear_to_srgb(b_s * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s0 = (ushort)(clamp(linear_to_srgb(srgb_to_linear(r_s) * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s1 = (ushort)(clamp(linear_to_srgb(srgb_to_linear(g_s) * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s2 = (ushort)(clamp(linear_to_srgb(srgb_to_linear(b_s) * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
     pixels[y * stride + x] = px;
 }
 )CL";
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernel;
-    cl::Kernel       kernel16;
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernel;
+    cl::Kernel kernel16;
 
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] Exposure: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "Exposure")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
-            kernel    = cl::Kernel(prog, "adjustExposure");
-            kernel16  = cl::Kernel(prog, "adjustExposure16");
+            kernel   = cl::Kernel(prog, "adjustExposure");
+            kernel16 = cl::Kernel(prog, "adjustExposure16");
             available = true;
             qDebug() << "[GPU] Exposure ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());

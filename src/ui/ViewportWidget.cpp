@@ -2,6 +2,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
+#include <QKeyEvent>
 #include <QWheelEvent>
 #include <QMouseEvent>
 #include <QDebug>
@@ -34,6 +35,7 @@ ViewportWidget::ViewportWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
     setMouseTracking(false);
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 ViewportWidget::~ViewportWidget() {
@@ -155,6 +157,51 @@ ViewportRequest ViewportWidget::viewportRequest() const {
 
 // ── Pan / zoom ───────────────────────────────────────────────────────────────
 
+void ViewportWidget::keyPressEvent(QKeyEvent* event) {
+    if (m_imageSize.isEmpty()) { event->ignore(); return; }
+
+    const bool ctrl = event->modifiers() & Qt::ControlModifier;
+    const int key   = event->key();
+
+    // Ctrl+0: fit to window
+    if (ctrl && key == Qt::Key_0) {
+        m_zoom   = 1.0f;
+        m_center = {0.5, 0.5};
+        emit viewportChanged();
+        event->accept();
+        return;
+    }
+
+    // Ctrl+1: 100% (one image pixel per screen pixel)
+    if (ctrl && key == Qt::Key_1) {
+        const float W  = m_imageSize.width(), H = m_imageSize.height();
+        const float Vw = width(),             Vh = height();
+        const float fitScale = std::min(Vw / W, Vh / H);
+        m_zoom   = std::clamp(1.0f / fitScale, 1.0f, 64.0f);
+        m_center = {0.5, 0.5};
+        clampCenter();
+        emit viewportChanged();
+        event->accept();
+        return;
+    }
+
+    // +/= zoom in, - zoom out
+    if (key == Qt::Key_Plus || key == Qt::Key_Equal) {
+        const float newZoom = std::clamp(m_zoom * 1.15f, 1.0f, 64.0f);
+        if (newZoom != m_zoom) { m_zoom = newZoom; clampCenter(); emit viewportChanged(); }
+        event->accept();
+        return;
+    }
+    if (key == Qt::Key_Minus) {
+        const float newZoom = std::clamp(m_zoom / 1.15f, 1.0f, 64.0f);
+        if (newZoom != m_zoom) { m_zoom = newZoom; clampCenter(); emit viewportChanged(); }
+        event->accept();
+        return;
+    }
+
+    event->ignore();
+}
+
 void ViewportWidget::wheelEvent(QWheelEvent* event) {
     if (m_imageSize.isEmpty()) { event->ignore(); return; }
 
@@ -191,7 +238,8 @@ void ViewportWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void ViewportWidget::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton && !m_imageSize.isEmpty()) {
+    const bool isPan = (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton);
+    if (isPan && !m_imageSize.isEmpty()) {
         m_panning      = true;
         m_lastMousePos = event->pos();
         setCursor(Qt::ClosedHandCursor);
@@ -221,7 +269,8 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ViewportWidget::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton && m_panning) {
+    const bool isPan = (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton);
+    if (isPan && m_panning) {
         m_panning = false;
         setCursor(m_imageSize.isEmpty() ? Qt::ArrowCursor : Qt::OpenHandCursor);
         event->accept();

@@ -13,6 +13,7 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
 
 namespace {
 
@@ -51,41 +52,18 @@ __kernel void grayscale16(__global ushort4* pixels, int stride, int width, int h
 }
 )CL";
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernel;
-    cl::Kernel       kernel16;
-    bool             available = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernel;
+    cl::Kernel kernel16;
 
-    // Must be called with gpuMutex held.
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] Grayscale: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "Grayscale")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
-            kernel    = cl::Kernel(prog, "grayscale");
-            kernel16  = cl::Kernel(prog, "grayscale16");
+            kernel   = cl::Kernel(prog, "grayscale");
+            kernel16 = cl::Kernel(prog, "grayscale16");
             available = true;
             qDebug() << "[GPU] Grayscale ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
@@ -124,6 +102,38 @@ static QImage processImageGPU(const QImage& image) {
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
     } catch (const cl::Error& e) {
         qWarning() << "[GPU] Grayscale kernel failed:" << e.what() << "(err" << e.err() << ")";
+        return {};
+    }
+    return result;
+}
+
+static QImage processImageGPU16(const QImage& image) {
+    QImage result = image; // already RGBX64; copy-on-write detaches
+    const int    width    = result.width();
+    const int    height   = result.height();
+    const int    stride   = result.bytesPerLine() / 8;
+    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
+
+    try {
+        std::lock_guard<std::mutex> lock(gpuMutex);
+        GpuContext& gpu = GpuContext::instance();
+        if (!gpu.available) return {};
+
+        cl::Buffer buf(gpu.context,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                       bufBytes, result.bits());
+
+        gpu.kernel16.setArg(0, buf);
+        gpu.kernel16.setArg(1, stride);
+        gpu.kernel16.setArg(2, width);
+        gpu.kernel16.setArg(3, height);
+
+        gpu.queue.enqueueNDRangeKernel(gpu.kernel16, cl::NullRange,
+                                       cl::NDRange(width, height), cl::NullRange);
+        gpu.queue.finish();
+        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
+    } catch (const cl::Error& e) {
+        qWarning() << "[GPU] Grayscale16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
     return result;
@@ -203,6 +213,7 @@ QWidget* GrayscaleEffect::createControlsWidget() {
 
 QImage GrayscaleEffect::processImage(const QImage &image, const QMap<QString, QVariant> &) {
     if (image.isNull() || !m_active) return image;
-    // GPU path operates on 8-bit RGB32; converts RGBX64 input automatically
+    if (image.format() == QImage::Format_RGBX64)
+        return processImageGPU16(image);
     return processImageGPU(image);
 }

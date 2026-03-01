@@ -35,6 +35,8 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
             allGpu = false;
     }
 
+    emit processingStarted();
+
     QElapsedTimer timer;
     timer.start();
 

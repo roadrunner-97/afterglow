@@ -58,7 +58,8 @@ target_link_libraries(photoeditor_widgets
 )
 
 target_include_directories(photoeditor_widgets
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/widgets>
+    PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/widgets>
+    PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/ui>
 )
 
 set_target_properties(photoeditor_widgets PROPERTIES
@@ -80,6 +81,8 @@ add_library(photoeditor_core SHARED
     src/core/GpuPipeline.cpp
     src/core/GpuPipeline.h
     src/core/IGpuEffect.h
+    src/core/GpuContextBase.h
+    src/core/blur_kernels.h
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h

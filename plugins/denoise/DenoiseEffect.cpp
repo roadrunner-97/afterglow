@@ -26,59 +26,15 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
+#include "blur_kernels.h"
 
 namespace {
 
-static const char* GPU_KERNEL_SOURCE = R"CL(
+// Blur passes (blurH/blurV/blurH16/blurV16) come from the shared header.
+static const char* GPU_KERNEL_SOURCE = SHARED_BLUR_KERNELS R"CL(
 
 // ─── 8-bit path ─────────────────────────────────────────────────────────────
-// Pixels: QImage::Format_RGB32 (0xFFRRGGBB).  stride = bytesPerLine/4.
-
-__kernel void blurH(__global const uint* in, __global uint* out,
-                    int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dx = -radius; dx <= radius; ++dx) {
-        int sx = clamp(x + dx, 0, width - 1);
-        uint p = in[y * stride + sx];
-        float w = native_exp(-0.5f * (float)(dx * dx) / (sigma * sigma));
-        r += w * ((p >> 16) & 0xFFu);
-        g += w * ((p >>  8) & 0xFFu);
-        b += w * ( p        & 0xFFu);
-        wsum += w;
-    }
-    uint ri = (uint)(r / wsum + 0.5f);
-    uint gi = (uint)(g / wsum + 0.5f);
-    uint bi = (uint)(b / wsum + 0.5f);
-    out[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
-
-__kernel void blurV(__global const uint* in, __global uint* out,
-                    int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dy = -radius; dy <= radius; ++dy) {
-        int sy = clamp(y + dy, 0, height - 1);
-        uint p = in[sy * stride + x];
-        float w = native_exp(-0.5f * (float)(dy * dy) / (sigma * sigma));
-        r += w * ((p >> 16) & 0xFFu);
-        g += w * ((p >>  8) & 0xFFu);
-        b += w * ( p        & 0xFFu);
-        wsum += w;
-    }
-    uint ri = (uint)(r / wsum + 0.5f);
-    uint gi = (uint)(g / wsum + 0.5f);
-    uint bi = (uint)(b / wsum + 0.5f);
-    out[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
 
 // Blend original → blurred, with shadow-based attenuation.
 // strength:       0.0–1.0  overall blend fraction
@@ -160,54 +116,7 @@ __kernel void colorNoiseBlend(__global const uint* current,
 }
 
 // ─── 16-bit path ─────────────────────────────────────────────────────────────
-// Pixels: QImage::Format_RGBX64 (ushort4, .s0=R .s1=G .s2=B .s3=unused).
-// stride = bytesPerLine / 8.
-
-__kernel void blurH16(__global const ushort4* in, __global ushort4* out,
-                      int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dx = -radius; dx <= radius; ++dx) {
-        int sx = clamp(x + dx, 0, width - 1);
-        ushort4 p = in[y * stride + sx];
-        float w = native_exp(-0.5f * (float)(dx * dx) / (sigma * sigma));
-        r += w * p.s0; g += w * p.s1; b += w * p.s2;
-        wsum += w;
-    }
-    ushort4 o;
-    o.s0 = (ushort)(r / wsum + 0.5f);
-    o.s1 = (ushort)(g / wsum + 0.5f);
-    o.s2 = (ushort)(b / wsum + 0.5f);
-    o.s3 = 65535;
-    out[y * stride + x] = o;
-}
-
-__kernel void blurV16(__global const ushort4* in, __global ushort4* out,
-                      int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dy = -radius; dy <= radius; ++dy) {
-        int sy = clamp(y + dy, 0, height - 1);
-        ushort4 p = in[sy * stride + x];
-        float w = native_exp(-0.5f * (float)(dy * dy) / (sigma * sigma));
-        r += w * p.s0; g += w * p.s1; b += w * p.s2;
-        wsum += w;
-    }
-    ushort4 o;
-    o.s0 = (ushort)(r / wsum + 0.5f);
-    o.s1 = (ushort)(g / wsum + 0.5f);
-    o.s2 = (ushort)(b / wsum + 0.5f);
-    o.s3 = 65535;
-    out[y * stride + x] = o;
-}
+// blurH16/blurV16 come from the shared SHARED_BLUR_KERNELS header.
 
 __kernel void denoiseBlend16(__global const ushort4* original,
                              __global const ushort4* blurred,
@@ -278,42 +187,20 @@ __kernel void colorNoiseBlend16(__global const ushort4* current,
 
 // ─── GPU singleton ───────────────────────────────────────────────────────────
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernelBlurH;
-    cl::Kernel       kernelBlurV;
-    cl::Kernel       kernelDenoiseBlend;
-    cl::Kernel       kernelColorNoiseBlend;
-    cl::Kernel       kernelBlurH16;
-    cl::Kernel       kernelBlurV16;
-    cl::Kernel       kernelDenoiseBlend16;
-    cl::Kernel       kernelColorNoiseBlend16;
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernelBlurH;
+    cl::Kernel kernelBlurV;
+    cl::Kernel kernelDenoiseBlend;
+    cl::Kernel kernelColorNoiseBlend;
+    cl::Kernel kernelBlurH16;
+    cl::Kernel kernelBlurV16;
+    cl::Kernel kernelDenoiseBlend16;
+    cl::Kernel kernelColorNoiseBlend16;
 
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] Denoise: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "Denoise")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
             kernelBlurH             = cl::Kernel(prog, "blurH");
@@ -533,8 +420,10 @@ bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
 
     if (strength == 0.0f && colorNoise == 0.0f) return true;
 
-    int lumRadius    = static_cast<int>(strength   * 5.0f + 0.5f);
-    int chromaRadius = static_cast<int>(colorNoise * 10.0f + 0.5f);
+    // Scale radii from source-image pixels to preview pixels.
+    const double srcPPP    = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    int lumRadius    = static_cast<int>(strength   * 5.0f / srcPPP + 0.5f);
+    int chromaRadius = static_cast<int>(colorNoise * 10.0f / srcPPP + 0.5f);
     if (lumRadius    < 1) lumRadius    = 1;
     if (chromaRadius < 2) chromaRadius = 2;
 

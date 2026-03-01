@@ -1,7 +1,9 @@
 #include "BrightnessEffect.h"
 #include "ParamSlider.h"
 #include <QDebug>
+#ifdef QT_DEBUG
 #include <QElapsedTimer>
+#endif
 #include <QVBoxLayout>
 #include <mutex>
 
@@ -14,6 +16,7 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
 
 namespace {
 
@@ -90,42 +93,18 @@ __kernel void adjustBrightness16(__global ushort4* pixels,
 }
 )CL";
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernel;
-    cl::Kernel       kernel16;
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernel;
+    cl::Kernel kernel16;
 
-    // Must be called with gpuMutex held.
-    // Checks GpuDeviceRegistry revision and reinitialises if the device changed.
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] Brightness: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "Brightness")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
-            kernel    = cl::Kernel(prog, "adjustBrightness");
-            kernel16  = cl::Kernel(prog, "adjustBrightness16");
+            kernel   = cl::Kernel(prog, "adjustBrightness");
+            kernel16 = cl::Kernel(prog, "adjustBrightness16");
             available = true;
             qDebug() << "[GPU] Brightness ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
@@ -172,8 +151,10 @@ static QImage processImageGPU(const QImage& image, int brightnessFactor, float c
 }
 
 static QImage processImageGPU16(const QImage& image, int brightnessFactor, float contrastFactor) {
+#ifdef QT_DEBUG
     QElapsedTimer t;
     t.start();
+#endif
 
     QImage result = image; // already RGBX64; copy-on-write detaches
     const int    width    = result.width();
@@ -181,21 +162,27 @@ static QImage processImageGPU16(const QImage& image, int brightnessFactor, float
     const int    stride   = result.bytesPerLine() / 8; // pixels per row (8 bytes each)
     const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
 
+#ifdef QT_DEBUG
     qDebug() << "[GPU16 Brightness] image" << width << "x" << height
              << "bufBytes" << bufBytes;
+#endif
 
     try {
         std::lock_guard<std::mutex> lock(gpuMutex);
         GpuContext& gpu = GpuContext::instance();
         if (!gpu.available) return {};
+#ifdef QT_DEBUG
         qint64 t0 = t.nsecsElapsed();
+#endif
 
         // Phase 1: detach QImage (host copy) + upload to GPU
         cl::Buffer buf(gpu.context,
                        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        bufBytes, result.bits());
+#ifdef QT_DEBUG
         qint64 t1 = t.nsecsElapsed();
         qDebug() << "[GPU16 Brightness] lock+upload:" << (t1 - t0) / 1000 << "µs";
+#endif
 
         gpu.kernel16.setArg(0, buf);
         gpu.kernel16.setArg(1, stride);
@@ -208,14 +195,18 @@ static QImage processImageGPU16(const QImage& image, int brightnessFactor, float
         gpu.queue.enqueueNDRangeKernel(gpu.kernel16, cl::NullRange,
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
+#ifdef QT_DEBUG
         qint64 t2 = t.nsecsElapsed();
         qDebug() << "[GPU16 Brightness] kernel exec:" << (t2 - t1) / 1000 << "µs";
+#endif
 
         // Phase 3: readback
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
+#ifdef QT_DEBUG
         qint64 t3 = t.nsecsElapsed();
         qDebug() << "[GPU16 Brightness] readback:" << (t3 - t2) / 1000 << "µs";
         qDebug() << "[GPU16 Brightness] TOTAL:" << t3 / 1000 << "µs";
+#endif
     } catch (const cl::Error& e) {
         qWarning() << "[GPU] Brightness16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
@@ -310,8 +301,11 @@ bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,
                                    cl::Buffer& buf, cl::Buffer& /*aux*/,
                                    int w, int h, int stride, bool is16bit,
                                    const QMap<QString, QVariant>& params) {
-    const int   brightnessFactor = params.value("brightness", 0).toInt();
-    const float contrastFactor   = (params.value("contrast", 0).toInt() + 100.0f) / 100.0f;
+    const int brightnessFactor = params.value("brightness", 0).toInt();
+    const int contrastInt      = params.value("contrast", 0).toInt();
+    if (brightnessFactor == 0 && contrastInt == 0) return true;  // no-op
+
+    const float contrastFactor = (contrastInt + 100.0f) / 100.0f;
 
     cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
     k.setArg(0, buf);
@@ -329,6 +323,8 @@ QImage BrightnessEffect::processImage(const QImage &image, const QMap<QString, Q
 
     int brightnessFactor   = parameters.value("brightness", 0).toInt();
     int contrastFactor     = parameters.value("contrast", 0).toInt();
+    if (brightnessFactor == 0 && contrastFactor == 0) return image;
+
     float contrastFactor_f = (contrastFactor + 100.0f) / 100.0f;
 
     if (image.format() == QImage::Format_RGBX64)

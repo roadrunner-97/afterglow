@@ -1,10 +1,12 @@
 #include "ParamSlider.h"
+#include "Theme.h"
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QSlider>
 #include <QDoubleSpinBox>
+#include <QMouseEvent>
 #include <cmath>
 
 ParamSlider::ParamSlider(const QString& label,
@@ -20,7 +22,7 @@ ParamSlider::ParamSlider(const QString& label,
     outer->setSpacing(4);
 
     m_label = new QLabel();
-    m_label->setStyleSheet("color: #2C2018;");
+    m_label->setStyleSheet(QString("color: %1;").arg(Theme::TEXT_PRIMARY));
     outer->addWidget(m_label);
 
     QHBoxLayout* row = new QHBoxLayout();
@@ -31,11 +33,13 @@ ParamSlider::ParamSlider(const QString& label,
                        static_cast<int>(std::round(max * m_scaleFactor)));
     m_slider->setValue(0);
     m_slider->setStyleSheet(
-        "QSlider::groove:horizontal { height: 4px; background: #CCC5B5; border-radius: 2px; }"
-        "QSlider::sub-page:horizontal { background: #5B6EA8; border-radius: 2px; }"
-        "QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0;"
-        "  background: #5B6EA8; border-radius: 7px; }"
-        "QSlider::handle:horizontal:hover { background: #C0802C; }");
+        QString("QSlider::groove:horizontal { height: 4px; background: %1; border-radius: 2px; }"
+                "QSlider::sub-page:horizontal { background: %2; border-radius: 2px; }"
+                "QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0;"
+                "  background: %2; border-radius: 7px; }"
+                "QSlider::handle:horizontal:hover { background: %3; }")
+        .arg(Theme::BORDER, Theme::ACCENT_STEEL, Theme::ACCENT_AMBER));
+    m_slider->installEventFilter(this);
     row->addWidget(m_slider);
 
     m_spinBox = new QDoubleSpinBox();
@@ -44,9 +48,10 @@ ParamSlider::ParamSlider(const QString& label,
     m_spinBox->setDecimals(decimals);
     m_spinBox->setValue(0.0);
     m_spinBox->setStyleSheet(
-        "QDoubleSpinBox { color: #2C2018; background-color: #F8F5F0;"
-        "  border: 1px solid #CCC5B5; border-radius: 3px; padding: 1px 3px; }"
-        "QDoubleSpinBox:focus { border-color: #5B6EA8; }");
+        QString("QDoubleSpinBox { color: %1; background-color: %2;"
+                "  border: 1px solid %3; border-radius: 3px; padding: 1px 3px; }"
+                "QDoubleSpinBox:focus { border-color: %4; }")
+        .arg(Theme::TEXT_PRIMARY, Theme::BG_SPINBOX, Theme::BORDER, Theme::ACCENT_STEEL));
     row->addWidget(m_spinBox);
 
     outer->addLayout(row);
@@ -105,4 +110,17 @@ void ParamSlider::updateLabel(double v) {
         m_label->setText(QString("%1: %2").arg(m_labelPrefix)
                                           .arg(static_cast<int>(std::round(v))));
     }
+}
+
+bool ParamSlider::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == m_slider && event->type() == QEvent::MouseButtonDblClick) {
+        auto* me = static_cast<QMouseEvent*>(event);
+        if (me->button() == Qt::LeftButton) {
+            setValue(0.0);
+            emit valueChanged(0.0);
+            emit editingFinished();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }

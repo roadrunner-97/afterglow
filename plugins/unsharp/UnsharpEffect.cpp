@@ -14,58 +14,18 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
+#include "blur_kernels.h"
 
 namespace {
 
 // Pixels: QImage::Format_RGB32 (0xFFRRGGBB), stride = bytesPerLine/4.
-// Blur passes use Gaussian weights (sigma = radius/3).
+// Blur passes (blurH/blurV/blurH16/blurV16) come from the shared header.
 // Unsharp: result = clamp(orig + amount*(orig − blurred), 0, 255)
 //          skipped (passes through original) when all channel diffs < threshold.
-static const char* GPU_KERNEL_SOURCE = R"CL(
+static const char* GPU_KERNEL_SOURCE = SHARED_BLUR_KERNELS R"CL(
 
-// 8-bit path ---------------------------------------------------------------
-__kernel void blurH(__global const uint* in, __global uint* out,
-                    int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dx = -radius; dx <= radius; dx++) {
-        int sx = clamp(x + dx, 0, width - 1);
-        uint p = in[y * stride + sx];
-        float w = exp(-0.5f * dx * dx / (sigma * sigma));
-        r += w * ((p >> 16) & 0xFFu);
-        g += w * ((p >>  8) & 0xFFu);
-        b += w * ( p        & 0xFFu);
-        wsum += w;
-    }
-    uint ri = (uint)(r/wsum + 0.5f), gi = (uint)(g/wsum + 0.5f), bi = (uint)(b/wsum + 0.5f);
-    out[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
-
-__kernel void blurV(__global const uint* in, __global uint* out,
-                    int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dy = -radius; dy <= radius; dy++) {
-        int sy = clamp(y + dy, 0, height - 1);
-        uint p = in[sy * stride + x];
-        float w = exp(-0.5f * dy * dy / (sigma * sigma));
-        r += w * ((p >> 16) & 0xFFu);
-        g += w * ((p >>  8) & 0xFFu);
-        b += w * ( p        & 0xFFu);
-        wsum += w;
-    }
-    uint ri = (uint)(r/wsum + 0.5f), gi = (uint)(g/wsum + 0.5f), bi = (uint)(b/wsum + 0.5f);
-    out[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
-
+// 8-bit unsharp combine ----------------------------------------------------
 __kernel void unsharpCombine(__global const uint* original,
                               __global const uint* blurred,
                               __global       uint* output,
@@ -95,57 +55,7 @@ __kernel void unsharpCombine(__global const uint* original,
     output[y * stride + x] = 0xFF000000u | (rr << 16) | (rg << 8) | rb;
 }
 
-// 16-bit path --------------------------------------------------------------
-// pixels are QImage::Format_RGBX64 (ushort4 per pixel).
-// On little-endian: ushort4.s0=R, .s1=G, .s2=B, .s3=A
-// stride = bytesPerLine / 8
-
-__kernel void blurH16(__global const ushort4* in, __global ushort4* out,
-                      int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dx = -radius; dx <= radius; dx++) {
-        int sx = clamp(x + dx, 0, width - 1);
-        ushort4 p = in[y * stride + sx];
-        float w = exp(-0.5f * dx * dx / (sigma * sigma));
-        r += w * p.s0; g += w * p.s1; b += w * p.s2;
-        wsum += w;
-    }
-    ushort4 o;
-    o.s0 = (ushort)(r/wsum + 0.5f);
-    o.s1 = (ushort)(g/wsum + 0.5f);
-    o.s2 = (ushort)(b/wsum + 0.5f);
-    o.s3 = 65535;
-    out[y * stride + x] = o;
-}
-
-__kernel void blurV16(__global const ushort4* in, __global ushort4* out,
-                      int stride, int width, int height, int radius)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float sigma = max((float)radius / 3.0f, 0.5f);
-    float r = 0, g = 0, b = 0, wsum = 0;
-    for (int dy = -radius; dy <= radius; dy++) {
-        int sy = clamp(y + dy, 0, height - 1);
-        ushort4 p = in[sy * stride + x];
-        float w = exp(-0.5f * dy * dy / (sigma * sigma));
-        r += w * p.s0; g += w * p.s1; b += w * p.s2;
-        wsum += w;
-    }
-    ushort4 o;
-    o.s0 = (ushort)(r/wsum + 0.5f);
-    o.s1 = (ushort)(g/wsum + 0.5f);
-    o.s2 = (ushort)(b/wsum + 0.5f);
-    o.s3 = 65535;
-    out[y * stride + x] = o;
-}
-
+// 16-bit unsharp combine ---------------------------------------------------
 __kernel void unsharpCombine16(__global const ushort4* original,
                                 __global const ushort4* blurred,
                                 __global       ushort4* output,
@@ -180,40 +90,18 @@ __kernel void unsharpCombine16(__global const ushort4* original,
 
 )CL";
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernelH;
-    cl::Kernel       kernelV;
-    cl::Kernel       kernelUnsharp;
-    cl::Kernel       kernelH16;
-    cl::Kernel       kernelV16;
-    cl::Kernel       kernelUnsharp16;
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernelH;
+    cl::Kernel kernelV;
+    cl::Kernel kernelUnsharp;
+    cl::Kernel kernelH16;
+    cl::Kernel kernelV16;
+    cl::Kernel kernelUnsharp16;
 
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] Unsharp: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "Unsharp")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
             kernelH         = cl::Kernel(prog, "blurH");
@@ -364,11 +252,15 @@ bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,
                                 cl::Buffer& buf, cl::Buffer& aux,
                                 int w, int h, int stride, bool is16bit,
                                 const QMap<QString, QVariant>& params) {
-    const float amount    = static_cast<float>(params.value("amount",    1.0).toDouble());
-    const int   radius    = params.value("radius",    2).toInt();
-    const int   threshold = params.value("threshold", 3).toInt();
+    const float amount     = static_cast<float>(params.value("amount",    1.0).toDouble());
+    const int   radius_src = params.value("radius",    2).toInt();
+    const int   threshold  = params.value("threshold", 3).toInt();
 
-    if (amount == 0.0f || radius == 0) return true;  // no-op
+    if (amount == 0.0f || radius_src == 0) return true;  // no-op
+
+    // Scale radius from source-image pixels to preview pixels.
+    const double srcPPP = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    const int    radius = qMax(1, static_cast<int>(radius_src / srcPPP + 0.5));
 
     // Allocate a third GPU buffer (no host copy — just GPU memory, very fast).
     // Layout:

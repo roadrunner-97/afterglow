@@ -15,6 +15,7 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #include <CL/opencl.hpp>
 #include "GpuDeviceRegistryOCL.h"
+#include "GpuContextBase.h"
 
 namespace {
 
@@ -148,38 +149,16 @@ __kernel void blurVertical16(__global const ushort4* input,
 
 )CL";
 
-struct GpuContext {
-    cl::Context      context;
-    cl::CommandQueue queue;
-    cl::Kernel       kernelH;    // horizontal pass (8-bit)
-    cl::Kernel       kernelV;    // vertical pass   (8-bit)
-    cl::Kernel       kernelH16;  // horizontal pass (16-bit)
-    cl::Kernel       kernelV16;  // vertical pass   (16-bit)
-    bool             available  = false;
-    int              m_revision = 0;
+struct GpuContext : GpuContextBase<GpuContext> {
+    cl::Kernel kernelH;    // horizontal pass (8-bit)
+    cl::Kernel kernelV;    // vertical pass   (8-bit)
+    cl::Kernel kernelH16;  // horizontal pass (16-bit)
+    cl::Kernel kernelV16;  // vertical pass   (16-bit)
 
-    static GpuContext& instance() {
-        static GpuContext ctx;
-        int rev = GpuDeviceRegistry::instance().revision();
-        if (ctx.m_revision != rev) {
-            ctx            = GpuContext{};
-            ctx.m_revision = rev;
-            ctx.init();
-        }
-        return ctx;
-    }
-
-private:
     void init() {
-        cl::Device   device;
-        cl::Platform platform;
-        if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
-            qWarning() << "[GPU] Blur: no OpenCL device available";
-            return;
-        }
+        cl::Device device;
+        if (!acquireDevice(device, "Blur")) return;
         try {
-            context = cl::Context(device);
-            queue   = cl::CommandQueue(context, device);
             cl::Program prog(context, GPU_KERNEL_SOURCE);
             prog.build({device});
             kernelH   = cl::Kernel(prog, "blurHorizontal");
@@ -326,11 +305,15 @@ bool BlurEffect::enqueueGpu(cl::CommandQueue& queue,
                              cl::Buffer& buf, cl::Buffer& aux,
                              int w, int h, int stride, bool is16bit,
                              const QMap<QString, QVariant>& params) {
-    const int  radius     = params.value("radius", 0).toInt();
+    const int  radius_src = params.value("radius", 0).toInt();
     const bool gaussian   = (params.value("blurType", 0).toInt() == 0);
     const int  isGaussian = gaussian ? 1 : 0;
 
-    if (radius == 0) return true;  // no-op, workBuf unchanged
+    if (radius_src == 0) return true;  // no-op, workBuf unchanged
+
+    // Scale radius from source-image pixels to preview pixels.
+    const double srcPPP = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    const int    radius = qMax(1, static_cast<int>(radius_src / srcPPP + 0.5));
 
     cl::Kernel& kH = is16bit ? m_kernelH16 : m_kernelH;
     cl::Kernel& kV = is16bit ? m_kernelV16 : m_kernelV;

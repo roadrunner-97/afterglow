@@ -3,22 +3,25 @@
 
 #include <QMainWindow>
 #include <QImage>
+#include <QTimer>
 #include "EffectManager.h"
 #include "ImageProcessor.h"
 #include "ViewportWidget.h"
 
 class QVBoxLayout;
 class QComboBox;
+class QLabel;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
 
 public:
     explicit PhotoEditorApp(EffectManager* effectManager, QWidget* parent = nullptr);
-    ~PhotoEditorApp() override = default;
+    ~PhotoEditorApp() override;
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    void closeEvent(QCloseEvent* event) override;
 
 private slots:
     void openImage();
@@ -26,6 +29,7 @@ private slots:
     void onParametersChanged();
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result);
+    void onProcessingStarted();
 
 private:
     void setupUI();
@@ -42,8 +46,10 @@ private:
     QString         m_lastDir;
     bool            m_liveUpdate = false;
 
-    ViewportWidget* m_viewport        = nullptr;
-    QComboBox*      m_gpuSelector     = nullptr;
+    ViewportWidget* m_viewport         = nullptr;
+    QComboBox*      m_gpuSelector      = nullptr;
+    QLabel*         m_processingLabel  = nullptr;
+    QTimer*         m_resizeDebounce   = nullptr;
     // True from the moment triggerReprocess() is called until the resulting
     // processingComplete() delivers a non-null image.  While set, viewport
     // changes also trigger full reruns so pan/zoom never shows a stale frame.

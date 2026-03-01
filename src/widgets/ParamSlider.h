@@ -2,6 +2,7 @@
 #define PARAMSLIDER_H
 
 #include <QWidget>
+#include <QEvent>
 
 class QLabel;
 class QSlider;
@@ -34,6 +35,9 @@ public:
 signals:
     void valueChanged(double value);  // fires on every slider drag / spinbox sync
     void editingFinished();           // fires only on slider release or spinbox commit
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     QLabel*         m_label;
