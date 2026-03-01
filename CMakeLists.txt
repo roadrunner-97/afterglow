@@ -162,3 +162,10 @@ set_target_properties(lightroom_clone PROPERTIES
     AUTOMOC ON
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# ============================================================================
+# Tests
+# ============================================================================
+
+enable_testing()
+add_subdirectory(tests)

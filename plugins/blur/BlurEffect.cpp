@@ -381,17 +381,17 @@ QWidget* BlurEffect::createControlsWidget() {
 
     // Blur type
     QLabel* typeLabel = new QLabel("Blur type:");
-    typeLabel->setStyleSheet("color: #e0e0e0;");
+    typeLabel->setStyleSheet("color: #2C2018;");
     layout->addWidget(typeLabel);
 
     blurTypeCombo = new QComboBox();
     blurTypeCombo->addItem("Gaussian");
     blurTypeCombo->addItem("Box");
     blurTypeCombo->setStyleSheet(
-        "QComboBox { color: #e0e0e0; background-color: #444444;"
-        "            border: 1px solid #666666; border-radius: 3px; padding: 3px; }"
+        "QComboBox { color: #2C2018; background-color: #F4F1EA;"
+        "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
         "QComboBox::drop-down { border: none; }"
-        "QComboBox QAbstractItemView { color: #e0e0e0; background-color: #444444; }");
+        "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
     layout->addWidget(blurTypeCombo);
 
     connect(blurTypeCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {

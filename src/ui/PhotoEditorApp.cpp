@@ -35,11 +35,11 @@ void PhotoEditorApp::setupToolBar() {
     QToolBar* toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
     toolbar->setStyleSheet(
-        "QToolBar { background: #1e1e1e; border-bottom: 1px solid #444; spacing: 6px; padding: 2px 6px; }"
-        "QToolButton { color: #c0c0c0; background: #333; border: 1px solid #555;"
+        "QToolBar { background: #F0EDE5; border-bottom: 1px solid #CCC5B5; spacing: 6px; padding: 2px 6px; }"
+        "QToolButton { color: #2C2018; background: transparent; border: 1px solid #CCC5B5;"
         "  border-radius: 3px; padding: 3px 10px; }"
-        "QToolButton:checked { color: #fff; background: #2a6496; border-color: #3a87c8; }"
-        "QToolButton:hover { background: #444; }");
+        "QToolButton:checked { color: #F5F2EA; background: #C0802C; border-color: #C0802C; }"
+        "QToolButton:hover { background: #E0D8CC; }");
 
     QAction* liveAct = new QAction("Live Preview", this);
     liveAct->setCheckable(true);
@@ -55,6 +55,7 @@ void PhotoEditorApp::setupUI() {
     setupMenuBar();
 
     QWidget* central = new QWidget();
+    central->setStyleSheet("background: #F0EDE5;");
     setCentralWidget(central);
     QHBoxLayout* mainLayout = new QHBoxLayout(central);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -68,7 +69,7 @@ void PhotoEditorApp::setupUI() {
 
     // ── Right panel ──────────────────────────────────────────────────────────
     QWidget* rightPanel = new QWidget();
-    rightPanel->setStyleSheet("background-color: #252525;");
+    rightPanel->setStyleSheet("background-color: #EDEADE;");
     rightPanel->setFixedWidth(300);
     QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(8, 8, 8, 8);
@@ -78,7 +79,7 @@ void PhotoEditorApp::setupUI() {
 
     QFrame* sep = new QFrame();
     sep->setFrameShape(QFrame::HLine);
-    sep->setStyleSheet("color: #444444;");
+    sep->setStyleSheet("color: #CBBFAE;");
     rightLayout->addWidget(sep);
 
     QScrollArea* effectsScroll = new QScrollArea();
@@ -101,6 +102,15 @@ void PhotoEditorApp::setupUI() {
 }
 
 void PhotoEditorApp::setupMenuBar() {
+    menuBar()->setStyleSheet(
+        "QMenuBar { background: #F0EDE5; color: #2C2018; border-bottom: 1px solid #CCC5B5; }"
+        "QMenuBar::item { padding: 4px 8px; }"
+        "QMenuBar::item:selected { background: #E0D8CC; border-radius: 3px; }"
+        "QMenu { background: #F4F1EA; color: #2C2018; border: 1px solid #CCC5B5; }"
+        "QMenu::item { padding: 4px 20px; }"
+        "QMenu::item:selected { background: #C0802C; color: #F5F2EA; }"
+        "QMenu::separator { height: 1px; background: #CCC5B5; margin: 2px 0; }");
+
     QMenu* fileMenu = menuBar()->addMenu("File");
 
     QAction* openAct = fileMenu->addAction("Open Image…");
@@ -134,15 +144,15 @@ void PhotoEditorApp::setupMenuBar() {
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
     QLabel* label = new QLabel("GPU Device");
-    label->setStyleSheet("color: #a0a0a0; font-size: 10px; text-transform: uppercase;");
+    label->setStyleSheet("color: #6E5E46; font-size: 10px; text-transform: uppercase;");
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
     m_gpuSelector->setStyleSheet(
-        "QComboBox { color: #e0e0e0; background-color: #3a3a3a;"
-        "  border: 1px solid #555; border-radius: 3px; padding: 4px; }"
+        "QComboBox { color: #2C2018; background-color: #F4F1EA;"
+        "  border: 1px solid #CCC5B5; border-radius: 3px; padding: 4px; }"
         "QComboBox::drop-down { border: none; }"
-        "QComboBox QAbstractItemView { color: #e0e0e0; background-color: #3a3a3a; }");
+        "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
 
     const auto& devs = GpuDeviceRegistry::instance().devices();
     if (devs.empty()) {
@@ -170,7 +180,7 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
         // Container
         QWidget* panel = new QWidget();
         panel->setStyleSheet(
-            "QWidget { background-color: #333333; border-radius: 4px; }");
+            "QWidget { background-color: #F4F1EA; border-radius: 4px; }");
         QVBoxLayout* panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
@@ -182,14 +192,14 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
         titleLayout->setContentsMargins(0, 0, 0, 0);
 
         QLabel* title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
-        title->setStyleSheet("color: #e0e0e0; background: transparent;");
+        title->setStyleSheet("color: #2C2018; background: transparent;");
         titleLayout->addWidget(title, 1);
 
         QPushButton* collapseBtn = new QPushButton("−");
         collapseBtn->setStyleSheet(
-            "QPushButton { background:#555; color:#fff; border:none;"
-            "  border-radius:3px; padding:1px 5px; font-weight:bold; }"
-            "QPushButton:hover { background:#777; }");
+            "QPushButton { background: #D0C8B8; color: #2C2018; border: none;"
+            "  border-radius: 3px; padding: 1px 5px; font-weight: bold; }"
+            "QPushButton:hover { background: #BEB8A8; }");
         collapseBtn->setMaximumWidth(28);
         titleLayout->addWidget(collapseBtn);
         panelLayout->addWidget(titleBar);

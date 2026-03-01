@@ -1,23 +1,24 @@
-#ifndef EXPOSUREEFFECT_H
-#define EXPOSUREEFFECT_H
+#ifndef HOTPIXELEFFECT_H
+#define HOTPIXELEFFECT_H
 
 #include "PhotoEditorEffect.h"
 #include "IGpuEffect.h"
 
 class ParamSlider;
 
-class ExposureEffect : public PhotoEditorEffect, public IGpuEffect {
+class HotPixelEffect : public PhotoEditorEffect, public IGpuEffect {
     Q_OBJECT
 
 public:
-    ExposureEffect();
-    ~ExposureEffect() override;
+    HotPixelEffect();
+    ~HotPixelEffect() override;
 
     QString getName() const override;
     QString getDescription() const override;
     QString getVersion() const override;
     bool initialize() override;
-    QImage processImage(const QImage &image, const QMap<QString, QVariant> &parameters = QMap<QString, QVariant>()) override;
+    QImage processImage(const QImage& image,
+                        const QMap<QString, QVariant>& parameters = QMap<QString, QVariant>()) override;
 
     QWidget* createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
@@ -30,14 +31,10 @@ public:
 
 private:
     QWidget*     controlsWidget;
-    ParamSlider* exposureParam;
-    ParamSlider* whitesParam;
-    ParamSlider* highlightsParam;
-    ParamSlider* shadowsParam;
-    ParamSlider* blacksParam;
+    ParamSlider* thresholdParam;
 
-    cl::Kernel m_kernel;
+    cl::Kernel m_kernel8;
     cl::Kernel m_kernel16;
 };
 
-#endif // EXPOSUREEFFECT_H
+#endif // HOTPIXELEFFECT_H

@@ -2,6 +2,7 @@
 #include "ui/PhotoEditorApp.h"
 #include "core/EffectManager.h"
 #include "core/GpuDeviceRegistry.h"
+#include "HotPixelEffect.h"
 #include "ExposureEffect.h"
 #include "BrightnessEffect.h"
 #include "SaturationEffect.h"
@@ -15,6 +16,7 @@ int main(int argc, char *argv[]) {
     GpuDeviceRegistry::instance().enumerate();
 
     EffectManager* effects = new EffectManager();
+    effects->addEffect(new HotPixelEffect());
     effects->addEffect(new ExposureEffect());
     effects->addEffect(new BrightnessEffect());
     effects->addEffect(new SaturationEffect());

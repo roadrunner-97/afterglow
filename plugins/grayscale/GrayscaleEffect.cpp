@@ -190,7 +190,7 @@ QWidget* GrayscaleEffect::createControlsWidget() {
     layout->setContentsMargins(0, 2, 0, 2);
 
     QCheckBox* check = new QCheckBox("Convert to Grayscale");
-    check->setStyleSheet("color: #e0e0e0;");
+    check->setStyleSheet("color: #2C2018;");
     check->setChecked(m_active);
     connect(check, &QCheckBox::toggled, this, [this](bool on) {
         m_active = on;

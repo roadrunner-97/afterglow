@@ -2,6 +2,9 @@
 #include "ParamSlider.h"
 #include <QDebug>
 #include <QVBoxLayout>
+#include <QPainter>
+#include <QPolygonF>
+#include <QSizePolicy>
 #include <cmath>
 #include <mutex>
 
@@ -19,12 +22,17 @@ namespace {
 
 // libraw outputs sRGB gamma-encoded data (output_color=1), so exposure must be
 // applied in linear light: decode sRGB → scale by 2^EV → re-encode sRGB.
-// Without linearisation, channels clip at different rates and highlights become
-// garish/saturated (hue shift from asymmetric clipping in gamma space).
 //
-// evFactor = pow(2.0, ev) — precomputed on host, passed as a single float.
-// 8-bit path: QImage::Format_RGB32 (uint = 0xFFRRGGBB), stride = bytesPerLine / 4.
-// 16-bit path: QImage::Format_RGBX64 (ushort4 per pixel), stride = bytesPerLine / 8.
+// Zone adjustments treat the four slider values as PCHIP control points anchored
+// at the midpoint of each zone:
+//   blacks=0.075  shadows=0.325  highlights=0.675  whites=0.925
+// Zone widths: blacks=15%, shadows=35%, highlights=35%, whites=15%.
+// The spline is evaluated at each pixel's luminance to get a smooth zone EV
+// offset.  Pixels darker than 0.075 get exactly blacksEv; pixels brighter than
+// 0.925 get exactly whitesEv.
+//
+// 8-bit path:  QImage::Format_RGB32  (uint = 0xFFRRGGBB), stride = bytesPerLine / 4
+// 16-bit path: QImage::Format_RGBX64 (ushort4 per pixel), stride = bytesPerLine / 8
 static const char* GPU_KERNEL_SOURCE = R"CL(
 float srgb_to_linear(float v) {
     return v <= 0.04045f ? v * (1.0f / 12.92f)
@@ -37,24 +45,69 @@ float linear_to_srgb(float v) {
                            : 1.055f * native_powr(v, 1.0f / 2.4f) - 0.055f;
 }
 
+// PCHIP interpolation through control points at the midpoint of each zone:
+//   blacks=0.075  shadows=0.325  highlights=0.675  whites=0.925
+// Zone widths: blacks=15%, shadows=35%, highlights=35%, whites=15%.
+// Segment lengths (midpoint-to-midpoint): h0=0.25, h1=0.35, h2=0.25.
+// Cubic Hermite with zero endpoint slopes; interior tangents are the
+// h-weighted arithmetic mean of adjacent slopes, zeroed on sign-change.
+float zoneEv(float lum, float p0, float p1, float p2, float p3) {
+    if (lum <= 0.075f) return p0;
+    if (lum >= 0.925f) return p3;
+
+    const float h0 = 0.25f, h1 = 0.35f, h2 = 0.25f;
+    float d0 = (p1 - p0) / h0;
+    float d1 = (p2 - p1) / h1;
+    float d2 = (p3 - p2) / h2;
+
+    float m1 = (d0 * d1 > 0.0f) ? (h0 * d1 + h1 * d0) / (h0 + h1) : 0.0f;
+    float m2 = (d1 * d2 > 0.0f) ? (h1 * d2 + h2 * d1) / (h1 + h2) : 0.0f;
+
+    float pk, pk1, mk, mk1, h, s;
+    if (lum < 0.325f) {
+        s = (lum - 0.075f) / h0;
+        pk = p0; pk1 = p1; mk = 0.0f; mk1 = m1; h = h0;
+    } else if (lum < 0.675f) {
+        s = (lum - 0.325f) / h1;
+        pk = p1; pk1 = p2; mk = m1;   mk1 = m2; h = h1;
+    } else {
+        s = (lum - 0.675f) / h2;
+        pk = p2; pk1 = p3; mk = m2;   mk1 = 0.0f; h = h2;
+    }
+
+    float s2 = s * s, s3 = s2 * s;
+    return (2.0f*s3 - 3.0f*s2 + 1.0f) * pk
+         + (      s3 - 2.0f*s2 + s)   * mk * h
+         + (-2.0f*s3 + 3.0f*s2)       * pk1
+         + (      s3 - s2)             * mk1 * h;
+}
+
 __kernel void adjustExposure(__global uint* pixels,
                               int   stride,
                               int   width,
                               int   height,
-                              float evFactor)
+                              float globalEv,
+                              float blacksEv,
+                              float shadowsEv,
+                              float highlightsEv,
+                              float whitesEv)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
     if (x >= width || y >= height) return;
 
     uint pixel = pixels[y * stride + x];
-    float r = srgb_to_linear(((pixel >> 16) & 0xFFu) / 255.0f);
-    float g = srgb_to_linear(((pixel >>  8) & 0xFFu) / 255.0f);
-    float b = srgb_to_linear(( pixel        & 0xFFu) / 255.0f);
+    float r_s = ((pixel >> 16) & 0xFFu) / 255.0f;
+    float g_s = ((pixel >>  8) & 0xFFu) / 255.0f;
+    float b_s = ( pixel        & 0xFFu) / 255.0f;
 
-    r = linear_to_srgb(r * evFactor);
-    g = linear_to_srgb(g * evFactor);
-    b = linear_to_srgb(b * evFactor);
+    float lum = 0.2126f * r_s + 0.7152f * g_s + 0.0722f * b_s;
+    float ev      = globalEv + zoneEv(lum, blacksEv, shadowsEv, highlightsEv, whitesEv);
+    float evFactor = native_exp2(ev);
+
+    float r = linear_to_srgb(srgb_to_linear(r_s) * evFactor);
+    float g = linear_to_srgb(srgb_to_linear(g_s) * evFactor);
+    float b = linear_to_srgb(srgb_to_linear(b_s) * evFactor);
 
     uint ri = (uint)(r * 255.0f + 0.5f);
     uint gi = (uint)(g * 255.0f + 0.5f);
@@ -66,25 +119,30 @@ __kernel void adjustExposure16(__global ushort4* pixels,
                                 int   stride,
                                 int   width,
                                 int   height,
-                                float evFactor)
+                                float globalEv,
+                                float blacksEv,
+                                float shadowsEv,
+                                float highlightsEv,
+                                float whitesEv)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
     if (x >= width || y >= height) return;
 
     ushort4 px = pixels[y * stride + x];
-    float r = srgb_to_linear(px.s0 / 65535.0f);
-    float g = srgb_to_linear(px.s1 / 65535.0f);
-    float b = srgb_to_linear(px.s2 / 65535.0f);
+    float r_s = srgb_to_linear(px.s0 / 65535.0f);
+    float g_s = srgb_to_linear(px.s1 / 65535.0f);
+    float b_s = srgb_to_linear(px.s2 / 65535.0f);
 
-    r = linear_to_srgb(r * evFactor);
-    g = linear_to_srgb(g * evFactor);
-    b = linear_to_srgb(b * evFactor);
+    float lum = 0.2126f * (px.s0 / 65535.0f)
+              + 0.7152f * (px.s1 / 65535.0f)
+              + 0.0722f * (px.s2 / 65535.0f);
+    float ev      = globalEv + zoneEv(lum, blacksEv, shadowsEv, highlightsEv, whitesEv);
+    float evFactor = native_exp2(ev);
 
-    px.s0 = (ushort)(r * 65535.0f + 0.5f);
-    px.s1 = (ushort)(g * 65535.0f + 0.5f);
-    px.s2 = (ushort)(b * 65535.0f + 0.5f);
-    // px.s3 (alpha/X) unchanged
+    px.s0 = (ushort)(clamp(linear_to_srgb(r_s * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s1 = (ushort)(clamp(linear_to_srgb(g_s * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s2 = (ushort)(clamp(linear_to_srgb(b_s * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
     pixels[y * stride + x] = px;
 }
 )CL";
@@ -97,7 +155,6 @@ struct GpuContext {
     bool             available  = false;
     int              m_revision = 0;
 
-    // Must be called with gpuMutex held.
     static GpuContext& instance() {
         static GpuContext ctx;
         int rev = GpuDeviceRegistry::instance().revision();
@@ -135,7 +192,24 @@ private:
 
 static std::mutex gpuMutex;
 
-static QImage processImageGPU(const QImage& image, float evFactor) {
+struct ZoneEvs {
+    float global, blacks, shadows, highlights, whites;
+};
+
+static void setKernelZoneArgs(cl::Kernel& k, cl::Buffer& buf, int stride, int w, int h,
+                               const ZoneEvs& z) {
+    k.setArg(0, buf);
+    k.setArg(1, stride);
+    k.setArg(2, w);
+    k.setArg(3, h);
+    k.setArg(4, z.global);
+    k.setArg(5, z.blacks);
+    k.setArg(6, z.shadows);
+    k.setArg(7, z.highlights);
+    k.setArg(8, z.whites);
+}
+
+static QImage processImageGPU(const QImage& image, const ZoneEvs& z) {
     QImage result = image.convertToFormat(QImage::Format_RGB32);
     const int    width    = result.width();
     const int    height   = result.height();
@@ -151,12 +225,7 @@ static QImage processImageGPU(const QImage& image, float evFactor) {
                        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        bufBytes, result.bits());
 
-        gpu.kernel.setArg(0, buf);
-        gpu.kernel.setArg(1, stride);
-        gpu.kernel.setArg(2, width);
-        gpu.kernel.setArg(3, height);
-        gpu.kernel.setArg(4, evFactor);
-
+        setKernelZoneArgs(gpu.kernel, buf, stride, width, height, z);
         gpu.queue.enqueueNDRangeKernel(gpu.kernel, cl::NullRange,
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
@@ -168,7 +237,7 @@ static QImage processImageGPU(const QImage& image, float evFactor) {
     return result;
 }
 
-static QImage processImageGPU16(const QImage& image, float evFactor) {
+static QImage processImageGPU16(const QImage& image, const ZoneEvs& z) {
     QImage result = image;
     const int    width    = result.width();
     const int    height   = result.height();
@@ -184,12 +253,7 @@ static QImage processImageGPU16(const QImage& image, float evFactor) {
                        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        bufBytes, result.bits());
 
-        gpu.kernel16.setArg(0, buf);
-        gpu.kernel16.setArg(1, stride);
-        gpu.kernel16.setArg(2, width);
-        gpu.kernel16.setArg(3, height);
-        gpu.kernel16.setArg(4, evFactor);
-
+        setKernelZoneArgs(gpu.kernel16, buf, stride, width, height, z);
         gpu.queue.enqueueNDRangeKernel(gpu.kernel16, cl::NullRange,
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
@@ -201,26 +265,163 @@ static QImage processImageGPU16(const QImage& image, float evFactor) {
     return result;
 }
 
+// ============================================================================
+// ToneCurveWidget — CPU mirror of the GPU zone math, drawn as a graph
+// ============================================================================
+
+// CPU mirror of the GPU kernel — must stay in sync with the OpenCL source above.
+static float cpuSrgbToLinear(float v) {
+    return v <= 0.04045f ? v / 12.92f
+                         : std::pow((v + 0.055f) / 1.055f, 2.4f);
+}
+static float cpuLinearToSrgb(float v) {
+    v = std::max(0.0f, std::min(1.0f, v));
+    return v <= 0.0031308f ? v * 12.92f
+                           : 1.055f * std::pow(v, 1.0f / 2.4f) - 0.055f;
+}
+// CPU mirror of zoneEv() — must stay in sync with the OpenCL source above.
+static float cpuZoneEv(float L, const ZoneEvs& z) {
+    if (L <= 0.075f) return z.blacks;
+    if (L >= 0.925f) return z.whites;
+
+    constexpr float h0 = 0.25f, h1 = 0.35f, h2 = 0.25f;
+    float d0 = (z.shadows    - z.blacks)     / h0;
+    float d1 = (z.highlights - z.shadows)    / h1;
+    float d2 = (z.whites     - z.highlights) / h2;
+
+    float m1 = (d0 * d1 > 0.0f) ? (h0 * d1 + h1 * d0) / (h0 + h1) : 0.0f;
+    float m2 = (d1 * d2 > 0.0f) ? (h1 * d2 + h2 * d1) / (h1 + h2) : 0.0f;
+
+    float pk, pk1, mk, mk1, h, s;
+    if (L < 0.325f) {
+        s = (L - 0.075f) / h0;
+        pk = z.blacks;     pk1 = z.shadows;    mk = 0.0f; mk1 = m1;   h = h0;
+    } else if (L < 0.675f) {
+        s = (L - 0.325f) / h1;
+        pk = z.shadows;    pk1 = z.highlights; mk = m1;   mk1 = m2;   h = h1;
+    } else {
+        s = (L - 0.675f) / h2;
+        pk = z.highlights; pk1 = z.whites;     mk = m2;   mk1 = 0.0f; h = h2;
+    }
+
+    float s2 = s*s, s3 = s2*s;
+    return (2.0f*s3 - 3.0f*s2 + 1.0f) * pk
+         + (      s3 - 2.0f*s2 + s)   * mk * h
+         + (-2.0f*s3 + 3.0f*s2)       * pk1
+         + (      s3 - s2)             * mk1 * h;
+}
+static float cpuCurve(float L, const ZoneEvs& z) {
+    float ev = z.global + cpuZoneEv(L, z);
+    return cpuLinearToSrgb(cpuSrgbToLinear(L) * std::exp2(ev));
+}
+
+class ToneCurveWidget : public QWidget {
+public:
+    explicit ToneCurveWidget(QWidget* parent = nullptr) : QWidget(parent) {
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setFixedHeight(160);
+    }
+
+    void setParams(const ZoneEvs& z) { m_z = z; update(); }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        // Inner plot area with a small margin for the border
+        const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        const float W = r.width(), H = r.height();
+        auto toScreen = [&](float L, float out) -> QPointF {
+            return { r.left() + L * W, r.bottom() - out * H };
+        };
+
+        // Background gradient: black on left, white on right
+        QLinearGradient bg(r.left(), 0, r.right(), 0);
+        bg.setColorAt(0.0, QColor(20, 20, 20));
+        bg.setColorAt(1.0, QColor(55, 55, 55));
+        p.fillRect(r, bg);
+
+        // Zone bands (subtle tinted backgrounds — palette matches app accent colours)
+        // Widths: blacks=15%, shadows=35%, highlights=35%, whites=15%
+        struct ZoneBand { float x0, x1; QColor col; };
+        const ZoneBand bands[] = {
+            { 0.00f, 0.15f, QColor( 91, 110, 168, 32) },  // blacks  — steel blue
+            { 0.15f, 0.50f, QColor( 58, 136, 152, 26) },  // shadows — muted teal
+            { 0.50f, 0.85f, QColor(192, 128,  44, 26) },  // highlights — warm amber
+            { 0.85f, 1.00f, QColor(200, 168,  64, 32) },  // whites  — golden sand
+        };
+        for (const auto& b : bands) {
+            QRectF br(r.left() + b.x0 * W, r.top(),
+                      (b.x1 - b.x0) * W, H);
+            p.fillRect(br, b.col);
+        }
+
+        // Vertical zone boundary lines at 0.15, 0.5, 0.85; horizontal at 0.25, 0.5, 0.75
+        p.setPen(QPen(QColor(80, 80, 80, 140), 1));
+        for (float frac : { 0.15f, 0.50f, 0.85f })
+            p.drawLine(toScreen(frac, 0.0f), toScreen(frac, 1.0f));
+        for (int i = 1; i <= 3; i++)
+            p.drawLine(toScreen(0.0f, float(i) / 4.0f), toScreen(1.0f, float(i) / 4.0f));
+
+        // Zone labels at the bottom of each band
+        p.setPen(QColor(160, 160, 160, 160));
+        QFont f = p.font();
+        f.setPixelSize(9);
+        p.setFont(f);
+        const char* labels[] = { "Blacks", "Shadows", "Highlights", "Whites" };
+        for (int i = 0; i < 4; i++) {
+            float cx = (bands[i].x0 + bands[i].x1) / 2.0f;
+            QPointF pt = toScreen(cx, 0.0f);
+            QRectF lr(pt.x() - 30, pt.y() - 14, 60, 12);
+            p.drawText(lr, Qt::AlignCenter, labels[i]);
+        }
+
+        // Identity diagonal (neutral / no adjustment)
+        p.setPen(QPen(QColor(140, 140, 140, 100), 1, Qt::DashLine));
+        p.drawLine(toScreen(0.0f, 0.0f), toScreen(1.0f, 1.0f));
+
+        // Tone curve — sample at each pixel column for smooth result
+        const int N = std::max(2, int(W));
+        QPolygonF poly;
+        poly.reserve(N + 1);
+        for (int i = 0; i <= N; i++) {
+            float L   = float(i) / float(N);
+            float out = cpuCurve(L, m_z);
+            poly << toScreen(L, out);
+        }
+        p.setPen(QPen(Qt::white, 1.5f));
+        p.drawPolyline(poly);
+
+        // Border
+        p.setPen(QPen(QColor(90, 90, 90), 1));
+        p.drawRect(r);
+    }
+
+private:
+    ZoneEvs m_z{};
+};
+
 } // namespace
 
+// ============================================================================
+// ExposureEffect
+// ============================================================================
+
 ExposureEffect::ExposureEffect()
-    : controlsWidget(nullptr), exposureParam(nullptr) {
+    : controlsWidget(nullptr), exposureParam(nullptr),
+      whitesParam(nullptr), highlightsParam(nullptr),
+      shadowsParam(nullptr), blacksParam(nullptr) {
 }
 
 ExposureEffect::~ExposureEffect() {
 }
 
-QString ExposureEffect::getName() const {
-    return "Exposure";
-}
-
+QString ExposureEffect::getName() const { return "Exposure"; }
 QString ExposureEffect::getDescription() const {
-    return "Adjusts overall image exposure in EV stops";
+    return "Adjusts overall image exposure with tonal zone controls";
 }
-
-QString ExposureEffect::getVersion() const {
-    return "1.0.0";
-}
+QString ExposureEffect::getVersion() const { return "1.0.0"; }
 
 bool ExposureEffect::initialize() {
     qDebug() << "Exposure effect initialized";
@@ -235,15 +436,50 @@ QWidget* ExposureEffect::createControlsWidget() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    // 0.1 EV steps, 1 decimal place, range -5 to +5
+    // Tone curve graph — sits at the top; updated via setParams() on every drag
+    auto* curve = new ToneCurveWidget();
+    layout->addWidget(curve);
+
+    // Helper: re-reads all slider values and pushes them to the curve widget
+    auto refreshCurve = [this, curve]() {
+        ZoneEvs z;
+        z.global     = float(exposureParam    ? exposureParam->value()    : 0.0);
+        z.whites     = float(whitesParam      ? whitesParam->value()      : 0.0);
+        z.highlights = float(highlightsParam  ? highlightsParam->value()  : 0.0);
+        z.shadows    = float(shadowsParam     ? shadowsParam->value()     : 0.0);
+        z.blacks     = float(blacksParam      ? blacksParam->value()      : 0.0);
+        curve->setParams(z);
+    };
+
+    auto connectSlider = [&](ParamSlider* s) {
+        connect(s, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+        connect(s, &ParamSlider::valueChanged, curve, [=](double) {
+            refreshCurve();
+            emit liveParametersChanged();
+        });
+    };
+
+    // Global exposure — range ±5 EV, 0.1 steps
     exposureParam = new ParamSlider("Exposure (EV)", -5.0, 5.0, 0.1, 1);
-    connect(exposureParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(exposureParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    connectSlider(exposureParam);
     layout->addWidget(exposureParam);
+
+    // Tonal zone offsets — range ±3 EV, 0.1 steps (bright → dark order)
+    whitesParam = new ParamSlider("Whites", -3.0, 3.0, 0.1, 1);
+    connectSlider(whitesParam);
+    layout->addWidget(whitesParam);
+
+    highlightsParam = new ParamSlider("Highlights", -3.0, 3.0, 0.1, 1);
+    connectSlider(highlightsParam);
+    layout->addWidget(highlightsParam);
+
+    shadowsParam = new ParamSlider("Shadows", -3.0, 3.0, 0.1, 1);
+    connectSlider(shadowsParam);
+    layout->addWidget(shadowsParam);
+
+    blacksParam = new ParamSlider("Blacks", -3.0, 3.0, 0.1, 1);
+    connectSlider(blacksParam);
+    layout->addWidget(blacksParam);
 
     layout->addStretch();
     return controlsWidget;
@@ -251,7 +487,11 @@ QWidget* ExposureEffect::createControlsWidget() {
 
 QMap<QString, QVariant> ExposureEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["exposure"] = exposureParam ? exposureParam->value() : 0.0;
+    params["exposure"]   = exposureParam   ? exposureParam->value()   : 0.0;
+    params["whites"]     = whitesParam     ? whitesParam->value()     : 0.0;
+    params["highlights"] = highlightsParam ? highlightsParam->value() : 0.0;
+    params["shadows"]    = shadowsParam    ? shadowsParam->value()    : 0.0;
+    params["blacks"]     = blacksParam     ? blacksParam->value()     : 0.0;
     return params;
 }
 
@@ -277,15 +517,15 @@ bool ExposureEffect::enqueueGpu(cl::CommandQueue& queue,
                                  cl::Buffer& buf, cl::Buffer& /*aux*/,
                                  int w, int h, int stride, bool is16bit,
                                  const QMap<QString, QVariant>& params) {
-    const float ev       = static_cast<float>(params.value("exposure", 0.0).toDouble());
-    const float evFactor = std::pow(2.0f, ev);
+    ZoneEvs z;
+    z.global     = float(params.value("exposure",   0.0).toDouble());
+    z.whites     = float(params.value("whites",     0.0).toDouble());
+    z.highlights = float(params.value("highlights", 0.0).toDouble());
+    z.shadows    = float(params.value("shadows",    0.0).toDouble());
+    z.blacks     = float(params.value("blacks",     0.0).toDouble());
 
     cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    k.setArg(4, evFactor);
+    setKernelZoneArgs(k, buf, stride, w, h, z);
     queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }
@@ -293,10 +533,14 @@ bool ExposureEffect::enqueueGpu(cl::CommandQueue& queue,
 QImage ExposureEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;
 
-    const float ev       = static_cast<float>(parameters.value("exposure", 0.0).toDouble());
-    const float evFactor = std::pow(2.0f, ev);
+    ZoneEvs z;
+    z.global     = float(parameters.value("exposure",   0.0).toDouble());
+    z.whites     = float(parameters.value("whites",     0.0).toDouble());
+    z.highlights = float(parameters.value("highlights", 0.0).toDouble());
+    z.shadows    = float(parameters.value("shadows",    0.0).toDouble());
+    z.blacks     = float(parameters.value("blacks",     0.0).toDouble());
 
     if (image.format() == QImage::Format_RGBX64)
-        return processImageGPU16(image, evFactor);
-    return processImageGPU(image, evFactor);
+        return processImageGPU16(image, z);
+    return processImageGPU(image, z);
 }

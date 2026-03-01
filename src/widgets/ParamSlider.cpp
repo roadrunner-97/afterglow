@@ -20,7 +20,7 @@ ParamSlider::ParamSlider(const QString& label,
     outer->setSpacing(4);
 
     m_label = new QLabel();
-    m_label->setStyleSheet("color: #e0e0e0;");
+    m_label->setStyleSheet("color: #2C2018;");
     outer->addWidget(m_label);
 
     QHBoxLayout* row = new QHBoxLayout();
@@ -30,6 +30,12 @@ ParamSlider::ParamSlider(const QString& label,
     m_slider->setRange(static_cast<int>(std::round(min * m_scaleFactor)),
                        static_cast<int>(std::round(max * m_scaleFactor)));
     m_slider->setValue(0);
+    m_slider->setStyleSheet(
+        "QSlider::groove:horizontal { height: 4px; background: #CCC5B5; border-radius: 2px; }"
+        "QSlider::sub-page:horizontal { background: #5B6EA8; border-radius: 2px; }"
+        "QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0;"
+        "  background: #5B6EA8; border-radius: 7px; }"
+        "QSlider::handle:horizontal:hover { background: #C0802C; }");
     row->addWidget(m_slider);
 
     m_spinBox = new QDoubleSpinBox();
@@ -37,7 +43,10 @@ ParamSlider::ParamSlider(const QString& label,
     m_spinBox->setSingleStep(step);
     m_spinBox->setDecimals(decimals);
     m_spinBox->setValue(0.0);
-    m_spinBox->setStyleSheet("color: #e0e0e0; background-color: #444444;");
+    m_spinBox->setStyleSheet(
+        "QDoubleSpinBox { color: #2C2018; background-color: #F8F5F0;"
+        "  border: 1px solid #CCC5B5; border-radius: 3px; padding: 1px 3px; }"
+        "QDoubleSpinBox:focus { border-color: #5B6EA8; }");
     row->addWidget(m_spinBox);
 
     outer->addLayout(row);
