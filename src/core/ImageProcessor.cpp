@@ -9,11 +9,6 @@
 ImageProcessor::ImageProcessor(QObject *parent)
     : QObject(parent) {}
 
-void ImageProcessor::cancelProcessing() {
-    ++(*generationPtr);
-    emit processingCancelled();
-}
-
 void ImageProcessor::processImageAsync(const QImage &originalImage,
                                        const QVector<PhotoEditorEffect*> &effects,
                                        ViewportRequest viewport,

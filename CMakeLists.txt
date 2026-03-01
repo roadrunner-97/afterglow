@@ -3,7 +3,15 @@ project(LightroomClone)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC \
+    -Wshadow=local \
+    -Wnon-virtual-dtor \
+    -Woverloaded-virtual \
+    -Wuseless-cast \
+    -Wimplicit-fallthrough \
+    -Wduplicated-cond \
+    -Wduplicated-branches \
+    -Werror")
 
 # Export compile_commands.json for clangd/LSP
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

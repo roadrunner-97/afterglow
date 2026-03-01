@@ -26,11 +26,8 @@ public:
                            ViewportRequest viewport = {},
                            bool viewportOnly = false);
 
-    void cancelProcessing();
-
 signals:
     void processingComplete(QImage result);
-    void processingCancelled();
 
 private:
     std::shared_ptr<std::atomic<uint64_t>> generationPtr =

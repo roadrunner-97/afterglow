@@ -39,9 +39,6 @@ public:
 signals:
     void parametersChanged();     // committed change (slider release / spinbox commit)
     void liveParametersChanged(); // real-time change (every drag tick)
-    void processingStarted();
-    void processingProgress(int progress);
-    void processingFinished();
 };
 
 #endif // PHOTOEDITOREFFECT_H

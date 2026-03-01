@@ -134,7 +134,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             m_queue.enqueueCopyBuffer(m_srcBuf, m_workBuf, 0, 0, m_bufBytes);
 
             for (const auto& call : calls) {
-                auto* g = static_cast<IGpuEffect*>(dynamic_cast<IGpuEffect*>(call.effect));
+                auto* g = dynamic_cast<IGpuEffect*>(call.effect);
                 if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
                                    m_width, m_height, m_stride, m_is16bit, call.params)) {
                     qWarning() << "[GpuPipeline]" << call.effect->getName()
