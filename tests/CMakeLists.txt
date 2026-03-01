@@ -40,3 +40,8 @@ add_test(NAME ParamSlider COMMAND test_param_slider)
 set_tests_properties(ParamSlider PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+# ---------------------------------------------------------------------------
+# Effect integration tests — GPU (OpenCL) required; skip gracefully if absent
+# ---------------------------------------------------------------------------
+add_subdirectory(effects)
