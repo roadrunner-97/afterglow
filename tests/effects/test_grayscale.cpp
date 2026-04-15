@@ -98,7 +98,8 @@ private slots:
         QImage input = makeSolid16bit(32, 32, 200, 100, 50);
         QImage out   = e.processImage(input, {});
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
+        QImage out32 = out.convertToFormat(QImage::Format_RGB32);
+        QVERIFY(allPixels(out32, [](QRgb px) {
             return qRed(px) == qGreen(px) && qGreen(px) == qBlue(px);
         }));
     }
