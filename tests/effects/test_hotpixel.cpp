@@ -1,8 +1,11 @@
 #include <QTest>
+#include <QSignalSpy>
+#include <QSlider>
 #include <QWidget>
 #include "HotPixelEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
+#include "ParamSlider.h"
 
 class TestHotPixel : public QObject {
     Q_OBJECT
@@ -142,6 +145,40 @@ private slots:
         QWidget* w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
+    }
+
+    // Fire signal lambdas for the threshold ParamSlider.
+    void connectSlider_signals_coverLambdaBodies() {
+        HotPixelEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+
+        QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
+        QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
+
+        auto sliders = w->findChildren<ParamSlider*>();
+        QVERIFY(!sliders.isEmpty());
+
+        for (auto* ps : sliders) {
+            auto* qs = ps->findChild<QSlider*>();
+            QVERIFY(qs);
+            qs->setValue(qs->value() + 1);
+            QMetaObject::invokeMethod(qs, "sliderReleased");
+        }
+
+        QCOMPARE(spyChanged.count(), 1);
+        QCOMPARE(spyLive.count(), 1);
+    }
+
+    void supportsGpuInPlace_returnsTrue() {
+        HotPixelEffect e;
+        QVERIFY(e.supportsGpuInPlace());
+    }
+
+    void destructor_heapAllocated_doesNotCrash() {
+        auto* e = new HotPixelEffect();
+        e->createControlsWidget();
+        delete e;
     }
 };
 

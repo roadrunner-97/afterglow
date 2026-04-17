@@ -121,6 +121,41 @@ private slots:
         QVERIFY(!mgr.entries()[0].enabled);
         QVERIFY( mgr.entries()[1].enabled); // untouched
     }
+
+    // ── PhotoEditorEffect base class default methods ──────────────────────────
+    // MockEffect does NOT override createControlsWidget, getParameters,
+    // onImageLoaded, or supportsGpuInPlace — so these calls exercise the
+    // default implementations in PhotoEditorEffect.h.
+
+    void baseClass_createControlsWidget_returnsNull() {
+        MockEffect e;
+        QVERIFY(e.createControlsWidget() == nullptr);
+    }
+
+    void baseClass_getParameters_returnsEmpty() {
+        MockEffect e;
+        QVERIFY(e.getParameters().isEmpty());
+    }
+
+    void baseClass_onImageLoaded_doesNotCrash() {
+        MockEffect e;
+        ImageMetadata meta;
+        meta.colorTempK = 5500.0f;
+        e.onImageLoaded(meta);  // default impl is a no-op
+    }
+
+    void baseClass_supportsGpuInPlace_returnsFalse() {
+        MockEffect e;
+        QVERIFY(!e.supportsGpuInPlace());
+    }
+
+    // Heap-allocate EffectManager with effects so the destructor loop body runs.
+    void destructor_heapAllocated_deletesEffects() {
+        auto* mgr = new EffectManager();
+        mgr->addEffect(new MockEffect());
+        mgr->addEffect(new MockEffect());
+        delete mgr;  // destructor iterates and deletes both effects
+    }
 };
 
 QTEST_GUILESS_MAIN(TestEffectManager)

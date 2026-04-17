@@ -1,8 +1,11 @@
 #include <QTest>
+#include <QSignalSpy>
+#include <QSlider>
 #include <QWidget>
 #include "UnsharpEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
+#include "ParamSlider.h"
 
 class TestUnsharp : public QObject {
     Q_OBJECT
@@ -162,6 +165,40 @@ private slots:
         QWidget* w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
+    }
+
+    // Fire signal lambdas for all three ParamSliders (amount, radius, threshold).
+    void connectSlider_signals_coverLambdaBodies() {
+        UnsharpEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+
+        QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
+        QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
+
+        auto sliders = w->findChildren<ParamSlider*>();
+        QVERIFY(sliders.size() >= 3);
+
+        for (auto* ps : sliders) {
+            auto* qs = ps->findChild<QSlider*>();
+            QVERIFY(qs);
+            qs->setValue(qs->value() + 1);
+            QMetaObject::invokeMethod(qs, "sliderReleased");
+        }
+
+        QVERIFY(spyChanged.count() >= 3);
+        QVERIFY(spyLive.count() >= 3);
+    }
+
+    void supportsGpuInPlace_returnsTrue() {
+        UnsharpEffect e;
+        QVERIFY(e.supportsGpuInPlace());
+    }
+
+    void destructor_heapAllocated_doesNotCrash() {
+        auto* e = new UnsharpEffect();
+        e->createControlsWidget();
+        delete e;
     }
 };
 

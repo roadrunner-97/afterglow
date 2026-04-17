@@ -1,8 +1,11 @@
 #include <QTest>
+#include <QSignalSpy>
+#include <QSlider>
 #include <QWidget>
 #include "BrightnessEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
+#include "ParamSlider.h"
 
 class TestBrightness : public QObject {
     Q_OBJECT
@@ -164,6 +167,65 @@ private slots:
         QWidget* w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
+    }
+
+    // 16-bit image with non-zero brightness — exercises processImageGPU16.
+    void brightness_16bit_nonZeroParams() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        BrightnessEffect e;
+        QImage input = makeSolid16bit(32, 32, 100, 100, 100);
+        QMap<QString, QVariant> params;
+        params["brightness"] = 50;
+        params["contrast"]   = 0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    // 16-bit with non-zero contrast — also exercises processImageGPU16.
+    void contrast_16bit_nonZeroParams() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        BrightnessEffect e;
+        QImage input = makeSolid16bit(32, 32, 128, 128, 128);
+        QMap<QString, QVariant> params;
+        params["brightness"] = 0;
+        params["contrast"]   = 30;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    // Fire signal lambdas in createControlsWidget (covers lambda bodies for both sliders).
+    void connectSlider_signals_coverLambdaBodies() {
+        BrightnessEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+
+        QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
+        QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
+
+        auto sliders = w->findChildren<ParamSlider*>();
+        QVERIFY(sliders.size() >= 2);
+
+        for (auto* ps : sliders) {
+            auto* qs = ps->findChild<QSlider*>();
+            QVERIFY(qs);
+            qs->setValue(1);
+            QMetaObject::invokeMethod(qs, "sliderReleased");
+        }
+
+        QVERIFY(spyChanged.count() >= 2);
+        QVERIFY(spyLive.count() >= 2);
+    }
+
+    void supportsGpuInPlace_returnsTrue() {
+        BrightnessEffect e;
+        QVERIFY(e.supportsGpuInPlace());
+    }
+
+    // Heap-allocate so the destructor body is explicitly attributed.
+    void destructor_heapAllocated_doesNotCrash() {
+        auto* e = new BrightnessEffect();
+        e->createControlsWidget();
+        delete e;
     }
 };
 

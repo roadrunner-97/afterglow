@@ -1,8 +1,11 @@
 #include <QTest>
+#include <QSignalSpy>
+#include <QSlider>
 #include <QWidget>
 #include "SaturationEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
+#include "ParamSlider.h"
 
 class TestSaturation : public QObject {
     Q_OBJECT
@@ -136,6 +139,64 @@ private slots:
         QWidget* w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
+    }
+
+    // 16-bit with non-zero saturation — exercises processImageGPU16.
+    void saturation_16bit_nonZeroParams() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        SaturationEffect e;
+        QImage input = makeSolid16bit(32, 32, 200, 100, 100);
+        QMap<QString, QVariant> params;
+        params["saturation"] = 10.0;
+        params["vibrancy"]   = 0.0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    // 16-bit with non-zero vibrancy — also exercises processImageGPU16.
+    void vibrancy_16bit_nonZeroParams() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        SaturationEffect e;
+        QImage input = makeSolid16bit(32, 32, 200, 180, 180);
+        QMap<QString, QVariant> params;
+        params["saturation"] = 0.0;
+        params["vibrancy"]   = 10.0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+    }
+
+    // Fire signal lambdas in createControlsWidget (covers both slider signal lambda bodies).
+    void connectSlider_signals_coverLambdaBodies() {
+        SaturationEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+
+        QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
+        QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
+
+        auto sliders = w->findChildren<ParamSlider*>();
+        QVERIFY(sliders.size() >= 2);
+
+        for (auto* ps : sliders) {
+            auto* qs = ps->findChild<QSlider*>();
+            QVERIFY(qs);
+            qs->setValue(qs->value() + 1);
+            QMetaObject::invokeMethod(qs, "sliderReleased");
+        }
+
+        QVERIFY(spyChanged.count() >= 2);
+        QVERIFY(spyLive.count() >= 2);
+    }
+
+    void supportsGpuInPlace_returnsTrue() {
+        SaturationEffect e;
+        QVERIFY(e.supportsGpuInPlace());
+    }
+
+    void destructor_heapAllocated_doesNotCrash() {
+        auto* e = new SaturationEffect();
+        e->createControlsWidget();
+        delete e;
     }
 };
 

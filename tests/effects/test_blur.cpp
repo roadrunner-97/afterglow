@@ -1,8 +1,12 @@
 #include <QTest>
+#include <QComboBox>
+#include <QSignalSpy>
+#include <QSlider>
 #include <QWidget>
 #include "BlurEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "ImageHelpers.h"
+#include "ParamSlider.h"
 
 class TestBlur : public QObject {
     Q_OBJECT
@@ -132,6 +136,54 @@ private slots:
         QWidget* w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
+    }
+
+    // Fire the QComboBox::activated signal (lambda: blurType = index; emit parametersChanged()).
+    void connectCombo_activated_firesParametersChanged() {
+        BlurEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+
+        QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
+        auto* combo = w->findChild<QComboBox*>();
+        QVERIFY(combo);
+        // Directly invoke the activated signal to fire the lambda body.
+        combo->activated(1);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    // Fire ParamSlider signals (editingFinished + valueChanged).
+    void connectSlider_signals_coverLambdaBodies() {
+        BlurEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+
+        QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
+        QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
+
+        auto sliders = w->findChildren<ParamSlider*>();
+        QVERIFY(!sliders.isEmpty());
+
+        for (auto* ps : sliders) {
+            auto* qs = ps->findChild<QSlider*>();
+            QVERIFY(qs);
+            qs->setValue(qs->value() + 1);
+            QMetaObject::invokeMethod(qs, "sliderReleased");
+        }
+
+        QVERIFY(spyChanged.count() >= 1);
+        QVERIFY(spyLive.count() >= 1);
+    }
+
+    void supportsGpuInPlace_returnsTrue() {
+        BlurEffect e;
+        QVERIFY(e.supportsGpuInPlace());
+    }
+
+    void destructor_heapAllocated_doesNotCrash() {
+        auto* e = new BlurEffect();
+        e->createControlsWidget();
+        delete e;
     }
 };
 

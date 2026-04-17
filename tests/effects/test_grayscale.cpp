@@ -122,6 +122,17 @@ private slots:
             return qRed(px) == 200 && qGreen(px) == 100 && qBlue(px) == 50;
         }));
     }
+
+    void supportsGpuInPlace_returnsTrue() {
+        GrayscaleEffect e;
+        QVERIFY(e.supportsGpuInPlace());
+    }
+
+    void destructor_heapAllocated_doesNotCrash() {
+        auto* e = new GrayscaleEffect();
+        e->createControlsWidget();
+        delete e;
+    }
 };
 
 // QWidget requires a full QApplication, not just QCoreApplication.

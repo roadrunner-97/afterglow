@@ -9,6 +9,52 @@
 #include "HotPixelEffect.h"
 #include "UnsharpEffect.h"
 #include "GrayscaleEffect.h"
+#include "DenoiseEffect.h"
+#include "WhiteBalanceEffect.h"
+
+// A concrete PhotoEditorEffect that does NOT inherit IGpuEffect.
+// Used to exercise the "missing IGpuEffect" warning path in GpuPipeline::run().
+class NonGpuEffect : public PhotoEditorEffect {
+    Q_OBJECT
+public:
+    QString getName()        const override { return "NonGpu"; }
+    QString getDescription() const override { return ""; }
+    QString getVersion()     const override { return "1.0"; }
+    bool    initialize()           override { return true; }
+    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
+};
+
+// An IGpuEffect whose initGpuKernels() always returns false.
+// Exercises the "initGpuKernels failed" warning path (GpuPipeline.cpp lines 101-103).
+class FailInitEffect : public PhotoEditorEffect, public IGpuEffect {
+    Q_OBJECT
+public:
+    QString getName()        const override { return "FailInit"; }
+    QString getDescription() const override { return ""; }
+    QString getVersion()     const override { return "1.0"; }
+    bool    initialize()           override { return true; }
+    bool    supportsGpuInPlace() const override { return true; }
+    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
+    bool initGpuKernels(cl::Context&, cl::Device&) override { return false; }
+    bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
+                    int, int, int, bool, const QMap<QString,QVariant>&) override { return true; }
+};
+
+// An IGpuEffect whose enqueueGpu() always returns false.
+// Exercises the "enqueueGpu() failed" warning path (GpuPipeline.cpp lines 177-179).
+class FailEnqueueEffect : public PhotoEditorEffect, public IGpuEffect {
+    Q_OBJECT
+public:
+    QString getName()        const override { return "FailEnqueue"; }
+    QString getDescription() const override { return ""; }
+    QString getVersion()     const override { return "1.0"; }
+    bool    initialize()           override { return true; }
+    bool    supportsGpuInPlace() const override { return true; }
+    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
+    bool initGpuKernels(cl::Context&, cl::Device&) override { return true; }
+    bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
+                    int, int, int, bool, const QMap<QString,QVariant>&) override { return false; }
+};
 
 // Effects are class members so their addresses are stable across test methods.
 // GpuPipeline::m_initializedEffects tracks pointers — if a local effect goes
@@ -28,6 +74,8 @@ private:
     HotPixelEffect   m_hotpixel;
     UnsharpEffect    m_unsharp;
     GrayscaleEffect  m_grayscale;
+    DenoiseEffect    m_denoise;
+    WhiteBalanceEffect m_whitebalance;
 
     static QImage makeSolid(int w, int h, int r, int g, int b) {
         QImage img(w, h, QImage::Format_RGB32);
@@ -131,6 +179,99 @@ private slots:
         QImage input = makeSolid(64, 64, 200, 100, 50);
         QImage out = m_pipeline.run(input, {{&m_grayscale, {}}}, fullViewport(input));
         QVERIFY(!out.isNull());
+    }
+
+    // Grayscale active: exercises enqueueGpu body (lines 167-173).
+    void pipeline_grayscale_active() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QWidget* w  = m_grayscale.createControlsWidget();
+        auto*    cb = w->findChild<QCheckBox*>();
+        QVERIFY(cb);
+        cb->setChecked(true);
+
+        QImage input = makeSolid(64, 64, 200, 100, 50);
+        QImage out = m_pipeline.run(input, {{&m_grayscale, {}}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+
+        cb->setChecked(false);  // reset for subsequent tests
+    }
+
+    void pipeline_denoise() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["strength"]       = 50;
+        p["shadowPreserve"] = 30;
+        p["colorNoise"]     = 50;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_denoise, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    void pipeline_whitebalance() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["shot_temp"]   = 5500.0;
+        p["temperature"] = 6500.0;
+        p["tint"]        = 0.0;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_whitebalance, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Calling setDevice with a different index bumps the revision counter.
+    // The pipeline reinitialises on the next run, which must still succeed.
+    void setDevice_switch_pipelineStillWorks() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        // devices() getter (GpuDeviceRegistry.h line 28)
+        QVERIFY(!GpuDeviceRegistry::instance().devices().empty());
+        GpuDeviceRegistry::instance().setDevice(1);  // covers setDevice body (lines 77-80)
+        GpuDeviceRegistry::instance().setDevice(0);  // restore
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // setDevice with out-of-range index, then re-enumerate: covers the
+    // bounds check in GpuDeviceRegistry::enumerate() (line 69).
+    void enumerate_afterOutOfRangeDevice_resetsIndex() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        GpuDeviceRegistry::instance().setDevice(99);   // index far out of range
+        GpuDeviceRegistry::instance().enumerate();     // line 69: 99 >= devices.size() → resets to 0
+        QCOMPARE(GpuDeviceRegistry::instance().currentIndex(), 0);
+        // Pipeline must still work after the re-enumeration.
+        QImage input = makeSolid(32, 32, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Pass an effect that does NOT implement IGpuEffect.
+    // GpuPipeline::run() should log a warning and return a null image.
+    void nonGpuEffect_warnsAndReturnsNull() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        NonGpuEffect nge;
+        QImage input = makeSolid(32, 32, 100, 100, 100);
+        QImage out = m_pipeline.run(input, {{&nge, {}}}, fullViewport(input));
+        QVERIFY(out.isNull());
+    }
+
+    // Pass an IGpuEffect whose initGpuKernels() always returns false.
+    // GpuPipeline::run() should log a warning and return a null image.
+    void failInitEffect_warnsAndReturnsNull() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        FailInitEffect fie;
+        QImage input = makeSolid(32, 32, 100, 100, 100);
+        QImage out = m_pipeline.run(input, {{&fie, {}}}, fullViewport(input));
+        QVERIFY(out.isNull());
+    }
+
+    // Pass an IGpuEffect whose enqueueGpu() always returns false.
+    // GpuPipeline::run() should log a warning and return a null image.
+    void failEnqueueEffect_warnsAndReturnsNull() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        FailEnqueueEffect fee;
+        QImage input = makeSolid(32, 32, 100, 100, 100);
+        QImage out = m_pipeline.run(input, {{&fee, {}}}, fullViewport(input));
+        QVERIFY(out.isNull());
     }
 
     // viewportOnly=true after a full run: skips the effect chain, re-downsamples only.
