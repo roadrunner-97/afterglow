@@ -49,3 +49,4 @@ add_effect_test(test_whitebalance test_whitebalance.cpp whitebalance_effect Effe
 add_effect_test(test_vignette     test_vignette.cpp     vignette_effect     Effects_Vignette)
 add_effect_test(test_filmgrain    test_filmgrain.cpp    filmgrain_effect    Effects_FilmGrain)
 add_effect_test(test_splittoning  test_splittoning.cpp  splittoning_effect  Effects_SplitToning)
+add_effect_test(test_clarity      test_clarity.cpp      clarity_effect      Effects_Clarity)

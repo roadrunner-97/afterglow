@@ -14,6 +14,7 @@
 #include "VignetteEffect.h"
 #include "FilmGrainEffect.h"
 #include "SplitToningEffect.h"
+#include "ClarityEffect.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -33,6 +34,7 @@ int main(int argc, char *argv[]) {
     effects->addEffect(new VignetteEffect());
     effects->addEffect(new FilmGrainEffect());
     effects->addEffect(new SplitToningEffect());
+    effects->addEffect(new ClarityEffect());
 
     for (const auto& e : effects->entries())
         e.effect->initialize();

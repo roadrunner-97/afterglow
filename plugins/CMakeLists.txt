@@ -36,6 +36,7 @@ add_subdirectory(denoise)
 add_subdirectory(vignette)
 add_subdirectory(filmgrain)
 add_subdirectory(splittoning)
+add_subdirectory(clarity)
 
 # Aggregator target: link this to get all effects + their include dirs
 add_library(all_effects INTERFACE)
@@ -52,4 +53,5 @@ target_link_libraries(all_effects INTERFACE
     vignette_effect
     filmgrain_effect
     splittoning_effect
+    clarity_effect
 )

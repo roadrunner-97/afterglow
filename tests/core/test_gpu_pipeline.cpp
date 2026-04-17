@@ -14,6 +14,7 @@
 #include "VignetteEffect.h"
 #include "FilmGrainEffect.h"
 #include "SplitToningEffect.h"
+#include "ClarityEffect.h"
 
 // A concrete PhotoEditorEffect that does NOT inherit IGpuEffect.
 // Used to exercise the "missing IGpuEffect" warning path in GpuPipeline::run().
@@ -82,6 +83,7 @@ private:
     VignetteEffect   m_vignette;
     FilmGrainEffect  m_filmgrain;
     SplitToningEffect m_splittoning;
+    ClarityEffect    m_clarity;
 
     static QImage makeSolid(int w, int h, int r, int g, int b) {
         QImage img(w, h, QImage::Format_RGB32);
@@ -299,6 +301,28 @@ private slots:
         p["balance"]      = 0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
         QImage out = m_pipeline.run(input, {{&m_splittoning, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Clarity inactive (amount=0): enqueueGpu early-returns but initGpuKernels runs.
+    void pipeline_clarity_inactive() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["amount"] = 0;
+        p["radius"] = 30;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_clarity, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Clarity active: exercises H/V blur + combine + copy pipeline path.
+    void pipeline_clarity_active() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["amount"] = 50;
+        p["radius"] = 20;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_clarity, p}}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
