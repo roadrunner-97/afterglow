@@ -12,6 +12,8 @@
 #include "DenoiseEffect.h"
 #include "WhiteBalanceEffect.h"
 #include "VignetteEffect.h"
+#include "FilmGrainEffect.h"
+#include "SplitToningEffect.h"
 
 // A concrete PhotoEditorEffect that does NOT inherit IGpuEffect.
 // Used to exercise the "missing IGpuEffect" warning path in GpuPipeline::run().
@@ -78,6 +80,8 @@ private:
     DenoiseEffect    m_denoise;
     WhiteBalanceEffect m_whitebalance;
     VignetteEffect   m_vignette;
+    FilmGrainEffect  m_filmgrain;
+    SplitToningEffect m_splittoning;
 
     static QImage makeSolid(int w, int h, int r, int g, int b) {
         QImage img(w, h, QImage::Format_RGB32);
@@ -243,6 +247,58 @@ private slots:
         p["roundness"] = 0;
         QImage input = makeSolid(64, 64, 180, 180, 180);
         QImage out = m_pipeline.run(input, {{&m_vignette, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Film grain inactive (amount=0): enqueueGpu early-returns but initGpuKernels runs.
+    void pipeline_filmgrain_inactive() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["amount"]    = 0;
+        p["size"]      = 1;
+        p["lumWeight"] = true;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_filmgrain, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Film grain active: exercises the enqueueGpu body (kernel dispatch).
+    void pipeline_filmgrain_active() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["amount"]    = 50;
+        p["size"]      = 2;
+        p["lumWeight"] = false;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_filmgrain, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Split toning inactive (both sats=0): enqueueGpu early-returns but initGpuKernels runs.
+    void pipeline_splittoning_inactive() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["shadowHue"]    = 240;
+        p["shadowSat"]    = 0;
+        p["highlightHue"] = 60;
+        p["highlightSat"] = 0;
+        p["balance"]      = 0;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_splittoning, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Split toning active: exercises the enqueueGpu body (kernel dispatch).
+    void pipeline_splittoning_active() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["shadowHue"]    = 240;
+        p["shadowSat"]    = 50;
+        p["highlightHue"] = 60;
+        p["highlightSat"] = 50;
+        p["balance"]      = 0;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_splittoning, p}}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 

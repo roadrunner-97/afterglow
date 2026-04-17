@@ -13,6 +13,7 @@
 #include "DenoiseEffect.h"
 #include "VignetteEffect.h"
 #include "FilmGrainEffect.h"
+#include "SplitToningEffect.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -31,6 +32,7 @@ int main(int argc, char *argv[]) {
     effects->addEffect(new DenoiseEffect());
     effects->addEffect(new VignetteEffect());
     effects->addEffect(new FilmGrainEffect());
+    effects->addEffect(new SplitToningEffect());
 
     for (const auto& e : effects->entries())
         e.effect->initialize();
