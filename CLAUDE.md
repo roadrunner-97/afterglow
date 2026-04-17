@@ -3,7 +3,7 @@
 ## Build
 
 ```bash
-cmake -B build          # OpenCL REQUIRED — configure fails if not found
+cmake -B build -G Ninja    # OpenCL REQUIRED — configure fails if not found
 cmake --build build
 ./build/bin/lightroom_clone
 ```
@@ -12,22 +12,30 @@ Binary: `build/bin/lightroom_clone`
 Libraries: `build/lib/libphotoeditor_core.so`, `build/lib/libphotoeditor_widgets.so`, `build/lib/libphotoeditor_ui.so`
 Effect libs: `build/plugins/lib*_effect.a` (statically linked into the binary)
 
-To reconfigure: `cmake -B build` from the repo root.
+To reconfigure: `cmake -B build -G Ninja` from the repo root. Ninja parallelises automatically, so `-j$(nproc)` is unnecessary on `cmake --build`.
 
 ### Running tests
 
 ```bash
-cmake --build build -j$(nproc)
+cmake --build build
 ctest --test-dir build --output-on-failure -j$(nproc)
 ```
 
 ### Coverage build
 
+One-shot via the `coverage` workflow preset (configure → build → test → coverage report):
+
 ```bash
-cmake -B build -DCOVERAGE=ON   # enable --coverage flags (gcovr required)
-cmake --build build -j$(nproc)
-ctest --test-dir build -j$(nproc)   # populate .gcda files
-make -Cbuild coverage               # generate report from existing .gcda files
+cmake --workflow --preset coverage
+```
+
+Or manually:
+
+```bash
+cmake -B build -G Ninja -DCOVERAGE=ON   # enable --coverage flags (gcovr required)
+cmake --build build
+ctest --test-dir build -j$(nproc)                 # populate .gcda files
+cmake --build build --target coverage             # generate report from existing .gcda files
 ```
 
 Report lands in `build/coverage/index.html` (HTML detail) and `build/coverage/coverage.xml`.
@@ -42,11 +50,21 @@ gcovr \
   --exclude "src/core/ImageProcessor\.cpp" \
   --exclude "src/core/RawLoader\.cpp" \
   --exclude "src/main\.cpp" \
+  --exclude-throw-branches \
+  --exclude-unreachable-branches \
+  --merge-mode-functions=merge-use-line-min \
   --gcov-ignore-errors=no_working_dir_found \
   --print-summary
 ```
 
 `gcovr` must be on PATH (`sudo pacman -S python-gcovr`). The `--gcov-ignore-errors=no_working_dir_found` flag suppresses a harmless warning from system headers that lack debug info.
+
+### Excluding infeasible code from coverage
+
+Some paths (OpenCL `cl::Error` catch blocks, enumeration fallbacks) cannot be driven from a unit test. Two mechanisms keep them out of the headline number:
+
+- **Source markers** — wrap the block with `// GCOVR_EXCL_START` / `// GCOVR_EXCL_STOP` (or `// GCOVR_EXCL_LINE` for a single line). The marker lines themselves are also excluded.
+- **gcovr flags** — `--exclude-throw-branches` drops compiler-synthesised exception branches (every potentially-throwing call emits one); `--exclude-unreachable-branches` drops branches the compiler proved unreachable. Both are on by default in the `coverage` target.
 
 ---
 
