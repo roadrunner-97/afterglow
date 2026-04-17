@@ -11,6 +11,7 @@
 #include "GrayscaleEffect.h"
 #include "DenoiseEffect.h"
 #include "WhiteBalanceEffect.h"
+#include "VignetteEffect.h"
 
 // A concrete PhotoEditorEffect that does NOT inherit IGpuEffect.
 // Used to exercise the "missing IGpuEffect" warning path in GpuPipeline::run().
@@ -76,6 +77,7 @@ private:
     GrayscaleEffect  m_grayscale;
     DenoiseEffect    m_denoise;
     WhiteBalanceEffect m_whitebalance;
+    VignetteEffect   m_vignette;
 
     static QImage makeSolid(int w, int h, int r, int g, int b) {
         QImage img(w, h, QImage::Format_RGB32);
@@ -215,6 +217,32 @@ private slots:
         p["tint"]        = 0.0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
         QImage out = m_pipeline.run(input, {{&m_whitebalance, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Vignette inactive (amount=0): enqueueGpu early-returns but initGpuKernels runs.
+    void pipeline_vignette_inactive() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["amount"]    = 0;
+        p["midpoint"]  = 50;
+        p["feather"]   = 50;
+        p["roundness"] = 0;
+        QImage input = makeSolid(64, 64, 180, 180, 180);
+        QImage out = m_pipeline.run(input, {{&m_vignette, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Vignette active: exercises the enqueueGpu body (kernel dispatch).
+    void pipeline_vignette_active() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["amount"]    = -60;
+        p["midpoint"]  = 40;
+        p["feather"]   = 40;
+        p["roundness"] = 0;
+        QImage input = makeSolid(64, 64, 180, 180, 180);
+        QImage out = m_pipeline.run(input, {{&m_vignette, p}}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
