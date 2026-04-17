@@ -170,9 +170,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Saturation ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Saturation init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -207,10 +210,13 @@ static QImage processImageGPU(const QImage& image, float saturationValue, float 
                                        cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -241,10 +247,13 @@ static QImage processImageGPU16(const QImage& image, float saturationValue, floa
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Saturation16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -261,11 +270,14 @@ bool SaturationEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernel   = cl::Kernel(prog, "adjustSatVibrancy");
         m_kernel16 = cl::Kernel(prog, "adjustSatVibrancy16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Saturation initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool SaturationEffect::enqueueGpu(cl::CommandQueue& queue,

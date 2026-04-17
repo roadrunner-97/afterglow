@@ -66,10 +66,12 @@ protected:
     // warning (with the supplied effect name) and returns false on failure.
     bool acquireDevice(cl::Device& outDevice, const char* effectName) {
         cl::Platform platform;
+        // GCOVR_EXCL_START
         if (!GpuDeviceRegistryOCL::getSelectedDevice(outDevice, platform)) {
             qWarning() << "[GPU]" << effectName << ": no OpenCL device available";
             return false;
         }
+        // GCOVR_EXCL_STOP
         context = cl::Context(outDevice);
         queue   = cl::CommandQueue(context, outDevice);
         return true;

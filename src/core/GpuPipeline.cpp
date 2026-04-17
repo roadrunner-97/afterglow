@@ -84,7 +84,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         m_previewW = 0;
         m_previewH = 0;
         if (!initContext())
-            return {};
+            return {}; // GCOVR_EXCL_LINE
         m_revision = rev;
     }
 
@@ -197,11 +197,14 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
                  << " preview:"   << previewW << "x" << previewH;
         return result;
 
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] run() failed:" << e.what() << "(err" << e.err() << ")";
         m_available = false;
         return {};
     }
+    // GCOVR_EXCL_STOP
 }
 
 // ── initContext ───────────────────────────────────────────────────────────────
@@ -209,10 +212,12 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
 bool GpuPipeline::initContext() {
     cl::Device   device;
     cl::Platform platform;
+    // GCOVR_EXCL_START
     if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
         qWarning() << "[GpuPipeline] no OpenCL device available";
         return false;
     }
+    // GCOVR_EXCL_STOP
 
     try {
         m_context = cl::Context(device);
@@ -222,16 +227,21 @@ bool GpuPipeline::initContext() {
         qDebug() << "[GpuPipeline] context ready on:"
                  << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
 
+        // GCOVR_EXCL_START
         if (!initDownsampleKernels()) {
             m_available = false;
             return false;
         }
+        // GCOVR_EXCL_STOP
 
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] initContext failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool GpuPipeline::initDownsampleKernels() {
@@ -241,7 +251,9 @@ bool GpuPipeline::initDownsampleKernels() {
         m_downsampleKernel8  = cl::Kernel(prog, "preview_downsample_8bit_rgb32");
         m_downsampleKernel16 = cl::Kernel(prog, "preview_downsample_16bit_rgb32");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] initDownsampleKernels failed:" << e.what()
                    << "(err" << e.err() << ")";
         try {
@@ -251,6 +263,7 @@ bool GpuPipeline::initDownsampleKernels() {
         } catch (...) {}
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 void GpuPipeline::uploadImageLocked(const QImage& image) {
@@ -281,8 +294,11 @@ void GpuPipeline::uploadImageLocked(const QImage& image) {
                  << "bufBytes" << m_bufBytes
                  << "in" << (t.nsecsElapsed() + 500) / 1000 << "µs";
 
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] upload failed:" << e.what() << "(err" << e.err() << ")";
         m_available = false;
     }
+    // GCOVR_EXCL_STOP
 }

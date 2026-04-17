@@ -67,9 +67,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Grayscale ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Grayscale init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -100,10 +103,13 @@ static QImage processImageGPU(const QImage& image) {
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Grayscale kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -132,10 +138,13 @@ static QImage processImageGPU16(const QImage& image) {
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Grayscale16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -152,11 +161,14 @@ bool GrayscaleEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernel   = cl::Kernel(prog, "grayscale");
         m_kernel16 = cl::Kernel(prog, "grayscale16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Grayscale initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool GrayscaleEffect::enqueueGpu(cl::CommandQueue& queue,

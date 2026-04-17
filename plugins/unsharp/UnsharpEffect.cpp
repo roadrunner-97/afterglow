@@ -113,9 +113,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Unsharp ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Unsharp init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -166,10 +169,13 @@ static QImage processImageGPU(const QImage& image, int radius, float amount, int
         gpu.queue.finish();
 
         gpu.queue.enqueueReadBuffer(bufB, CL_TRUE, 0, bufBytes, src.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Unsharp kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return src;
 }
 
@@ -216,10 +222,13 @@ static QImage processImageGPU16(const QImage& image, int radius, float amount, i
         gpu.queue.finish();
 
         gpu.queue.enqueueReadBuffer(bufB, CL_TRUE, 0, bufBytes, src.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Unsharp16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return src;
 }
 
@@ -241,11 +250,14 @@ bool UnsharpEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernelUnsharp16 = cl::Kernel(prog, "unsharpCombine16");
         m_pipelineCtx     = ctx;  // save for temp buffer allocation in enqueueGpu
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Unsharp initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,

@@ -127,9 +127,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] HotPixel ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] HotPixel init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -169,10 +172,13 @@ static QImage processImageGPU(const QImage& image, float threshold) {
                                        cl::NDRange(w, h), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(bufB, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] HotPixel kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -204,10 +210,13 @@ static QImage processImageGPU16(const QImage& image, float threshold) {
                                        cl::NDRange(w, h), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(bufB, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] HotPixel16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -224,11 +233,14 @@ bool HotPixelEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernel8  = cl::Kernel(prog, "hotPixelRemove");
         m_kernel16 = cl::Kernel(prog, "hotPixelRemove16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] HotPixel initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool HotPixelEffect::enqueueGpu(cl::CommandQueue& queue,

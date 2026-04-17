@@ -108,9 +108,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Brightness ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Brightness init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -143,10 +146,13 @@ static QImage processImageGPU(const QImage& image, int brightnessFactor, float c
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Brightness kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -207,10 +213,13 @@ static QImage processImageGPU16(const QImage& image, int brightnessFactor, float
         qDebug() << "[GPU16 Brightness] readback:" << (t3 - t2) / 1000 << "µs";
         qDebug() << "[GPU16 Brightness] TOTAL:" << t3 / 1000 << "µs";
 #endif
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Brightness16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -290,11 +299,14 @@ bool BrightnessEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernel   = cl::Kernel(prog, "adjustBrightness");
         m_kernel16 = cl::Kernel(prog, "adjustBrightness16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Brightness initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,

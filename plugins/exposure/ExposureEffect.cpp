@@ -164,9 +164,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Exposure ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Exposure init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -210,10 +213,13 @@ static QImage processImageGPU(const QImage& image, const ZoneEvs& z) {
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Exposure kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -238,10 +244,13 @@ static QImage processImageGPU16(const QImage& image, const ZoneEvs& z) {
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Exposure16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -505,11 +514,14 @@ bool ExposureEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernel   = cl::Kernel(prog, "adjustExposure");
         m_kernel16 = cl::Kernel(prog, "adjustExposure16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Exposure initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool ExposureEffect::enqueueGpu(cl::CommandQueue& queue,

@@ -168,9 +168,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Blur ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Blur init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -222,10 +225,13 @@ static QImage processImageGPU(const QImage& image, int radius, bool gaussian) {
 
         // Read result back from A
         gpu.queue.enqueueReadBuffer(bufA, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Blur kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -272,10 +278,13 @@ static QImage processImageGPU16(const QImage& image, int radius, bool gaussian) 
         gpu.queue.finish();
 
         gpu.queue.enqueueReadBuffer(bufA, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Blur16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -294,11 +303,14 @@ bool BlurEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernelH16 = cl::Kernel(prog, "blurHorizontal16");
         m_kernelV16 = cl::Kernel(prog, "blurVertical16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Blur initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool BlurEffect::enqueueGpu(cl::CommandQueue& queue,

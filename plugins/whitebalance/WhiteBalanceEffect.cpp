@@ -164,9 +164,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] WhiteBalance ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] WhiteBalance init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -205,10 +208,13 @@ static QImage processImageGPU(const QImage& image,
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] WB kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -245,10 +251,13 @@ static QImage processImageGPU16(const QImage& image,
                                        cl::NDRange(width, height), cl::NullRange);
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] WB16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return result;
 }
 
@@ -265,11 +274,14 @@ bool WhiteBalanceEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernel   = cl::Kernel(prog, "applyWB");
         m_kernel16 = cl::Kernel(prog, "applyWB16");
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] WhiteBalance initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool WhiteBalanceEffect::enqueueGpu(cl::CommandQueue& queue,

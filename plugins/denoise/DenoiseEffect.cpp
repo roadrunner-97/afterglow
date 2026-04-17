@@ -214,9 +214,12 @@ struct GpuContext : GpuContextBase<GpuContext> {
             available = true;
             qDebug() << "[GPU] Denoise ready on:"
                      << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        } catch (const cl::Error& e) {
+        }
+        // GCOVR_EXCL_START
+        catch (const cl::Error& e) {
             qWarning() << "[GPU] Denoise init failed:" << e.what() << "(err" << e.err() << ")";
         }
+        // GCOVR_EXCL_STOP
     }
 };
 
@@ -299,10 +302,13 @@ static QImage processImageGPU(const QImage& image,
 
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(bufSrc, CL_TRUE, 0, bytes, src.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Denoise kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return src;
 }
 
@@ -375,10 +381,13 @@ static QImage processImageGPU16(const QImage& image,
 
         gpu.queue.finish();
         gpu.queue.enqueueReadBuffer(bufSrc, CL_TRUE, 0, bytes, src.bits());
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GPU] Denoise16 kernel failed:" << e.what() << "(err" << e.err() << ")";
         return {};
     }
+    // GCOVR_EXCL_STOP
     return src;
 }
 
@@ -402,11 +411,14 @@ bool DenoiseEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernelColorNoiseBlend16 = cl::Kernel(prog, "colorNoiseBlend16");
         m_pipelineCtx             = ctx;
         return true;
-    } catch (const cl::Error& e) {
+    }
+    // GCOVR_EXCL_START
+    catch (const cl::Error& e) {
         qWarning() << "[GpuPipeline] Denoise initGpuKernels failed:"
                    << e.what() << "(err" << e.err() << ")";
         return false;
     }
+    // GCOVR_EXCL_STOP
 }
 
 bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,

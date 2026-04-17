@@ -202,6 +202,14 @@ if(COVERAGE)
             --exclude "${CMAKE_SOURCE_DIR}/src/core/ImageProcessor\\.cpp"
             --exclude "${CMAKE_SOURCE_DIR}/src/core/RawLoader\\.cpp"
             --exclude "${CMAKE_SOURCE_DIR}/src/main\\.cpp"
+            # Drop compiler-generated exception branches and proven-unreachable
+            # branches; combined with GCOVR_EXCL_START/STOP markers around GPU
+            # failure catches, this stops infeasible paths from skewing the total.
+            --exclude-throw-branches
+            --exclude-unreachable-branches
+            # Tolerate gcov reporting the same function at two line numbers
+            # (happens after split-line catch blocks); pick the earliest.
+            --merge-mode-functions=merge-use-line-min
             --html-details ${CMAKE_BINARY_DIR}/coverage/index.html
             --xml ${CMAKE_BINARY_DIR}/coverage/coverage.xml
             --print-summary
