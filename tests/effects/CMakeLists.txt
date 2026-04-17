@@ -47,3 +47,4 @@ add_effect_test(test_unsharp      test_unsharp.cpp      unsharp_effect      Effe
 add_effect_test(test_denoise      test_denoise.cpp      denoise_effect      Effects_Denoise)
 add_effect_test(test_whitebalance test_whitebalance.cpp whitebalance_effect Effects_WhiteBalance)
 add_effect_test(test_vignette     test_vignette.cpp     vignette_effect     Effects_Vignette)
+add_effect_test(test_filmgrain    test_filmgrain.cpp    filmgrain_effect    Effects_FilmGrain)

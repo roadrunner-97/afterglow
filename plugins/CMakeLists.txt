@@ -34,6 +34,7 @@ add_subdirectory(grayscale)
 add_subdirectory(unsharp)
 add_subdirectory(denoise)
 add_subdirectory(vignette)
+add_subdirectory(filmgrain)
 
 # Aggregator target: link this to get all effects + their include dirs
 add_library(all_effects INTERFACE)
@@ -48,4 +49,5 @@ target_link_libraries(all_effects INTERFACE
     unsharp_effect
     denoise_effect
     vignette_effect
+    filmgrain_effect
 )

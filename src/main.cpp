@@ -12,6 +12,7 @@
 #include "UnsharpEffect.h"
 #include "DenoiseEffect.h"
 #include "VignetteEffect.h"
+#include "FilmGrainEffect.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -29,6 +30,7 @@ int main(int argc, char *argv[]) {
     effects->addEffect(new UnsharpEffect());
     effects->addEffect(new DenoiseEffect());
     effects->addEffect(new VignetteEffect());
+    effects->addEffect(new FilmGrainEffect());
 
     for (const auto& e : effects->entries())
         e.effect->initialize();
