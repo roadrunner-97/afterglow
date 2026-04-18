@@ -15,6 +15,7 @@
 #include "FilmGrainEffect.h"
 #include "SplitToningEffect.h"
 #include "ClarityEffect.h"
+#include "ColorBalanceEffect.h"
 
 // A concrete PhotoEditorEffect that does NOT inherit IGpuEffect.
 // Used to exercise the "missing IGpuEffect" warning path in GpuPipeline::run().
@@ -84,6 +85,7 @@ private:
     FilmGrainEffect  m_filmgrain;
     SplitToningEffect m_splittoning;
     ClarityEffect    m_clarity;
+    ColorBalanceEffect m_colorbalance;
 
     static QImage makeSolid(int w, int h, int r, int g, int b) {
         QImage img(w, h, QImage::Format_RGB32);
@@ -323,6 +325,30 @@ private slots:
         p["radius"] = 20;
         QImage input = makeSolid(64, 64, 128, 128, 128);
         QImage out = m_pipeline.run(input, {{&m_clarity, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Color balance inactive (all offsets=0): enqueueGpu early-returns but initGpuKernels runs.
+    void pipeline_colorbalance_inactive() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["shadowR"]    = 0; p["shadowG"]    = 0; p["shadowB"]    = 0;
+        p["midtoneR"]   = 0; p["midtoneG"]   = 0; p["midtoneB"]   = 0;
+        p["highlightR"] = 0; p["highlightG"] = 0; p["highlightB"] = 0;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_colorbalance, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
+    // Color balance active: exercises the enqueueGpu body (kernel dispatch).
+    void pipeline_colorbalance_active() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["shadowR"]    = 40; p["shadowG"]    = 0;  p["shadowB"]    = -20;
+        p["midtoneR"]   = 0;  p["midtoneG"]   = 30; p["midtoneB"]   = 0;
+        p["highlightR"] = 0;  p["highlightG"] = 0;  p["highlightB"] = 40;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_colorbalance, p}}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
