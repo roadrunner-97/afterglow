@@ -292,6 +292,8 @@ bool UnsharpEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernelBlurVLinear   = cl::Kernel(prog, "blurVLinear");
         m_kernelUnsharpLinear = cl::Kernel(prog, "unsharpCombineLinear");
         m_pipelineCtx         = ctx;  // save for temp buffer allocation
+        m_blurBuf             = cl::Buffer();
+        m_blurBufW = m_blurBufH = 0;
         return true;
     }
     // GCOVR_EXCL_START
@@ -320,10 +322,13 @@ bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,
     // to normalised sRGB [0,1] for comparison with linear_to_srgb() output.
     const float threshold_srgb = thresholdInt / 255.0f;
 
-    // Allocate a per-call scratch buffer to hold the blurred image so the
-    // combine pass can read the (still-unmodified) original from buf.
+    // Scratch buffer for the blurred image (reused across calls).
     const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
-    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
+    if (m_blurBufW != w || m_blurBufH != h) {
+        m_blurBuf  = cl::Buffer(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
+        m_blurBufW = w;
+        m_blurBufH = h;
+    }
 
     const cl::NDRange global(w, h);
 
@@ -336,18 +341,18 @@ bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelBlurHLinear.setArg(5, 1); // isGaussian
     queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-    // V blur: aux → blurBuf  (buf still holds the unmodified original)
+    // V blur: aux → m_blurBuf  (buf still holds the unmodified original)
     m_kernelBlurVLinear.setArg(0, aux);
-    m_kernelBlurVLinear.setArg(1, blurBuf);
+    m_kernelBlurVLinear.setArg(1, m_blurBuf);
     m_kernelBlurVLinear.setArg(2, w);
     m_kernelBlurVLinear.setArg(3, h);
     m_kernelBlurVLinear.setArg(4, radius);
     m_kernelBlurVLinear.setArg(5, 1);
     queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-    // Combine: (original=buf, blurred=blurBuf) → aux
+    // Combine: (original=buf, blurred=m_blurBuf) → aux
     m_kernelUnsharpLinear.setArg(0, buf);
-    m_kernelUnsharpLinear.setArg(1, blurBuf);
+    m_kernelUnsharpLinear.setArg(1, m_blurBuf);
     m_kernelUnsharpLinear.setArg(2, aux);
     m_kernelUnsharpLinear.setArg(3, w);
     m_kernelUnsharpLinear.setArg(4, h);

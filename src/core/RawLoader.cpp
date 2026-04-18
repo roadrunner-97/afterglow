@@ -136,15 +136,23 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
         return {};
     }
 
-    // img->data is uint16_t[height * width * 3], R G B interleaved
+    // img->data is uint16_t[height * width * 3], R G B interleaved.
+    // Format_RGBX64 is ushort4 interleaved (R, G, B, A) in memory — swizzle
+    // with a tight inner loop so the compiler can vectorise the 3-in / 4-out
+    // widening.  Constant 0xFFFF alpha lets the store be a straight blit.
     const uint16_t* src = reinterpret_cast<const uint16_t*>(img->data);
     QImage result(img->width, img->height, QImage::Format_RGBX64);
 
-    for (int y = 0; y < static_cast<int>(img->height); ++y) {
-        QRgba64* row = reinterpret_cast<QRgba64*>(result.scanLine(y));
-        for (int x = 0; x < static_cast<int>(img->width); ++x) {
-            const uint16_t* px = src + 3 * (y * img->width + x);
-            row[x] = QRgba64::fromRgba64(px[0], px[1], px[2], 65535);
+    const int width  = static_cast<int>(img->width);
+    const int height = static_cast<int>(img->height);
+    for (int y = 0; y < height; ++y) {
+        uint16_t*       dst    = reinterpret_cast<uint16_t*>(result.scanLine(y));
+        const uint16_t* srcRow = src + static_cast<size_t>(y) * width * 3;
+        for (int x = 0; x < width; ++x) {
+            dst[4*x + 0] = srcRow[3*x + 0];
+            dst[4*x + 1] = srcRow[3*x + 1];
+            dst[4*x + 2] = srcRow[3*x + 2];
+            dst[4*x + 3] = 0xFFFF;
         }
     }
 

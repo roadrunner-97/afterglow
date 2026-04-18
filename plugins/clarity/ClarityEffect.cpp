@@ -299,6 +299,8 @@ bool ClarityEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         m_kernelBlurVLinear   = cl::Kernel(prog, "blurVLinear");
         m_kernelClarityLinear = cl::Kernel(prog, "clarityCombineLinear");
         m_pipelineCtx         = ctx;
+        m_blurBuf             = cl::Buffer();
+        m_blurBufW = m_blurBufH = 0;
         return true;
     }
     // GCOVR_EXCL_START
@@ -325,7 +327,11 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
     int radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
     const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
-    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
+    if (m_blurBufW != w || m_blurBufH != h) {
+        m_blurBuf  = cl::Buffer(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
+        m_blurBufW = w;
+        m_blurBufH = h;
+    }
 
     const cl::NDRange global(w, h);
 
@@ -338,18 +344,18 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelBlurHLinear.setArg(5, 1); // isGaussian
     queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-    // V blur: aux → blurBuf  (buf still holds the unmodified original)
+    // V blur: aux → m_blurBuf  (buf still holds the unmodified original)
     m_kernelBlurVLinear.setArg(0, aux);
-    m_kernelBlurVLinear.setArg(1, blurBuf);
+    m_kernelBlurVLinear.setArg(1, m_blurBuf);
     m_kernelBlurVLinear.setArg(2, w);
     m_kernelBlurVLinear.setArg(3, h);
     m_kernelBlurVLinear.setArg(4, radius);
     m_kernelBlurVLinear.setArg(5, 1);
     queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-    // Combine: (original=buf, blurred=blurBuf) → aux
+    // Combine: (original=buf, blurred=m_blurBuf) → aux
     m_kernelClarityLinear.setArg(0, buf);
-    m_kernelClarityLinear.setArg(1, blurBuf);
+    m_kernelClarityLinear.setArg(1, m_blurBuf);
     m_kernelClarityLinear.setArg(2, aux);
     m_kernelClarityLinear.setArg(3, w);
     m_kernelClarityLinear.setArg(4, h);

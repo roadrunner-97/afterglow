@@ -39,6 +39,12 @@ private:
     cl::Kernel  m_kernelBlurHLinear;
     cl::Kernel  m_kernelBlurVLinear;
     cl::Kernel  m_kernelUnsharpLinear;
+
+    // Cached scratch buffer for the blurred image.  Reused across calls;
+    // reallocated only when preview dimensions change (or context is reset).
+    cl::Buffer  m_blurBuf;
+    int         m_blurBufW = 0;
+    int         m_blurBufH = 0;
 };
 
 #endif // UNSHARPEFFECT_H
