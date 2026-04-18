@@ -18,21 +18,19 @@
 
 namespace {
 
-// Hash-based per-pixel noise.
+// Value-noise film grain, evaluated in source-image pixel space so the
+// pattern stays anchored to the image regardless of zoom / pan.
 //
-// Pixel coordinates are quantised to grain-size blocks so neighbouring pixels
-// within a block share a noise value — a cheap way to get grain size > 1 px
-// without a separate blur pass.  The hash mixes the block coordinates with a
-// fixed seed via a small PCG-style integer hash, yielding a uniform [-1, 1]
-// noise value that is added to each RGB channel.
+// The kernel's global id (x, y) is a PREVIEW pixel.  We map it back to a
+// source-image coordinate using the crop origin (srcX0, srcY0) and the
+// preview-to-source pixel ratio (srcPPP) that GpuPipeline already supplies
+// to all effects.  The noise lattice lives at intervals of `size` source
+// pixels, and bilinear+smootherstep interpolation produces smoothly varying
+// values rather than the old per-block on/off pattern.
 //
-// If lumWeight is non-zero the noise is multiplied by 4*L*(1-L), a tent
-// function peaking at midtones (L=0.5) and vanishing at shadows/highlights.
-// This mimics how real film grain is least visible in pure-black or pure-white
-// regions.
-//
-// amount is the additive noise range in normalised [0..1] intensity units; at
-// amount=1 a midtone pixel with lumWeight can swing by up to ±1 (fully clamped).
+// If lumWeight is non-zero the noise is multiplied by 4*L*(1-L) — a tent
+// peaking at midtones, vanishing at pure black / white — which mimics how
+// real film grain is least visible in deep shadows / highlights.
 static const char* GPU_KERNEL_SOURCE = R"CL(
 inline uint pcg_hash(uint x, uint y, uint seed) {
     uint h = x * 374761393u + y * 668265263u + seed * 3266489917u;
@@ -40,22 +38,97 @@ inline uint pcg_hash(uint x, uint y, uint seed) {
     return h ^ (h >> 16);
 }
 
-inline float grain_noise(int x, int y, int size, uint seed) {
-    uint bx = (uint)(x / size);
-    uint by = (uint)(y / size);
-    uint h  = pcg_hash(bx, by, seed);
-    // map to [-1, 1]
-    return (float)h * (2.0f / 4294967295.0f) - 1.0f;
+inline float hash_lattice(int x, int y, uint seed) {
+    return (float)pcg_hash((uint)x, (uint)y, seed) * (2.0f / 4294967295.0f) - 1.0f;
+}
+
+inline float smootherstep(float t) {
+    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+// Value noise at fractional lattice coords — bilinear interpolation of four
+// corner hash values with smootherstep easing.  Output range: [-1, 1].
+inline float value_noise(float x, float y, uint seed) {
+    int   x0 = (int)floor(x);
+    int   y0 = (int)floor(y);
+    float fx = x - (float)x0;
+    float fy = y - (float)y0;
+    float v00 = hash_lattice(x0,     y0,     seed);
+    float v10 = hash_lattice(x0 + 1, y0,     seed);
+    float v01 = hash_lattice(x0,     y0 + 1, seed);
+    float v11 = hash_lattice(x0 + 1, y0 + 1, seed);
+    float u = smootherstep(fx);
+    float v = smootherstep(fy);
+    return mix(mix(v00, v10, u), mix(v01, v11, u), v);
+}
+
+// Fractional Brownian motion — three octaves of value noise summed at
+// doubling frequency and halving amplitude.  The extra octaves give real
+// grain its speckly, stippled character: the finest octave produces
+// pixel-scale detail that single-octave value noise lacks (which otherwise
+// looks like blurry shading at large `size`).
+//
+// Per-octave analytic anti-aliasing: when an octave's lattice spacing
+// shrinks below one preview pixel (i.e. zoom-out pushes it past Nyquist),
+// that octave fades out.  This replaces the brute-force n×n box filter —
+// cheaper, and it's the standard trick for mipmap-style noise filtering.
+//
+// Normalisation divides by the *total* possible amplitude so attenuated
+// octaves don't get re-amplified.  The result is grain that naturally
+// averages away at extreme zoom-out (as real film does when downscaled).
+inline float fbm_aa(float x, float y, uint seed, float srcPPP, float sizef) {
+    const int OCTAVES = 3;
+    float acc     = 0.0f;
+    float ampSum  = 0.0f;   // sum of contributing (amp * w); used for normalisation
+    float freq    = 1.0f;
+    float amp     = 1.0f;
+    uint octaveSeeds[3] = { seed,
+                            seed ^ 0x85EBCA6Bu,
+                            seed ^ 0xC2B2AE35u };
+    for (int i = 0; i < OCTAVES; ++i) {
+        // This octave's lattice spacing in preview pixels.
+        float latticePrevPx = sizef / (freq * srcPPP);
+        // smoothstep(0.5, 1.0): zero at/below half-pixel lattice (deeply
+        // sub-Nyquist — would alias to per-pixel static), full weight at
+        // one-pixel lattice or coarser.
+        float w = smoothstep(0.5f, 1.0f, latticePrevPx);
+        if (w > 0.0f) {
+            acc    += value_noise(x * freq, y * freq, octaveSeeds[i]) * amp * w;
+            ampSum += amp * w;
+        }
+        freq *= 2.0f;
+        amp  *= 0.5f;
+    }
+    // Normalising by contributing amp (not total possible amp) keeps grain
+    // amplitude consistent as octaves drop out with zoom — the coarsest
+    // octave alone looks the same strength as all three combined.  Falls
+    // to zero only when every octave is sub-Nyquist.
+    if (ampSum < 0.001f) return 0.0f;
+    return acc / ampSum;
+}
+
+// Preview-pixel (px, py) → source-image coord → fBm noise.  Lattice coords
+// are source pixels divided by `sizef`, so the coarsest octave has spacing
+// `size` source pixels (what the user sets).
+inline float grain_sample(int px, int py,
+                          float srcX0, float srcY0, float srcPPP,
+                          float sizef, uint seed) {
+    float sx = srcX0 + ((float)px + 0.5f) * srcPPP;
+    float sy = srcY0 + ((float)py + 0.5f) * srcPPP;
+    return fbm_aa(sx / sizef, sy / sizef, seed, srcPPP, sizef);
 }
 
 __kernel void applyFilmGrain(__global uint* pixels,
                               int   stride,
                               int   width,
                               int   height,
-                              int   size,
+                              float sizef,
                               float amount,
                               int   lumWeight,
-                              uint  seed)
+                              uint  seed,
+                              float srcX0,
+                              float srcY0,
+                              float srcPPP)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -66,7 +139,7 @@ __kernel void applyFilmGrain(__global uint* pixels,
     float g = ((pixel >>  8) & 0xFFu) / 255.0f;
     float b = ( pixel        & 0xFFu) / 255.0f;
 
-    float n = grain_noise(x, y, size, seed);
+    float n = grain_sample(x, y, srcX0, srcY0, srcPPP, sizef, seed);
     float w = 1.0f;
     if (lumWeight) {
         float L = 0.299f * r + 0.587f * g + 0.114f * b;
@@ -88,10 +161,13 @@ __kernel void applyFilmGrain16(__global ushort4* pixels,
                                 int   stride,
                                 int   width,
                                 int   height,
-                                int   size,
+                                float sizef,
                                 float amount,
                                 int   lumWeight,
-                                uint  seed)
+                                uint  seed,
+                                float srcX0,
+                                float srcY0,
+                                float srcPPP)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -102,7 +178,7 @@ __kernel void applyFilmGrain16(__global ushort4* pixels,
     float g = px.s1 / 65535.0f;
     float b = px.s2 / 65535.0f;
 
-    float n = grain_noise(x, y, size, seed);
+    float n = grain_sample(x, y, srcX0, srcY0, srcPPP, sizef, seed);
     float w = 1.0f;
     if (lumWeight) {
         float L = 0.299f * r + 0.587f * g + 0.114f * b;
@@ -148,31 +224,43 @@ struct GpuContext : GpuContextBase<GpuContext> {
 static std::mutex gpuMutex;
 
 struct GrainArgs {
-    int      size;        // block side in pixels, ≥1
-    float    amount;      // 0..1 (slider 0..100 → /100)
+    float    size;        // lattice spacing in source pixels, ≥1
+    float    amount;      // 0..1 (slider 0..40 → /100)
     int      lumWeight;   // 0 or 1
-    unsigned seed;
+    unsigned seed;        // hashed user seed
+    float    srcX0;       // source-pixel origin of preview pixel (0, 0)
+    float    srcY0;
+    float    srcPPP;      // source pixels per preview pixel (1.0 when run on full-res)
 };
 
-static GrainArgs makeArgs(int amount, int size, bool lumWeight) {
+static GrainArgs makeArgs(int amount, int size, bool lumWeight, int userSeed,
+                          double srcX0 = 0.0, double srcY0 = 0.0, double srcPPP = 1.0) {
     GrainArgs a;
-    a.size      = size < 1 ? 1 : size;
+    a.size      = static_cast<float>(size < 1 ? 1 : size);
     a.amount    = amount / 100.0f;
     a.lumWeight = lumWeight ? 1 : 0;
-    a.seed      = 0xDEADBEEFu;
+    // Mix the user's seed into a well-distributed 32-bit value so adjacent
+    // integers (0, 1, 2, …) produce visibly different patterns.
+    a.seed      = static_cast<unsigned>(userSeed) * 2654435761u + 0xDEADBEEFu;
+    a.srcX0     = static_cast<float>(srcX0);
+    a.srcY0     = static_cast<float>(srcY0);
+    a.srcPPP    = static_cast<float>(srcPPP);
     return a;
 }
 
 static void setKernelArgs(cl::Kernel& k, cl::Buffer& buf,
                            int stride, int w, int h, const GrainArgs& a) {
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    k.setArg(4, a.size);
-    k.setArg(5, a.amount);
-    k.setArg(6, a.lumWeight);
-    k.setArg(7, a.seed);
+    k.setArg(0,  buf);
+    k.setArg(1,  stride);
+    k.setArg(2,  w);
+    k.setArg(3,  h);
+    k.setArg(4,  a.size);
+    k.setArg(5,  a.amount);
+    k.setArg(6,  a.lumWeight);
+    k.setArg(7,  a.seed);
+    k.setArg(8,  a.srcX0);
+    k.setArg(9,  a.srcY0);
+    k.setArg(10, a.srcPPP);
 }
 
 static QImage processImageGPU(const QImage& image, const GrainArgs& a) {
@@ -245,7 +333,7 @@ static QImage processImageGPU16(const QImage& image, const GrainArgs& a) {
 
 FilmGrainEffect::FilmGrainEffect()
     : controlsWidget(nullptr), amountParam(nullptr), sizeParam(nullptr),
-      lumWeightBox(nullptr) {
+      seedParam(nullptr), lumWeightBox(nullptr) {
 }
 
 FilmGrainEffect::~FilmGrainEffect() {
@@ -275,16 +363,24 @@ QWidget* FilmGrainEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     };
 
-    amountParam = new ParamSlider("Amount", 0, 100);
+    amountParam = new ParamSlider("Amount", 0, 40);
     amountParam->setToolTip("Strength of the grain.\n0 disables the effect.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
 
-    sizeParam = new ParamSlider("Size", 1, 5);
-    sizeParam->setValue(1);
-    sizeParam->setToolTip("Grain size in pixels.\nLarger values produce a coarser pattern.");
+    sizeParam = new ParamSlider("Size", 1, 50);
+    sizeParam->setValue(8);
+    sizeParam->setToolTip("Grain size in source-image pixels.\n"
+                          "Larger values produce a coarser pattern.\n"
+                          "Anchored to the image — grain does not scale with zoom.");
     connectSlider(sizeParam);
     layout->addWidget(sizeParam);
+
+    seedParam = new ParamSlider("Seed", 0, 999);
+    seedParam->setValue(0);
+    seedParam->setToolTip("PRNG seed — change to get a different grain pattern.");
+    connectSlider(seedParam);
+    layout->addWidget(seedParam);
 
     lumWeightBox = new QCheckBox("Luminance-weighted");
     lumWeightBox->setChecked(true);
@@ -299,7 +395,8 @@ QWidget* FilmGrainEffect::createControlsWidget() {
 QMap<QString, QVariant> FilmGrainEffect::getParameters() const {
     QMap<QString, QVariant> params;
     params["amount"]    = static_cast<int>(amountParam ? amountParam->value() : 0.0);
-    params["size"]      = static_cast<int>(sizeParam   ? sizeParam->value()   : 1.0);
+    params["size"]      = static_cast<int>(sizeParam   ? sizeParam->value()   : 8.0);
+    params["seed"]      = static_cast<int>(seedParam   ? seedParam->value()   : 0.0);
     params["lumWeight"] = lumWeightBox ? lumWeightBox->isChecked() : true;
     return params;
 }
@@ -334,8 +431,12 @@ bool FilmGrainEffect::enqueueGpu(cl::CommandQueue& queue,
 
     const GrainArgs a = makeArgs(
         amount,
-        params.value("size", 1).toInt(),
-        params.value("lumWeight", true).toBool());
+        params.value("size", 8).toInt(),
+        params.value("lumWeight", true).toBool(),
+        params.value("seed", 0).toInt(),
+        params.value("_cropX0", 0.0).toDouble(),
+        params.value("_cropY0", 0.0).toDouble(),
+        params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
 
     cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
     setKernelArgs(k, buf, stride, w, h, a);
@@ -351,8 +452,12 @@ QImage FilmGrainEffect::processImage(const QImage& image, const QMap<QString, QV
 
     const GrainArgs a = makeArgs(
         amount,
-        parameters.value("size", 1).toInt(),
-        parameters.value("lumWeight", true).toBool());
+        parameters.value("size", 8).toInt(),
+        parameters.value("lumWeight", true).toBool(),
+        parameters.value("seed", 0).toInt(),
+        parameters.value("_cropX0", 0.0).toDouble(),
+        parameters.value("_cropY0", 0.0).toDouble(),
+        parameters.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
 
     if (image.format() == QImage::Format_RGBX64)
         return processImageGPU16(image, a);

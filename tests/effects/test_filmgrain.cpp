@@ -111,27 +111,61 @@ private slots:
         QVERIFY2(changed > 0, qPrintable(QString("changed=%1").arg(changed)));
     }
 
-    // Grain size groups neighbouring pixels into blocks sharing the same noise
-    // value.  With size=4 every 4x4 block should be uniform internally.
-    void grainSize_blocksOfSamePixel() {
+    // Value noise must vary smoothly, not in solid on/off blocks.  With
+    // size=8 adjacent pixels share a lattice cell and their noise values
+    // differ gradually.  We assert two things:
+    //   (a) the output is not piecewise-constant (pixels within a cell
+    //       are not all identical) — rules out the old blocky hash.
+    //   (b) pixel-to-pixel deltas are bounded well below the full noise
+    //       range — rules out pure per-pixel white noise.
+    void grainSize_smoothNoiseNotBlocky() {
         if (!m_hasGpu) QSKIP("No GPU");
         FilmGrainEffect e;
         QImage input = makeSolid(64, 64, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["amount"]    = 50;
-        params["size"]      = 4;
+        params["size"]      = 8;
+        params["seed"]      = 42;
         params["lumWeight"] = false;
         QImage out = e.processImage(input, params);
         QVERIFY(!out.isNull());
 
-        // Pick a block aligned to size=4 and verify all 16 pixels agree.
-        const int bx = 8, by = 12;  // top-left of block
-        QRgb ref = reinterpret_cast<const QRgb*>(out.constScanLine(by))[bx];
-        for (int dy = 0; dy < 4; ++dy)
-            for (int dx = 0; dx < 4; ++dx) {
-                QRgb px = reinterpret_cast<const QRgb*>(out.constScanLine(by + dy))[bx + dx];
-                QCOMPARE(px, ref);
+        int distinct = 0, maxDelta = 0;
+        for (int y = 0; y < 64; ++y) {
+            const auto* row = reinterpret_cast<const QRgb*>(out.constScanLine(y));
+            for (int x = 1; x < 64; ++x) {
+                const int d = std::abs(qRed(row[x]) - qRed(row[x - 1]));
+                if (d != 0) ++distinct;
+                if (d > maxDelta) maxDelta = d;
             }
+        }
+        // (a) lots of non-equal neighbours — not a block pattern
+        QVERIFY2(distinct > 64 * 32,
+                 qPrintable(QString("distinct=%1").arg(distinct)));
+        // (b) smooth noise: pure per-pixel white noise with amount=50 can
+        // swing the full ~127 units between neighbours; value noise over
+        // 8-pixel cells caps per-step change at roughly 2*1.875/size*0.5*255
+        // ≈ 60.  A bound of 80 comfortably rules out the per-pixel pattern.
+        QVERIFY2(maxDelta < 80,
+                 qPrintable(QString("maxDelta=%1").arg(maxDelta)));
+    }
+
+    // Different seeds must produce visibly different grain patterns.
+    void seed_affectsOutput() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        FilmGrainEffect e;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QMap<QString, QVariant> base;
+        base["amount"]    = 50;
+        base["size"]      = 2;
+        base["lumWeight"] = false;
+
+        QMap<QString, QVariant> p0 = base; p0["seed"] = 0;
+        QMap<QString, QVariant> p1 = base; p1["seed"] = 1;
+        QImage a = e.processImage(input, p0);
+        QImage b = e.processImage(input, p1);
+        QVERIFY(!a.isNull() && !b.isNull());
+        QVERIFY(a != b);
     }
 
     // Noise pattern must be deterministic for a given seed — running the
@@ -196,10 +230,12 @@ private slots:
         auto params = e.getParameters();
         QVERIFY(params.contains("amount"));
         QVERIFY(params.contains("size"));
+        QVERIFY(params.contains("seed"));
         QVERIFY(params.contains("lumWeight"));
         // Widget not yet built → fall-through defaults
-        QCOMPARE(params["amount"].toInt(),    0);
-        QCOMPARE(params["size"].toInt(),      1);
+        QCOMPARE(params["amount"].toInt(),     0);
+        QCOMPARE(params["size"].toInt(),       8);
+        QCOMPARE(params["seed"].toInt(),       0);
         QCOMPARE(params["lumWeight"].toBool(), true);
     }
 
@@ -215,7 +251,8 @@ private slots:
         e.createControlsWidget();
         auto params = e.getParameters();
         QCOMPARE(params["amount"].toInt(),     0);
-        QCOMPARE(params["size"].toInt(),       1);
+        QCOMPARE(params["size"].toInt(),       8);
+        QCOMPARE(params["seed"].toInt(),       0);
         QCOMPARE(params["lumWeight"].toBool(), true);
     }
 
@@ -234,7 +271,7 @@ private slots:
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
         auto sliders = w->findChildren<ParamSlider*>();
-        QCOMPARE(sliders.size(), 2);
+        QCOMPARE(sliders.size(), 3);
         for (auto* ps : sliders) {
             auto* qs = ps->findChild<QSlider*>();
             QVERIFY(qs);
@@ -246,8 +283,8 @@ private slots:
         QVERIFY(check);
         check->toggle();
 
-        QVERIFY(spyChanged.count() >= 3);  // 2 sliders + 1 checkbox
-        QVERIFY(spyLive.count()    >= 2);
+        QVERIFY(spyChanged.count() >= 4);  // 3 sliders + 1 checkbox
+        QVERIFY(spyLive.count()    >= 3);
     }
 
     // Heap-allocate so the destructor body is explicitly attributed.

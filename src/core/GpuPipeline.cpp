@@ -171,6 +171,8 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             QMap<QString, QVariant> scaledParams = call.params;
             scaledParams.insert("_srcPixelsPerPreviewPixel",
                                 static_cast<double>(srcPixelsPerPreviewPixel));
+            scaledParams.insert("_cropX0", static_cast<double>(cropX0));
+            scaledParams.insert("_cropY0", static_cast<double>(cropY0));
             if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
                                previewW, previewH, previewW,
                                /*is16bit=*/false, scaledParams)) {

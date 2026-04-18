@@ -33,6 +33,7 @@ private:
     QWidget*     controlsWidget;
     ParamSlider* amountParam;
     ParamSlider* sizeParam;
+    ParamSlider* seedParam;
     QCheckBox*   lumWeightBox;
 
     cl::Kernel m_kernel;
