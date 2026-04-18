@@ -31,7 +31,7 @@ public:
     // Switch the active device. Bumps revision() so GpuContexts reinitialise.
     void setDevice(int index);
 
-    int currentIndex() const { return m_currentIndex; }
+    int currentIndex() const { return m_currentIndex.load(std::memory_order_relaxed); }
 
     // Starts at 1; effects initialise their stored revision to 0 so the very
     // first call always triggers init(). Bumped again on each setDevice() call.
@@ -41,7 +41,7 @@ private:
     GpuDeviceRegistry() = default;
 
     std::vector<GpuDeviceInfo> m_devices;
-    int m_currentIndex = 0;
+    std::atomic<int> m_currentIndex{0};
     std::atomic<int> m_revision{1};
 };
 

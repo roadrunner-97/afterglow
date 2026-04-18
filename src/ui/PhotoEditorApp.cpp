@@ -291,8 +291,9 @@ void PhotoEditorApp::openImage() {
     m_lastDir = QFileInfo(fileName).absolutePath();
 
     QImage img;
+    ImageMetadata meta;
     if (RawLoader::isRawFile(fileName)) {
-        img = RawLoader::load(fileName);
+        img = RawLoader::load(fileName, &meta);
         if (img.isNull())
             qWarning() << "RawLoader failed for" << fileName << "— trying QImage::load";
     }
@@ -307,6 +308,8 @@ void PhotoEditorApp::openImage() {
     m_originalImage = img;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
+    for (const auto& e : m_effects->entries())
+        e.effect->onImageLoaded(meta);
     triggerReprocess();
 }
 
@@ -385,10 +388,10 @@ void PhotoEditorApp::onProcessingStarted() {
 
 void PhotoEditorApp::onProcessingComplete(QImage result) {
     m_processingLabel->setVisible(false);
+    m_pendingFullRun = false;
     if (result.isNull()) {
-        m_viewport->update();   // CL-GL path: result already in GL texture
+        m_viewport->update();
     } else {
-        m_pendingFullRun = false;
         m_viewport->setImage(result);
     }
 }
