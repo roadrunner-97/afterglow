@@ -42,7 +42,7 @@ public:
     QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
     bool initGpuKernels(cl::Context&, cl::Device&) override { return false; }
     bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
-                    int, int, int, bool, const QMap<QString,QVariant>&) override { return true; }
+                    int, int, const QMap<QString,QVariant>&) override { return true; }
 };
 
 // An IGpuEffect whose enqueueGpu() always returns false.
@@ -58,7 +58,7 @@ public:
     QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
     bool initGpuKernels(cl::Context&, cl::Device&) override { return true; }
     bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
-                    int, int, int, bool, const QMap<QString,QVariant>&) override { return false; }
+                    int, int, const QMap<QString,QVariant>&) override { return false; }
 };
 
 // Effects are class members so their addresses are stable across test methods.

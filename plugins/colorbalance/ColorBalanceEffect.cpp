@@ -1,5 +1,6 @@
 #include "ColorBalanceEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <QLabel>
@@ -223,6 +224,48 @@ static QImage processImageGPU16(const QImage& image, const BalanceArgs& a) {
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Zone masks are computed on perceptually-placed luminance (sRGB-encoded L)
+// so the shadow/midtone/highlight boundaries match the UI expectation of
+// today's behaviour.  Slider deltas retain their ±0.25 per-channel semantics
+// but are added in LINEAR RGB — no encode/decode around the addition, so the
+// full dynamic range of the pipeline is preserved.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void applyColorBalanceLinear(__global float4* pixels,
+                                       int   w,
+                                       int   h,
+                                       float sR, float sG, float sB,
+                                       float mR, float mG, float mB,
+                                       float hR, float hG, float hB)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+
+    // Zone selection uses perceptual L (sRGB-encoded luma).
+    float linLum = linear_luma(px);
+    float L      = linear_to_srgb(linLum);
+
+    float shadowW    = fmax(0.0f, 1.0f - 2.0f * L);
+    float highlightW = fmax(0.0f, 2.0f * L - 1.0f);
+    float midtoneW   = 1.0f - shadowW - highlightW;
+
+    float offR = sR * shadowW + mR * midtoneW + hR * highlightW;
+    float offG = sG * shadowW + mG * midtoneW + hG * highlightW;
+    float offB = sB * shadowW + mB * midtoneW + hB * highlightW;
+
+    // Add offsets in linear RGB — do not clamp (the final pack kernel clamps once).
+    pixels[y * w + x] = (float4)(px.x + offR,
+                                 px.y + offG,
+                                 px.z + offB,
+                                 1.0f);
+}
+)CL";
+
+// ============================================================================
 // ColorBalanceEffect
 // ============================================================================
 
@@ -302,10 +345,9 @@ QMap<QString, QVariant> ColorBalanceEffect::getParameters() const {
 
 bool ColorBalanceEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "applyColorBalance");
-        m_kernel16 = cl::Kernel(prog, "applyColorBalance16");
+        m_kernelLinear = cl::Kernel(prog, "applyColorBalanceLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -330,7 +372,7 @@ static bool allZero(const QMap<QString, QVariant>& p) {
 
 bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue& queue,
                                      cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                     int w, int h, int stride, bool is16bit,
+                                     int w, int h,
                                      const QMap<QString, QVariant>& params) {
     if (allZero(params)) return true;  // no-op
 
@@ -345,9 +387,14 @@ bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue& queue,
         params.value("highlightG", 0).toInt(),
         params.value("highlightB", 0).toInt());
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    setKernelArgs(k, buf, stride, w, h, a);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0,  buf);
+    m_kernelLinear.setArg(1,  w);
+    m_kernelLinear.setArg(2,  h);
+    m_kernelLinear.setArg(3,  a.sR); m_kernelLinear.setArg(4,  a.sG); m_kernelLinear.setArg(5,  a.sB);
+    m_kernelLinear.setArg(6,  a.mR); m_kernelLinear.setArg(7,  a.mG); m_kernelLinear.setArg(8,  a.mB);
+    m_kernelLinear.setArg(9,  a.hR); m_kernelLinear.setArg(10, a.hG); m_kernelLinear.setArg(11, a.hB);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

@@ -1,5 +1,6 @@
 #include "SplitToningEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <mutex>
@@ -235,6 +236,70 @@ static QImage processImageGPU16(const QImage& image, const SplitArgs& a) {
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Zone selection (shadow/highlight masks) is on perceptually-placed luminance
+// (sRGB-encoded L) so the balance crossover matches the UI expectation.  The
+// tint RGB is specified in sRGB (slider = hue wheel), so it is decoded to
+// linear before being mixed into the linear pixel.  The tint-intensity
+// multiplier uses linear luma so pure black stays black.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+// Pure-hue RGB at V=1, S=1 in sRGB space.  Input hue is in [0,1).
+inline float3 hueToRgb(float h) {
+    float r = fabs(h * 6.0f - 3.0f) - 1.0f;
+    float g = 2.0f - fabs(h * 6.0f - 2.0f);
+    float b = 2.0f - fabs(h * 6.0f - 4.0f);
+    return clamp((float3)(r, g, b), 0.0f, 1.0f);
+}
+
+__kernel void applySplitToningLinear(__global float4* pixels,
+                                      int   w,
+                                      int   h,
+                                      float shadowHue,
+                                      float shadowSat,
+                                      float highlightHue,
+                                      float highlightSat,
+                                      float balance)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+
+    // Mask selection uses perceptual L (sRGB-encoded luma).
+    float linLum = linear_luma(px);
+    float Lp     = linear_to_srgb(linLum);
+
+    float shadowMask    = clamp((1.0f - Lp) - balance * 0.5f, 0.0f, 1.0f);
+    float highlightMask = clamp(Lp          + balance * 0.5f, 0.0f, 1.0f);
+
+    // Tint colours are defined on the sRGB hue wheel — decode to linear so
+    // the blend stays physically meaningful in linear light.
+    float3 sT_srgb = hueToRgb(shadowHue);
+    float3 hT_srgb = hueToRgb(highlightHue);
+    float3 sT = (float3)(srgb_to_linear(sT_srgb.x),
+                         srgb_to_linear(sT_srgb.y),
+                         srgb_to_linear(sT_srgb.z));
+    float3 hT = (float3)(srgb_to_linear(hT_srgb.x),
+                         srgb_to_linear(hT_srgb.y),
+                         srgb_to_linear(hT_srgb.z));
+
+    float sStr = shadowSat    * shadowMask;
+    float hStr = highlightSat * highlightMask;
+
+    // Tint intensity scales with linear luma so pure black stays black (the
+    // tint contribution vanishes for zero-luma pixels).
+    float3 rgb = (float3)(px.x, px.y, px.z);
+    rgb = rgb * (1.0f - sStr) + sT * linLum * sStr;
+    rgb = rgb * (1.0f - hStr) + hT * linLum * hStr;
+
+    // Do not clamp — the final pack kernel clamps once.
+    pixels[y * w + x] = (float4)(rgb.x, rgb.y, rgb.z, 1.0f);
+}
+)CL";
+
+// ============================================================================
 // SplitToningEffect
 // ============================================================================
 
@@ -315,10 +380,9 @@ QMap<QString, QVariant> SplitToningEffect::getParameters() const {
 
 bool SplitToningEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "applySplitToning");
-        m_kernel16 = cl::Kernel(prog, "applySplitToning16");
+        m_kernelLinear = cl::Kernel(prog, "applySplitToningLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -332,7 +396,7 @@ bool SplitToningEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool SplitToningEffect::enqueueGpu(cl::CommandQueue& queue,
                                     cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                    int w, int h, int stride, bool is16bit,
+                                    int w, int h,
                                     const QMap<QString, QVariant>& params) {
     const int shadowSat    = params.value("shadowSat",    0).toInt();
     const int highlightSat = params.value("highlightSat", 0).toInt();
@@ -343,9 +407,16 @@ bool SplitToningEffect::enqueueGpu(cl::CommandQueue& queue,
         params.value("highlightHue", 0).toInt(), highlightSat,
         params.value("balance",      0).toInt());
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    setKernelArgs(k, buf, stride, w, h, a);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, a.shadowHue);
+    m_kernelLinear.setArg(4, a.shadowSat);
+    m_kernelLinear.setArg(5, a.highlightHue);
+    m_kernelLinear.setArg(6, a.highlightSat);
+    m_kernelLinear.setArg(7, a.balance);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

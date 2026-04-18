@@ -1,5 +1,6 @@
 #include "VignetteEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <cmath>
@@ -252,6 +253,54 @@ static QImage processImageGPU16(const QImage& image, const VignetteArgs& a) {
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Vignette is a pure linear-light multiply on RGB: compute an isotropic L^p
+// distance from image centre, smoothstep-feathered around a midpoint, then
+// scale each channel by factor = 1 + amount * t.  No clamping — the final
+// pack kernel clamps once before readback.
+//
+// Runs on the preview-sized float4 buffer (w = h = preview dimensions).  The
+// mask is positioned relative to that buffer, which visually matches today's
+// behaviour at fit-to-window zoom.  See VignetteEffect.cpp (sRGB kernels) for
+// the detailed math commentary.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void applyVignetteLinear(__global float4* pixels,
+                                   int   w,
+                                   int   h,
+                                   float cx,
+                                   float cy,
+                                   float halfW,
+                                   float halfH,
+                                   float amount,
+                                   float midpoint,
+                                   float feather,
+                                   float p,
+                                   float cornerD)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float nx = fabs(((float)x - cx) / halfW);
+    float ny = fabs(((float)y - cy) / halfH);
+    float d  = native_powr(native_powr(nx, p) + native_powr(ny, p), 1.0f / p);
+    float dn = d / cornerD;
+
+    float edge0 = midpoint - feather * 0.5f;
+    float edge1 = midpoint + feather * 0.5f + 1e-5f;
+    float t = smoothstep(edge0, edge1, dn);
+    float factor = 1.0f + amount * t;
+
+    float4 px = pixels[y * w + x];
+    pixels[y * w + x] = (float4)(px.x * factor,
+                                 px.y * factor,
+                                 px.z * factor,
+                                 1.0f);
+}
+)CL";
+
+// ============================================================================
 // VignetteEffect
 // ============================================================================
 
@@ -328,10 +377,9 @@ QMap<QString, QVariant> VignetteEffect::getParameters() const {
 
 bool VignetteEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "applyVignette");
-        m_kernel16 = cl::Kernel(prog, "applyVignette16");
+        m_kernelLinear = cl::Kernel(prog, "applyVignetteLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -345,7 +393,7 @@ bool VignetteEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
                                  cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                 int w, int h, int stride, bool is16bit,
+                                 int w, int h,
                                  const QMap<QString, QVariant>& params) {
     const int amount = params.value("amount", 0).toInt();
     if (amount == 0) return true;  // no-op
@@ -356,9 +404,31 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
         params.value("feather",   50).toInt(),
         params.value("roundness",  0).toInt());
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    setKernelArgs(k, buf, stride, w, h, a);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    const float halfW = w * 0.5f;
+    const float halfH = h * 0.5f;
+    const float halfD = std::sqrt(halfW * halfW + halfH * halfH);
+    // Isotropic normalisation — same scale on both axes so p=2 yields a true
+    // circle regardless of aspect.  cornerD normalises dn to 1 at the corner.
+    const float nxCorner = halfW / halfD;
+    const float nyCorner = halfH / halfD;
+    const float cornerD  = std::pow(std::pow(nxCorner, a.p) +
+                                    std::pow(nyCorner, a.p), 1.0f / a.p);
+
+    m_kernelLinear.setArg(0,  buf);
+    m_kernelLinear.setArg(1,  w);
+    m_kernelLinear.setArg(2,  h);
+    m_kernelLinear.setArg(3,  halfW);   // cx
+    m_kernelLinear.setArg(4,  halfH);   // cy
+    m_kernelLinear.setArg(5,  halfD);   // halfW scale (isotropic)
+    m_kernelLinear.setArg(6,  halfD);   // halfH scale (isotropic)
+    m_kernelLinear.setArg(7,  a.amount);
+    m_kernelLinear.setArg(8,  a.midpoint);
+    m_kernelLinear.setArg(9,  a.feather);
+    m_kernelLinear.setArg(10, a.p);
+    m_kernelLinear.setArg(11, cornerD);
+
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

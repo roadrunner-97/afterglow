@@ -1,5 +1,6 @@
 #include "BrightnessEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #ifdef QT_DEBUG
 #include <QElapsedTimer>
@@ -225,6 +226,50 @@ static QImage processImageGPU16(const QImage& image, int brightnessFactor, float
 
 } // namespace
 
+// ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Brightness and contrast were defined as slider offsets in sRGB-gamma space
+// (see processImageGPU above); preserving that UI behaviour here means
+// gamma-encoding to apply the offsets, then decoding back to linear.  The
+// surrounding pipeline (upstream downsample, downstream effects, final pack)
+// stays entirely in linear light — the full RAW dynamic range is preserved.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void adjustBrightnessLinear(__global float4* pixels,
+                                     int   w,
+                                     int   h,
+                                     int   brightnessFactor,
+                                     float contrastFactor)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+
+    // Encode to sRGB-gamma to apply UI-defined brightness/contrast (matches
+    // the slider semantics of the 8-bit processImage kernel).
+    float r = linear_to_srgb(px.x);
+    float g = linear_to_srgb(px.y);
+    float b = linear_to_srgb(px.z);
+
+    float bd = brightnessFactor / 255.0f;
+    r = r + bd;
+    g = g + bd;
+    b = b + bd;
+
+    r = (r - 0.5f) * contrastFactor + 0.5f;
+    g = (g - 0.5f) * contrastFactor + 0.5f;
+    b = (b - 0.5f) * contrastFactor + 0.5f;
+
+    // Back to linear — don't clamp here; the final pack kernel clamps once.
+    pixels[y * w + x] = (float4)(srgb_to_linear(r),
+                                 srgb_to_linear(g),
+                                 srgb_to_linear(b),
+                                 1.0f);
+}
+)CL";
+
 BrightnessEffect::BrightnessEffect()
     : controlsWidget(nullptr), brightnessParam(nullptr), contrastParam(nullptr) {
 }
@@ -294,10 +339,9 @@ QMap<QString, QVariant> BrightnessEffect::getParameters() const {
 
 bool BrightnessEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "adjustBrightness");
-        m_kernel16 = cl::Kernel(prog, "adjustBrightness16");
+        m_kernelLinear = cl::Kernel(prog, "adjustBrightnessLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -311,7 +355,7 @@ bool BrightnessEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,
                                    cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                   int w, int h, int stride, bool is16bit,
+                                   int w, int h,
                                    const QMap<QString, QVariant>& params) {
     const int brightnessFactor = params.value("brightness", 0).toInt();
     const int contrastInt      = params.value("contrast", 0).toInt();
@@ -319,14 +363,13 @@ bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,
 
     const float contrastFactor = (contrastInt + 100.0f) / 100.0f;
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    k.setArg(4, brightnessFactor);
-    k.setArg(5, contrastFactor);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, brightnessFactor);
+    m_kernelLinear.setArg(4, contrastFactor);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

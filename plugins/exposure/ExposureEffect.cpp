@@ -1,5 +1,6 @@
 #include "ExposureEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <QPainter>
@@ -407,6 +408,83 @@ private:
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Exposure is applied in linear light (just rgb *= 2^ev); zone selection uses
+// a perceptual L = linear_to_srgb(linear_luma(px)) so the zone midpoints stay
+// where the UI expects them.  Do not clamp outputs — scene-linear values above
+// 1.0 are valid HDR; the final pack kernel clamps once.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+
+// PCHIP interpolation through control points at the midpoint of each zone:
+//   blacks=0.075  shadows=0.325  highlights=0.675  whites=0.925
+// Zone widths: blacks=15%, shadows=35%, highlights=35%, whites=15%.
+// Segment lengths (midpoint-to-midpoint): h0=0.25, h1=0.35, h2=0.25.
+// Cubic Hermite with zero endpoint slopes; interior tangents are the
+// h-weighted arithmetic mean of adjacent slopes, zeroed on sign-change.
+float zoneEvLinear(float lum, float p0, float p1, float p2, float p3) {
+    if (lum <= 0.075f) return p0;
+    if (lum >= 0.925f) return p3;
+
+    const float h0 = 0.25f, h1 = 0.35f, h2 = 0.25f;
+    float d0 = (p1 - p0) / h0;
+    float d1 = (p2 - p1) / h1;
+    float d2 = (p3 - p2) / h2;
+
+    float m1 = (d0 * d1 > 0.0f) ? (h0 * d1 + h1 * d0) / (h0 + h1) : 0.0f;
+    float m2 = (d1 * d2 > 0.0f) ? (h1 * d2 + h2 * d1) / (h1 + h2) : 0.0f;
+
+    float pk, pk1, mk, mk1, h, s;
+    if (lum < 0.325f) {
+        s = (lum - 0.075f) / h0;
+        pk = p0; pk1 = p1; mk = 0.0f; mk1 = m1; h = h0;
+    } else if (lum < 0.675f) {
+        s = (lum - 0.325f) / h1;
+        pk = p1; pk1 = p2; mk = m1;   mk1 = m2; h = h1;
+    } else {
+        s = (lum - 0.675f) / h2;
+        pk = p2; pk1 = p3; mk = m2;   mk1 = 0.0f; h = h2;
+    }
+
+    float s2 = s * s, s3 = s2 * s;
+    return (2.0f*s3 - 3.0f*s2 + 1.0f) * pk
+         + (      s3 - 2.0f*s2 + s)   * mk * h
+         + (-2.0f*s3 + 3.0f*s2)       * pk1
+         + (      s3 - s2)             * mk1 * h;
+}
+
+__kernel void adjustExposureLinear(__global float4* pixels,
+                                    int   w,
+                                    int   h,
+                                    float globalEv,
+                                    float blacksEv,
+                                    float shadowsEv,
+                                    float highlightsEv,
+                                    float whitesEv)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+
+    // Zone lookup uses perceptual L: gamma-encode the linear luma so zone
+    // midpoints stay where the UI/curve widget places them.
+    float linLum = linear_luma(px);
+    float L      = linear_to_srgb(linLum);
+
+    float ev       = globalEv + zoneEvLinear(L, blacksEv, shadowsEv, highlightsEv, whitesEv);
+    float evFactor = native_exp2(ev);
+
+    // Exposure adjustment is a plain scale in linear light; no clamp.
+    pixels[y * w + x] = (float4)(px.x * evFactor,
+                                 px.y * evFactor,
+                                 px.z * evFactor,
+                                 1.0f);
+}
+)CL";
+
+// ============================================================================
 // ExposureEffect
 // ============================================================================
 
@@ -509,10 +587,9 @@ QMap<QString, QVariant> ExposureEffect::getParameters() const {
 
 bool ExposureEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "adjustExposure");
-        m_kernel16 = cl::Kernel(prog, "adjustExposure16");
+        m_kernelLinear = cl::Kernel(prog, "adjustExposureLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -526,18 +603,29 @@ bool ExposureEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool ExposureEffect::enqueueGpu(cl::CommandQueue& queue,
                                  cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                 int w, int h, int stride, bool is16bit,
+                                 int w, int h,
                                  const QMap<QString, QVariant>& params) {
-    ZoneEvs z;
-    z.global     = float(params.value("exposure",   0.0).toDouble());
-    z.whites     = float(params.value("whites",     0.0).toDouble());
-    z.highlights = float(params.value("highlights", 0.0).toDouble());
-    z.shadows    = float(params.value("shadows",    0.0).toDouble());
-    z.blacks     = float(params.value("blacks",     0.0).toDouble());
+    const float globalEv     = float(params.value("exposure",   0.0).toDouble());
+    const float blacksEv     = float(params.value("blacks",     0.0).toDouble());
+    const float shadowsEv    = float(params.value("shadows",    0.0).toDouble());
+    const float highlightsEv = float(params.value("highlights", 0.0).toDouble());
+    const float whitesEv     = float(params.value("whites",     0.0).toDouble());
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    setKernelZoneArgs(k, buf, stride, w, h, z);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    if (globalEv == 0.0f && blacksEv == 0.0f && shadowsEv == 0.0f
+        && highlightsEv == 0.0f && whitesEv == 0.0f) {
+        return true;  // no-op
+    }
+
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, globalEv);
+    m_kernelLinear.setArg(4, blacksEv);
+    m_kernelLinear.setArg(5, shadowsEv);
+    m_kernelLinear.setArg(6, highlightsEv);
+    m_kernelLinear.setArg(7, whitesEv);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

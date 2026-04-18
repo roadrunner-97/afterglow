@@ -22,6 +22,62 @@
 //   )CL";
 //
 // Consumed by: UnsharpEffect, DenoiseEffect.
+//
+// Also provides a float4-linear variant for the shared float4 preview pipeline:
+//   blurHLinear / blurVLinear  — both take __global float4* in/out, tightly
+//   packed (stride == width).  Pixels are scene-linear sRGB primaries; .w is
+//   unused and written as 1.0.  Signature: (in, out, w, h, radius, isGaussian).
+// Consumed by: BlurEffect, UnsharpEffect, ClarityEffect, DenoiseEffect
+// (pipeline enqueueGpu path only).
+
+#define SHARED_BLUR_KERNELS_F4 R"CL(
+
+// float4 linear path — tightly packed (stride == w); .w written as 1.0.
+__kernel void blurHLinear(__global const float4* in, __global float4* out,
+                           int w, int h, int radius, int isGaussian)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float sigma = max((float)radius / 3.0f, 0.5f);
+    float4 sum = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+    float wsum = 0.0f;
+    for (int dx = -radius; dx <= radius; ++dx) {
+        int sx = clamp(x + dx, 0, w - 1);
+        float4 p = in[y * w + sx];
+        float ww = isGaussian ? native_exp(-0.5f * (float)(dx * dx) / (sigma * sigma)) : 1.0f;
+        sum.x += ww * p.x;
+        sum.y += ww * p.y;
+        sum.z += ww * p.z;
+        wsum += ww;
+    }
+    float inv = 1.0f / wsum;
+    out[y * w + x] = (float4)(sum.x * inv, sum.y * inv, sum.z * inv, 1.0f);
+}
+
+__kernel void blurVLinear(__global const float4* in, __global float4* out,
+                           int w, int h, int radius, int isGaussian)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float sigma = max((float)radius / 3.0f, 0.5f);
+    float4 sum = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+    float wsum = 0.0f;
+    for (int dy = -radius; dy <= radius; ++dy) {
+        int sy = clamp(y + dy, 0, h - 1);
+        float4 p = in[sy * w + x];
+        float ww = isGaussian ? native_exp(-0.5f * (float)(dy * dy) / (sigma * sigma)) : 1.0f;
+        sum.x += ww * p.x;
+        sum.y += ww * p.y;
+        sum.z += ww * p.z;
+        wsum += ww;
+    }
+    float inv = 1.0f / wsum;
+    out[y * w + x] = (float4)(sum.x * inv, sum.y * inv, sum.z * inv, 1.0f);
+}
+
+)CL"
 
 #define SHARED_BLUR_KERNELS R"CL(
 

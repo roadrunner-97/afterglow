@@ -63,13 +63,17 @@ private:
     cl::CommandQueue m_queue;
     cl::Device       m_device;
 
-    cl::Buffer m_srcBuf;   // persistent original — written once per image load
-    cl::Buffer m_workBuf;  // preview-sized RGB32; filled by downsample, then modified by effects
-    cl::Buffer m_auxBuf;   // preview-sized scratch for multi-pass effects (blur, unsharp)
+    cl::Buffer m_srcBuf;     // persistent original — written once per image load
+    cl::Buffer m_workBuf;    // preview-sized cl_float4 linear; modified by effects in-place
+    cl::Buffer m_auxBuf;     // preview-sized cl_float4 scratch (blur, unsharp ping-pong)
+    cl::Buffer m_packedBuf;  // preview-sized uint (RGB32 sRGB) — final pack target, read back to CPU
 
-    // Downsample kernels (RGB32 output — R and B not swapped)
-    cl::Kernel m_downsampleKernel8;   // 8-bit source  → preview-sized RGB32
-    cl::Kernel m_downsampleKernel16;  // 16-bit source → preview-sized RGB32
+    // Downsample kernels — output float4 linear sRGB (scene-linear, unclamped).
+    cl::Kernel m_downsampleKernel8Srgb;     //  8-bit sRGB uint  → float4 linear (sRGB decode)
+    cl::Kernel m_downsampleKernel16Srgb;    // 16-bit sRGB ushort → float4 linear (sRGB decode)
+    cl::Kernel m_downsampleKernel16Linear;  // 16-bit linear ushort → float4 linear (divide by 65535)
+    cl::Kernel m_packKernel;                // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
+
     int        m_previewW = 0;
     int        m_previewH = 0;
 
@@ -78,6 +82,7 @@ private:
     int    m_stride   = 0;
     size_t m_bufBytes = 0;
     bool   m_is16bit  = false;
+    bool   m_inputIsLinear = false;  // true if source is scene-linear (RAW via LibRaw gamm=1)
 
     bool        m_available = false;
     int         m_revision  = -1;

@@ -1,9 +1,12 @@
 #include "BlurEffect.h"
 #include "ParamSlider.h"
+#include "blur_kernels.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QComboBox>
+#include <algorithm>
 #include <mutex>
 
 // ============================================================================
@@ -291,17 +294,22 @@ static QImage processImageGPU16(const QImage& image, int radius, bool gaussian) 
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB.  Blur is done directly in linear light,
+// which gives specular highlights their natural bloom / bright-over-dark
+// spread.  Two-pass separable: H(buf→aux), V(aux→buf); result in buf.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = SHARED_BLUR_KERNELS_F4;
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool BlurEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernelH   = cl::Kernel(prog, "blurHorizontal");
-        m_kernelV   = cl::Kernel(prog, "blurVertical");
-        m_kernelH16 = cl::Kernel(prog, "blurHorizontal16");
-        m_kernelV16 = cl::Kernel(prog, "blurVertical16");
+        m_kernelBlurHLinear = cl::Kernel(prog, "blurHLinear");
+        m_kernelBlurVLinear = cl::Kernel(prog, "blurVLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -315,32 +323,36 @@ bool BlurEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool BlurEffect::enqueueGpu(cl::CommandQueue& queue,
                              cl::Buffer& buf, cl::Buffer& aux,
-                             int w, int h, int stride, bool is16bit,
+                             int w, int h,
                              const QMap<QString, QVariant>& params) {
-    const int  radius_src = params.value("radius", 0).toInt();
-    const bool gaussian   = (params.value("blurType", 0).toInt() == 0);
-    const int  isGaussian = gaussian ? 1 : 0;
+    const int radiusSrc = params.value("radius", 0).toInt();
+    if (radiusSrc == 0) return true;  // no-op
 
-    if (radius_src == 0) return true;  // no-op, workBuf unchanged
+    // Scale radius from source-pixel units to preview-pixel units so that the
+    // perceived blur strength is independent of zoom level.
+    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    int radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
-    // Scale radius from source-image pixels to preview pixels.
-    const double srcPPP = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    const int    radius = qMax(1, static_cast<int>(radius_src / srcPPP + 0.5));
+    const int isGaussian = (params.value("blurType", 0).toInt() == 0) ? 1 : 0;
+    const cl::NDRange global(w, h);
 
-    cl::Kernel& kH = is16bit ? m_kernelH16 : m_kernelH;
-    cl::Kernel& kV = is16bit ? m_kernelV16 : m_kernelV;
+    // Horizontal: buf → aux
+    m_kernelBlurHLinear.setArg(0, buf);
+    m_kernelBlurHLinear.setArg(1, aux);
+    m_kernelBlurHLinear.setArg(2, w);
+    m_kernelBlurHLinear.setArg(3, h);
+    m_kernelBlurHLinear.setArg(4, radius);
+    m_kernelBlurHLinear.setArg(5, isGaussian);
+    queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-    // H pass: buf → aux
-    kH.setArg(0, buf);  kH.setArg(1, aux);
-    kH.setArg(2, stride); kH.setArg(3, w); kH.setArg(4, h);
-    kH.setArg(5, radius); kH.setArg(6, isGaussian);
-    queue.enqueueNDRangeKernel(kH, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
-
-    // V pass: aux → buf  (in-order queue: waits for H to finish)
-    kV.setArg(0, aux);  kV.setArg(1, buf);
-    kV.setArg(2, stride); kV.setArg(3, w); kV.setArg(4, h);
-    kV.setArg(5, radius); kV.setArg(6, isGaussian);
-    queue.enqueueNDRangeKernel(kV, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    // Vertical: aux → buf (in-order queue; no finish needed)
+    m_kernelBlurVLinear.setArg(0, aux);
+    m_kernelBlurVLinear.setArg(1, buf);
+    m_kernelBlurVLinear.setArg(2, w);
+    m_kernelBlurVLinear.setArg(3, h);
+    m_kernelBlurVLinear.setArg(4, radius);
+    m_kernelBlurVLinear.setArg(5, isGaussian);
+    queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
     return true;
 }

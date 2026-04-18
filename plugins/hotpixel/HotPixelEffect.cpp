@@ -1,5 +1,6 @@
 #include "HotPixelEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <mutex>
@@ -223,15 +224,58 @@ static QImage processImageGPU16(const QImage& image, float threshold) {
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Same 3x3 neighbour-average replacement as the sRGB path, but on linear-light
+// float4 pixels.  Threshold is the UI pct / 100, treated as a normalised
+// deviation in the linear-channel [0, 1] range.  Reads `input` and writes
+// `output` to avoid a read/write race on a single buffer; enqueueGpu copies
+// the result back to `buf` so downstream effects see the corrected pixels.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void hotPixelRemoveLinear(
+    __global const float4* input,
+    __global       float4* output,
+    int w, int h,
+    float threshold)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 center = input[y * w + x];
+    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (dx == 0 && dy == 0) continue;
+            int nx = clamp(x + dx, 0, w - 1);
+            int ny = clamp(y + dy, 0, h - 1);
+            float4 n = input[ny * w + nx];
+            sumR += n.x;
+            sumG += n.y;
+            sumB += n.z;
+        }
+    }
+    float avgR = sumR * 0.125f;
+    float avgG = sumG * 0.125f;
+    float avgB = sumB * 0.125f;
+
+    float outR = (fabs(center.x - avgR) > threshold) ? avgR : center.x;
+    float outG = (fabs(center.y - avgG) > threshold) ? avgG : center.y;
+    float outB = (fabs(center.z - avgB) > threshold) ? avgB : center.z;
+
+    output[y * w + x] = (float4)(outR, outG, outB, 1.0f);
+}
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool HotPixelEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel8  = cl::Kernel(prog, "hotPixelRemove");
-        m_kernel16 = cl::Kernel(prog, "hotPixelRemove16");
+        m_kernelLinear = cl::Kernel(prog, "hotPixelRemoveLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -245,25 +289,25 @@ bool HotPixelEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool HotPixelEffect::enqueueGpu(cl::CommandQueue& queue,
                                  cl::Buffer& buf, cl::Buffer& aux,
-                                 int w, int h, int stride, bool is16bit,
+                                 int w, int h,
                                  const QMap<QString, QVariant>& params) {
-    const int   thresholdPct = params.value("threshold", 30).toInt();
-    const float threshold    = scaledThreshold(thresholdPct, is16bit);
+    const int thresholdPct = params.value("threshold", 30).toInt();
+    if (thresholdPct == 0) return true;  // no-op
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel8;
-    k.setArg(0, buf);
-    k.setArg(1, aux);
-    k.setArg(2, stride);
-    k.setArg(3, w);
-    k.setArg(4, h);
-    k.setArg(5, threshold);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    // UI 0–100 → normalised [0, 1] linear-channel deviation.
+    const float threshold = thresholdPct / 100.0f;
 
-    // Result is in aux; copy back to buf so downstream effects see it in buf.
-    // (In-order queue: copy waits for the kernel above.)
-    const size_t bufBytes = static_cast<size_t>(stride) * h * (is16bit ? 8 : 4);
+    m_kernelLinear.setArg(0, buf);    // input
+    m_kernelLinear.setArg(1, aux);    // output scratch
+    m_kernelLinear.setArg(2, w);
+    m_kernelLinear.setArg(3, h);
+    m_kernelLinear.setArg(4, threshold);
+
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
+    // Copy aux → buf so downstream effects read corrected pixels from buf.
+    const size_t bufBytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
     queue.enqueueCopyBuffer(aux, buf, 0, 0, bufBytes);
-
     return true;
 }
 

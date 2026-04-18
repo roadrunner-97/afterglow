@@ -1,4 +1,5 @@
 #include "GrayscaleEffect.h"
+#include "color_kernels.h"
 #include <QCheckBox>
 #include <QVBoxLayout>
 #include <QDebug>
@@ -151,15 +152,32 @@ static QImage processImageGPU16(const QImage& image) {
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Grayscale in linear light: L = 0.2126 R + 0.7152 G + 0.0722 B (Rec. 709
+// linear luma).  No gamma dance — the full linear dynamic range is preserved.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void grayscaleLinear(__global float4* pixels, int w, int h)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+    float L = linear_luma(px);
+    pixels[y * w + x] = (float4)(L, L, L, 1.0f);
+}
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool GrayscaleEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "grayscale");
-        m_kernel16 = cl::Kernel(prog, "grayscale16");
+        m_kernelLinear = cl::Kernel(prog, "grayscaleLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -173,15 +191,15 @@ bool GrayscaleEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool GrayscaleEffect::enqueueGpu(cl::CommandQueue& queue,
                                   cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                  int w, int h, int stride, bool is16bit,
+                                  int w, int h,
                                   const QMap<QString, QVariant>& /*params*/) {
-    if (!m_active) return true;  // no-op: pass buffer through unchanged
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    if (!m_active) return true;  // no-op when checkbox is unchecked
+
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

@@ -25,7 +25,7 @@ public:
     bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
     bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
-                    int w, int h, int stride, bool is16bit,
+                    int w, int h,
                     const QMap<QString, QVariant>& params) override;
 
 private:
@@ -34,12 +34,10 @@ private:
     ParamSlider* radiusParam;   //   10 – 100: blur radius in source pixels
 
     cl::Context m_pipelineCtx;  // saved in initGpuKernels for temp buffer allocation
-    cl::Kernel  m_kernelH;
-    cl::Kernel  m_kernelV;
-    cl::Kernel  m_kernelClarity;
-    cl::Kernel  m_kernelH16;
-    cl::Kernel  m_kernelV16;
-    cl::Kernel  m_kernelClarity16;
+    // Pipeline (float4 linear) kernels.
+    cl::Kernel  m_kernelBlurHLinear;
+    cl::Kernel  m_kernelBlurVLinear;
+    cl::Kernel  m_kernelClarityLinear;
 };
 
 #endif // CLARITYEFFECT_H

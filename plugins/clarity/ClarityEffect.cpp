@@ -1,7 +1,9 @@
 #include "ClarityEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <mutex>
 
 // ============================================================================
@@ -245,20 +247,58 @@ static QImage processImageGPU16(const QImage& image, int radius, float amount) {
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB.  Blur happens in linear; the midtone
+// mask is evaluated on sRGB-encoded luminance so its triangular tent
+// (centred at 0.5 perceptual grey) behaves like the test path.  We then
+// modulate the original linear RGB by the midtone weight * detail to preserve
+// hue.  Flow: H(buf→aux) → V(aux→blurBuf) → combine(buf+blurBuf → aux) →
+// copy(aux→buf).
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
+
+inline float claritMask(float L) {
+    return max(0.0f, 1.0f - 2.0f * fabs(L - 0.5f));
+}
+
+__kernel void clarityCombineLinear(__global const float4* original,
+                                    __global const float4* blurred,
+                                    __global       float4* output,
+                                    int w, int h,
+                                    float amount)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 o = original[y * w + x];
+    float4 b = blurred [y * w + x];
+
+    // Midtone mask evaluated in sRGB-perceptual space so the tent matches
+    // today's behaviour (L=0.5 in sRGB ≈ 0.214 in linear — very different).
+    float L_linear = linear_luma(o);
+    float L_srgb   = linear_to_srgb(L_linear);
+    float k = amount * claritMask(L_srgb);
+
+    // Detail in linear light; unclamped (pack kernel clamps once at the end).
+    float r  = o.x + k * (o.x - b.x);
+    float g  = o.y + k * (o.y - b.y);
+    float bl = o.z + k * (o.z - b.z);
+    output[y * w + x] = (float4)(r, g, bl, 1.0f);
+}
+
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool ClarityEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernelH         = cl::Kernel(prog, "blurH");
-        m_kernelV         = cl::Kernel(prog, "blurV");
-        m_kernelClarity   = cl::Kernel(prog, "clarityCombine");
-        m_kernelH16       = cl::Kernel(prog, "blurH16");
-        m_kernelV16       = cl::Kernel(prog, "blurV16");
-        m_kernelClarity16 = cl::Kernel(prog, "clarityCombine16");
-        m_pipelineCtx     = ctx;
+        m_kernelBlurHLinear   = cl::Kernel(prog, "blurHLinear");
+        m_kernelBlurVLinear   = cl::Kernel(prog, "blurVLinear");
+        m_kernelClarityLinear = cl::Kernel(prog, "clarityCombineLinear");
+        m_pipelineCtx         = ctx;
         return true;
     }
     // GCOVR_EXCL_START
@@ -272,50 +312,52 @@ bool ClarityEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
                                 cl::Buffer& buf, cl::Buffer& aux,
-                                int w, int h, int stride, bool is16bit,
+                                int w, int h,
                                 const QMap<QString, QVariant>& params) {
     const int amountPct  = params.value("amount", 0).toInt();
-    const int radius_src = params.value("radius", 30).toInt();
-    if (amountPct == 0 || radius_src == 0) return true;  // no-op
+    const int radiusSrc  = params.value("radius", 30).toInt();
+    if (amountPct == 0 || radiusSrc == 0) return true;
 
     const float amount = amountPct / 100.0f;
 
-    // Scale radius from source-image pixels to preview pixels.
-    const double srcPPP = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    const int    radius = qMax(1, static_cast<int>(radius_src / srcPPP + 0.5));
+    // Scale blur radius from source pixels to preview pixels.
+    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    int radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
-    // Pipeline layout mirrors UnsharpEffect:
-    //   buf     = input image (preserved as "original" for the combine step)
-    //   aux     = H-blur output, then the final combined result
-    //   blurBuf = V-blur output (= blurred image used in combine)
-    const size_t bufBytes = static_cast<size_t>(stride) * (is16bit ? 8 : 4) * h;
-    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, bufBytes);
+    const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
 
     const cl::NDRange global(w, h);
 
-    cl::Kernel& kH  = is16bit ? m_kernelH16 : m_kernelH;
-    cl::Kernel& kV  = is16bit ? m_kernelV16 : m_kernelV;
-    cl::Kernel& kCL = is16bit ? m_kernelClarity16 : m_kernelClarity;
+    // H blur: buf → aux
+    m_kernelBlurHLinear.setArg(0, buf);
+    m_kernelBlurHLinear.setArg(1, aux);
+    m_kernelBlurHLinear.setArg(2, w);
+    m_kernelBlurHLinear.setArg(3, h);
+    m_kernelBlurHLinear.setArg(4, radius);
+    m_kernelBlurHLinear.setArg(5, 1); // isGaussian
+    queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-    // Step 1: H blur — buf → aux
-    kH.setArg(0, buf); kH.setArg(1, aux);
-    kH.setArg(2, stride); kH.setArg(3, w); kH.setArg(4, h); kH.setArg(5, radius);
-    queue.enqueueNDRangeKernel(kH, cl::NullRange, global, cl::NullRange);
+    // V blur: aux → blurBuf  (buf still holds the unmodified original)
+    m_kernelBlurVLinear.setArg(0, aux);
+    m_kernelBlurVLinear.setArg(1, blurBuf);
+    m_kernelBlurVLinear.setArg(2, w);
+    m_kernelBlurVLinear.setArg(3, h);
+    m_kernelBlurVLinear.setArg(4, radius);
+    m_kernelBlurVLinear.setArg(5, 1);
+    queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-    // Step 2: V blur — aux → blurBuf
-    kV.setArg(0, aux); kV.setArg(1, blurBuf);
-    kV.setArg(2, stride); kV.setArg(3, w); kV.setArg(4, h); kV.setArg(5, radius);
-    queue.enqueueNDRangeKernel(kV, cl::NullRange, global, cl::NullRange);
+    // Combine: (original=buf, blurred=blurBuf) → aux
+    m_kernelClarityLinear.setArg(0, buf);
+    m_kernelClarityLinear.setArg(1, blurBuf);
+    m_kernelClarityLinear.setArg(2, aux);
+    m_kernelClarityLinear.setArg(3, w);
+    m_kernelClarityLinear.setArg(4, h);
+    m_kernelClarityLinear.setArg(5, amount);
+    queue.enqueueNDRangeKernel(m_kernelClarityLinear, cl::NullRange, global, cl::NullRange);
 
-    // Step 3: Clarity combine — (original=buf, blurred=blurBuf) → aux
-    kCL.setArg(0, buf); kCL.setArg(1, blurBuf); kCL.setArg(2, aux);
-    kCL.setArg(3, stride); kCL.setArg(4, w); kCL.setArg(5, h);
-    kCL.setArg(6, amount);
-    queue.enqueueNDRangeKernel(kCL, cl::NullRange, global, cl::NullRange);
-
-    // Step 4: Copy result (aux) → working buffer (buf)
-    queue.enqueueCopyBuffer(aux, buf, 0, 0, bufBytes);
-
+    // Final result must live in buf.
+    queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
     return true;
 }
 

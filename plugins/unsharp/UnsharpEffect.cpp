@@ -1,7 +1,9 @@
 #include "UnsharpEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <mutex>
 
 // ============================================================================
@@ -235,20 +237,61 @@ static QImage processImageGPU16(const QImage& image, int radius, float amount, i
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB.  Blur is performed in linear light;
+// the unsharp combine also happens in linear (original + amount * detail).
+// The threshold gate is evaluated on *sRGB-encoded* per-channel magnitudes
+// so its perceptual behaviour matches the sRGB-space test path.
+// Flow: H blur (buf→aux), V blur (aux→blurBuf), combine (orig=buf,
+// blurred=blurBuf → aux), copy (aux→buf) so result ends in buf.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
+
+__kernel void unsharpCombineLinear(__global const float4* original,
+                                    __global const float4* blurred,
+                                    __global       float4* output,
+                                    int w, int h,
+                                    float amount, float threshold_srgb)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 o = original[y * w + x];
+    float4 b = blurred [y * w + x];
+
+    // Perceptual threshold test: gate on sRGB-encoded magnitude of the
+    // original-vs-blurred differences so it matches slider intuition (the
+    // slider unit mirrors the 8-bit threshold's per-channel difference).
+    float dr_s = linear_to_srgb(o.x) - linear_to_srgb(b.x);
+    float dg_s = linear_to_srgb(o.y) - linear_to_srgb(b.y);
+    float db_s = linear_to_srgb(o.z) - linear_to_srgb(b.z);
+    if (fabs(dr_s) < threshold_srgb
+     && fabs(dg_s) < threshold_srgb
+     && fabs(db_s) < threshold_srgb) {
+        output[y * w + x] = (float4)(o.x, o.y, o.z, 1.0f);
+        return;
+    }
+
+    // Combine in linear light.  Don't clamp — the pack kernel clamps once.
+    float r = o.x + amount * (o.x - b.x);
+    float g = o.y + amount * (o.y - b.y);
+    float bl = o.z + amount * (o.z - b.z);
+    output[y * w + x] = (float4)(r, g, bl, 1.0f);
+}
+
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool UnsharpEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernelH         = cl::Kernel(prog, "blurH");
-        m_kernelV         = cl::Kernel(prog, "blurV");
-        m_kernelUnsharp   = cl::Kernel(prog, "unsharpCombine");
-        m_kernelH16       = cl::Kernel(prog, "blurH16");
-        m_kernelV16       = cl::Kernel(prog, "blurV16");
-        m_kernelUnsharp16 = cl::Kernel(prog, "unsharpCombine16");
-        m_pipelineCtx     = ctx;  // save for temp buffer allocation in enqueueGpu
+        m_kernelBlurHLinear   = cl::Kernel(prog, "blurHLinear");
+        m_kernelBlurVLinear   = cl::Kernel(prog, "blurVLinear");
+        m_kernelUnsharpLinear = cl::Kernel(prog, "unsharpCombineLinear");
+        m_pipelineCtx         = ctx;  // save for temp buffer allocation
         return true;
     }
     // GCOVR_EXCL_START
@@ -262,51 +305,58 @@ bool UnsharpEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,
                                 cl::Buffer& buf, cl::Buffer& aux,
-                                int w, int h, int stride, bool is16bit,
+                                int w, int h,
                                 const QMap<QString, QVariant>& params) {
-    const float amount     = static_cast<float>(params.value("amount",    1.0).toDouble());
-    const int   radius_src = params.value("radius",    2).toInt();
-    const int   threshold  = params.value("threshold", 3).toInt();
+    const float amount       = static_cast<float>(params.value("amount", 1.0).toDouble());
+    const int   radiusSrc    = params.value("radius", 2).toInt();
+    const int   thresholdInt = params.value("threshold", 3).toInt();
+    if (amount == 0.0f || radiusSrc == 0) return true;
 
-    if (amount == 0.0f || radius_src == 0) return true;  // no-op
+    // Scale blur radius from source pixels to preview pixels.
+    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    int radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
-    // Scale radius from source-image pixels to preview pixels.
-    const double srcPPP = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    const int    radius = qMax(1, static_cast<int>(radius_src / srcPPP + 0.5));
+    // Threshold slider is defined in 0..20 of 0..255 sRGB-byte units.  Scale
+    // to normalised sRGB [0,1] for comparison with linear_to_srgb() output.
+    const float threshold_srgb = thresholdInt / 255.0f;
 
-    // Allocate a third GPU buffer (no host copy — just GPU memory, very fast).
-    // Layout:
-    //   buf     = input image (preserved as "original" for the combine step)
-    //   aux     = H-blur output, then the sharpened result
-    //   blurBuf = V-blur output (= blurred image used in combine)
-    const size_t bufBytes = static_cast<size_t>(stride) * (is16bit ? 8 : 4) * h;
-    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, bufBytes);
+    // Allocate a per-call scratch buffer to hold the blurred image so the
+    // combine pass can read the (still-unmodified) original from buf.
+    const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
 
     const cl::NDRange global(w, h);
 
-    cl::Kernel& kH  = is16bit ? m_kernelH16 : m_kernelH;
-    cl::Kernel& kV  = is16bit ? m_kernelV16 : m_kernelV;
-    cl::Kernel& kUS = is16bit ? m_kernelUnsharp16 : m_kernelUnsharp;
+    // H blur: buf → aux
+    m_kernelBlurHLinear.setArg(0, buf);
+    m_kernelBlurHLinear.setArg(1, aux);
+    m_kernelBlurHLinear.setArg(2, w);
+    m_kernelBlurHLinear.setArg(3, h);
+    m_kernelBlurHLinear.setArg(4, radius);
+    m_kernelBlurHLinear.setArg(5, 1); // isGaussian
+    queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-    // Step 1: H blur — buf → aux
-    kH.setArg(0, buf); kH.setArg(1, aux);
-    kH.setArg(2, stride); kH.setArg(3, w); kH.setArg(4, h); kH.setArg(5, radius);
-    queue.enqueueNDRangeKernel(kH, cl::NullRange, global, cl::NullRange);
+    // V blur: aux → blurBuf  (buf still holds the unmodified original)
+    m_kernelBlurVLinear.setArg(0, aux);
+    m_kernelBlurVLinear.setArg(1, blurBuf);
+    m_kernelBlurVLinear.setArg(2, w);
+    m_kernelBlurVLinear.setArg(3, h);
+    m_kernelBlurVLinear.setArg(4, radius);
+    m_kernelBlurVLinear.setArg(5, 1);
+    queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-    // Step 2: V blur — aux → blurBuf  (blurBuf = blurred image)
-    kV.setArg(0, aux); kV.setArg(1, blurBuf);
-    kV.setArg(2, stride); kV.setArg(3, w); kV.setArg(4, h); kV.setArg(5, radius);
-    queue.enqueueNDRangeKernel(kV, cl::NullRange, global, cl::NullRange);
+    // Combine: (original=buf, blurred=blurBuf) → aux
+    m_kernelUnsharpLinear.setArg(0, buf);
+    m_kernelUnsharpLinear.setArg(1, blurBuf);
+    m_kernelUnsharpLinear.setArg(2, aux);
+    m_kernelUnsharpLinear.setArg(3, w);
+    m_kernelUnsharpLinear.setArg(4, h);
+    m_kernelUnsharpLinear.setArg(5, amount);
+    m_kernelUnsharpLinear.setArg(6, threshold_srgb);
+    queue.enqueueNDRangeKernel(m_kernelUnsharpLinear, cl::NullRange, global, cl::NullRange);
 
-    // Step 3: Unsharp combine — (original=buf, blurred=blurBuf) → aux
-    kUS.setArg(0, buf); kUS.setArg(1, blurBuf); kUS.setArg(2, aux);
-    kUS.setArg(3, stride); kUS.setArg(4, w); kUS.setArg(5, h);
-    kUS.setArg(6, amount); kUS.setArg(7, threshold);
-    queue.enqueueNDRangeKernel(kUS, cl::NullRange, global, cl::NullRange);
-
-    // Step 4: Copy result (aux) → working buffer (buf)
-    queue.enqueueCopyBuffer(aux, buf, 0, 0, bufBytes);
-
+    // Final result must live in buf.
+    queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
     return true;
 }
 

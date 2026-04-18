@@ -1,5 +1,6 @@
 #include "SaturationEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <mutex>
@@ -260,15 +261,90 @@ static QImage processImageGPU16(const QImage& image, float saturationValue, floa
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// Saturation/vibrancy semantics are defined in sRGB-gamma HSV (the UI was
+// designed around that perceptual space).  The linear-light pipeline kernel
+// therefore gamma-encodes the input, runs the existing HSV adjust, and
+// gamma-decodes the result back to linear.  Don't clamp outputs — the final
+// pack kernel clamps once.  (HSV encode/decode is unchanged from the 8/16-bit
+// kernels; only the colour-space wrap around it is new.)
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void adjustSatVibrancyLinear(__global float4* pixels,
+                                       int   w,
+                                       int   h,
+                                       float saturationValue,
+                                       float vibrancyValue)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+
+    // Encode to sRGB-gamma for HSV adjust (matches processImage UI behaviour).
+    float r = linear_to_srgb(px.x);
+    float g = linear_to_srgb(px.y);
+    float b = linear_to_srgb(px.z);
+
+    // RGB → HSV
+    float maxC  = fmax(fmax(r, g), b);
+    float delta = maxC - fmin(fmin(r, g), b);
+    float v = maxC;
+    float s = (maxC == 0.0f) ? 0.0f : (delta / maxC);
+
+    float hue = 0.0f;
+    if (delta != 0.0f) {
+        if      (maxC == r) hue = fmod((g - b) / delta, 6.0f);
+        else if (maxC == g) hue = (b - r) / delta + 2.0f;
+        else                hue = (r - g) / delta + 4.0f;
+        hue = fmod(hue * 60.0f, 360.0f);
+        if (hue < 0.0f) hue += 360.0f;
+    }
+
+    // Vibrancy with skin-tone protection (Gaussian around hue=20°, sigma=25°).
+    if (vibrancyValue != 0.0f) {
+        float hueDist = fabs(hue - 20.0f);
+        if (hueDist > 180.0f) hueDist = 360.0f - hueDist;
+        float skinProtect = exp(-0.5f * hueDist * hueDist / (25.0f * 25.0f));
+        float weight = (1.0f - s) * (1.0f - 0.7f * skinProtect);
+        s = clamp(s + (vibrancyValue / 100.0f) * weight, 0.0f, 1.0f);
+    }
+
+    // Global saturation boost after vibrancy.
+    if (saturationValue != 0.0f) {
+        s = clamp(s + saturationValue / 100.0f, 0.0f, 1.0f);
+    }
+
+    // HSV → RGB
+    float c  = v * s;
+    float xv = c * (1.0f - fabs(fmod(hue / 60.0f, 2.0f) - 1.0f));
+    float m  = v - c;
+    float rf, gf, bf;
+    if      (hue <  60.0f) { rf = c;    gf = xv;   bf = 0.0f; }
+    else if (hue < 120.0f) { rf = xv;   gf = c;    bf = 0.0f; }
+    else if (hue < 180.0f) { rf = 0.0f; gf = c;    bf = xv;   }
+    else if (hue < 240.0f) { rf = 0.0f; gf = xv;   bf = c;    }
+    else if (hue < 300.0f) { rf = xv;   gf = 0.0f; bf = c;    }
+    else                   { rf = c;    gf = 0.0f; bf = xv;   }
+
+    // Decode back to linear — don't clamp; the final pack kernel clamps once.
+    pixels[y * w + x] = (float4)(srgb_to_linear(rf + m),
+                                 srgb_to_linear(gf + m),
+                                 srgb_to_linear(bf + m),
+                                 1.0f);
+}
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool SaturationEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "adjustSatVibrancy");
-        m_kernel16 = cl::Kernel(prog, "adjustSatVibrancy16");
+        m_kernelLinear = cl::Kernel(prog, "adjustSatVibrancyLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -282,20 +358,19 @@ bool SaturationEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool SaturationEffect::enqueueGpu(cl::CommandQueue& queue,
                                    cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                   int w, int h, int stride, bool is16bit,
+                                   int w, int h,
                                    const QMap<QString, QVariant>& params) {
-    const float satVal = static_cast<float>(params.value("saturation", 0.0).toDouble());
-    const float vibVal = static_cast<float>(params.value("vibrancy",   0.0).toDouble());
-    if (satVal == 0.0f && vibVal == 0.0f) return true;  // no-op
+    const float saturationValue = float(params.value("saturation", 0.0).toDouble());
+    const float vibrancyValue   = float(params.value("vibrancy",   0.0).toDouble());
+    if (saturationValue == 0.0f && vibrancyValue == 0.0f) return true;  // no-op
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    k.setArg(4, satVal);
-    k.setArg(5, vibVal);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, saturationValue);
+    m_kernelLinear.setArg(4, vibrancyValue);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

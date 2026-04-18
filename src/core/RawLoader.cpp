@@ -100,9 +100,14 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
 #ifdef HAVE_LIBRAW
     LibRaw rawProcessor;
 
-    // 16-bit sRGB output; use the camera's own white balance; no auto-brightness
+    // 16-bit linear sRGB output (sRGB primaries, NO gamma curve).
+    // gamm[0] = 1.0, gamm[1] = 1.0 disables LibRaw's sRGB tone curve so the
+    // pipeline receives scene-linear data with the full sensor dynamic range
+    // available for exposure/white-balance/zone adjustments.
     rawProcessor.imgdata.params.output_bps     = 16;
-    rawProcessor.imgdata.params.output_color   = 1;  // sRGB
+    rawProcessor.imgdata.params.output_color   = 1;  // sRGB primaries
+    rawProcessor.imgdata.params.gamm[0]        = 1.0;
+    rawProcessor.imgdata.params.gamm[1]        = 1.0;
     rawProcessor.imgdata.params.use_camera_wb  = 1;
     rawProcessor.imgdata.params.no_auto_bright = 1;
     rawProcessor.imgdata.params.fbdd_noiserd   = 1;  // basic noise reduction
@@ -144,6 +149,9 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
     }
 
     LibRaw::dcraw_clear_mem(img);
+    // Tag the image as linear-light so GpuPipeline knows to skip sRGB decode
+    // on upload. QImage/JPEG/PNG loads have no tag → treated as sRGB-encoded.
+    result.setText("color_space", "linear");
     return result;
 #else
     Q_UNUSED(filePath)

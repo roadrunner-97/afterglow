@@ -30,15 +30,17 @@ public:
     virtual bool initGpuKernels(cl::Context& ctx, cl::Device& dev) = 0;
 
     // Enqueue this effect's GPU work onto queue.
-    //   buf   — main working buffer; read input, write output
-    //   aux   — scratch buffer, same size as buf (may be used as ping-pong)
-    //   stride — pixels per row (= bytesPerLine / bytes_per_pixel)
-    //   is16bit — true: Format_RGBX64 (8 B/px), false: Format_RGB32 (4 B/px)
+    //   buf   — main working buffer; cl_float4 linear sRGB, in-place.  Nominal
+    //           range [0, 1], but values above 1 are valid (scene-linear HDR)
+    //           and must not be clamped mid-pipeline — the final pack kernel
+    //           clamps before readback.
+    //   aux   — scratch buffer, same size & format as buf (float4 ping-pong).
+    //   w, h  — preview dimensions; buffers are tightly packed, so stride = w.
     // Do NOT call queue.finish() — GpuPipeline calls it once after all effects.
-    // Return false on error (pipeline falls back to per-effect QImage chain).
+    // Return false on error (pipeline aborts; no CPU fallback).
     virtual bool enqueueGpu(cl::CommandQueue& queue,
                              cl::Buffer& buf, cl::Buffer& aux,
-                             int w, int h, int stride, bool is16bit,
+                             int w, int h,
                              const QMap<QString, QVariant>& params) = 0;
 };
 

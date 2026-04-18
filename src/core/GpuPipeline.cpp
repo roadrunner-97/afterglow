@@ -2,71 +2,137 @@
 #include "IGpuEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "GpuDeviceRegistryOCL.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QElapsedTimer>
 #include <algorithm>
 
-// Downsample kernels output RGB32 (0xFFRRGGBB), matching QImage::Format_RGB32.
-// R and B are NOT swapped — effect kernels expect RGB32 byte order.
+// ── Pipeline kernels ─────────────────────────────────────────────────────────
+//
+// Work / aux buffers are cl_float4 in scene-linear sRGB primaries.  Values are
+// nominally [0, 1] but may exceed 1.0 (scene-linear HDR) during the effect
+// chain — the final pack kernel clamps immediately before readback.
+//
+// Downsample kernels box-average the source crop region and emit float4 linear
+// pixels.  Three variants cover the two input depths and two gamma encodings:
+//   * 8-bit uint RGB32, sRGB-gamma encoded   (JPEG/PNG loaded via QImage)
+//   * 16-bit ushort4 RGBX64, sRGB-gamma      (legacy 16-bit sRGB inputs)
+//   * 16-bit ushort4 RGBX64, scene-linear    (RAW via LibRaw with gamm=1.0)
+//
 // cropX0/Y0/X1/Y1 are the visible region in source image pixels (may extend
 // outside [0..srcW/H) — those pixels are output as black for letterboxing).
-static const char* DOWNSAMPLE_KERNEL_SOURCE = R"CL(
-kernel void preview_downsample_8bit_rgb32(
-    global const uint* src, global uint* dst,
-    int srcW, int srcH, int srcStride, int dstW, int dstH,
-    float cropX0, float cropY0, float cropX1, float cropY1)
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+
+// Shared crop-to-source-range helper.  Returns [sx0, sx1) × [sy0, sy1) for the
+// dest pixel (dx, dy); callers check sx0<sx1 && sy0<sy1 before sampling.
+static void crop_range(int dx, int dy, int srcW, int srcH, int dstW, int dstH,
+                       float cropX0, float cropY0, float cropX1, float cropY1,
+                       int* sx0, int* sy0, int* sx1, int* sy1)
 {
-    int dx = get_global_id(0), dy = get_global_id(1);
-    if (dx >= dstW || dy >= dstH) return;
     float rgnW = cropX1 - cropX0, rgnH = cropY1 - cropY0;
     float sx0f = cropX0 + (float)dx       * rgnW / dstW;
     float sy0f = cropY0 + (float)dy       * rgnH / dstH;
     float sx1f = cropX0 + (float)(dx + 1) * rgnW / dstW;
     float sy1f = cropY0 + (float)(dy + 1) * rgnH / dstH;
-    int sx0 = max(0, (int)sx0f);
-    int sy0 = max(0, (int)sy0f);
-    int sx1 = min(srcW, (int)sx1f + 1);
-    int sy1 = min(srcH, (int)sy1f + 1);
-    if (sx0 >= sx1 || sy0 >= sy1) { dst[dy*dstW+dx] = 0xFF000000u; return; }
-    float r=0,g=0,b=0; int n=0;
-    for (int sy=sy0;sy<sy1;sy++) for (int sx=sx0;sx<sx1;sx++) {
-        uint p = src[sy*srcStride+sx];
-        r += (p>>16)&0xFF; g += (p>>8)&0xFF; b += p&0xFF; n++;
-    }
-    // Output RGB32: keep R/G/B order (not swapped)
-    if (n) dst[dy*dstW+dx] = 0xFF000000u
-        | ((uint)(r/n+.5f)<<16)
-        | ((uint)(g/n+.5f)<<8)
-        |  (uint)(b/n+.5f);
+    *sx0 = max(0, (int)sx0f);
+    *sy0 = max(0, (int)sy0f);
+    *sx1 = min(srcW, (int)sx1f + 1);
+    *sy1 = min(srcH, (int)sy1f + 1);
 }
 
-kernel void preview_downsample_16bit_rgb32(
-    global const ushort* src, global uint* dst,
+__kernel void preview_downsample_8bit_srgb_to_linear(
+    __global const uint* src, __global float4* dst,
     int srcW, int srcH, int srcStride, int dstW, int dstH,
     float cropX0, float cropY0, float cropX1, float cropY1)
 {
     int dx = get_global_id(0), dy = get_global_id(1);
     if (dx >= dstW || dy >= dstH) return;
-    float rgnW = cropX1 - cropX0, rgnH = cropY1 - cropY0;
-    float sx0f = cropX0 + (float)dx       * rgnW / dstW;
-    float sy0f = cropY0 + (float)dy       * rgnH / dstH;
-    float sx1f = cropX0 + (float)(dx + 1) * rgnW / dstW;
-    float sy1f = cropY0 + (float)(dy + 1) * rgnH / dstH;
-    int sx0 = max(0, (int)sx0f);
-    int sy0 = max(0, (int)sy0f);
-    int sx1 = min(srcW, (int)sx1f + 1);
-    int sy1 = min(srcH, (int)sy1f + 1);
-    if (sx0 >= sx1 || sy0 >= sy1) { dst[dy*dstW+dx] = 0xFF000000u; return; }
-    float r=0,g=0,b=0; int n=0;
-    for (int sy=sy0;sy<sy1;sy++) for (int sx=sx0;sx<sx1;sx++) {
-        int i = (sy*srcStride+sx)*4;
-        r += src[i]; g += src[i+1]; b += src[i+2]; n++;
+
+    int sx0, sy0, sx1, sy1;
+    crop_range(dx, dy, srcW, srcH, dstW, dstH, cropX0, cropY0, cropX1, cropY1,
+               &sx0, &sy0, &sx1, &sy1);
+    if (sx0 >= sx1 || sy0 >= sy1) { dst[dy*dstW + dx] = (float4)(0, 0, 0, 1); return; }
+
+    float r = 0, g = 0, b = 0; int n = 0;
+    for (int sy = sy0; sy < sy1; ++sy)
+    for (int sx = sx0; sx < sx1; ++sx) {
+        uint p = src[sy*srcStride + sx];
+        r += srgb_to_linear(((p >> 16) & 0xFFu) * (1.0f/255.0f));
+        g += srgb_to_linear(((p >>  8) & 0xFFu) * (1.0f/255.0f));
+        b += srgb_to_linear(( p        & 0xFFu) * (1.0f/255.0f));
+        ++n;
     }
-    // Output RGB32: keep R/G/B order (not swapped), scale 16-bit → 8-bit
-    if (n) dst[dy*dstW+dx] = 0xFF000000u
-        | ((uint)(r/n/257.f+.5f)<<16)
-        | ((uint)(g/n/257.f+.5f)<<8)
-        |  (uint)(b/n/257.f+.5f);
+    float inv = 1.0f / (float)n;
+    dst[dy*dstW + dx] = (float4)(r * inv, g * inv, b * inv, 1.0f);
+}
+
+__kernel void preview_downsample_16bit_srgb_to_linear(
+    __global const ushort* src, __global float4* dst,
+    int srcW, int srcH, int srcStride, int dstW, int dstH,
+    float cropX0, float cropY0, float cropX1, float cropY1)
+{
+    int dx = get_global_id(0), dy = get_global_id(1);
+    if (dx >= dstW || dy >= dstH) return;
+
+    int sx0, sy0, sx1, sy1;
+    crop_range(dx, dy, srcW, srcH, dstW, dstH, cropX0, cropY0, cropX1, cropY1,
+               &sx0, &sy0, &sx1, &sy1);
+    if (sx0 >= sx1 || sy0 >= sy1) { dst[dy*dstW + dx] = (float4)(0, 0, 0, 1); return; }
+
+    float r = 0, g = 0, b = 0; int n = 0;
+    for (int sy = sy0; sy < sy1; ++sy)
+    for (int sx = sx0; sx < sx1; ++sx) {
+        int i = (sy*srcStride + sx) * 4;
+        r += srgb_to_linear(src[i  ] * (1.0f/65535.0f));
+        g += srgb_to_linear(src[i+1] * (1.0f/65535.0f));
+        b += srgb_to_linear(src[i+2] * (1.0f/65535.0f));
+        ++n;
+    }
+    float inv = 1.0f / (float)n;
+    dst[dy*dstW + dx] = (float4)(r * inv, g * inv, b * inv, 1.0f);
+}
+
+__kernel void preview_downsample_16bit_linear(
+    __global const ushort* src, __global float4* dst,
+    int srcW, int srcH, int srcStride, int dstW, int dstH,
+    float cropX0, float cropY0, float cropX1, float cropY1)
+{
+    int dx = get_global_id(0), dy = get_global_id(1);
+    if (dx >= dstW || dy >= dstH) return;
+
+    int sx0, sy0, sx1, sy1;
+    crop_range(dx, dy, srcW, srcH, dstW, dstH, cropX0, cropY0, cropX1, cropY1,
+               &sx0, &sy0, &sx1, &sy1);
+    if (sx0 >= sx1 || sy0 >= sy1) { dst[dy*dstW + dx] = (float4)(0, 0, 0, 1); return; }
+
+    float r = 0, g = 0, b = 0; int n = 0;
+    for (int sy = sy0; sy < sy1; ++sy)
+    for (int sx = sx0; sx < sx1; ++sx) {
+        int i = (sy*srcStride + sx) * 4;
+        r += src[i  ] * (1.0f/65535.0f);
+        g += src[i+1] * (1.0f/65535.0f);
+        b += src[i+2] * (1.0f/65535.0f);
+        ++n;
+    }
+    float inv = 1.0f / (float)n;
+    dst[dy*dstW + dx] = (float4)(r * inv, g * inv, b * inv, 1.0f);
+}
+
+// Final stage: clamp each channel to [0, 1], apply the sRGB OETF, round to
+// 8-bit, pack into 0xFFRRGGBB (QImage::Format_RGB32 byte order).
+__kernel void pack_linear_to_srgb_rgb32(
+    __global const float4* src, __global uint* dst, int w, int h)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+    float4 c = src[y*w + x];
+    float r = linear_to_srgb(c.x);
+    float g = linear_to_srgb(c.y);
+    float b = linear_to_srgb(c.z);
+    uint ri = (uint)(clamp(r, 0.0f, 1.0f) * 255.0f + 0.5f);
+    uint gi = (uint)(clamp(g, 0.0f, 1.0f) * 255.0f + 0.5f);
+    uint bi = (uint)(clamp(b, 0.0f, 1.0f) * 255.0f + 0.5f);
+    dst[y*w + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
 }
 )CL";
 
@@ -132,29 +198,37 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         const float cropX1 = cropX0 + regionW;
         const float cropY1 = cropY0 + regionH;
 
-        // Reallocate preview-sized work/aux buffers when dimensions change.
+        // Reallocate preview-sized work/aux/packed buffers when dimensions change.
         if (m_previewW != previewW || m_previewH != previewH) {
-            const size_t previewBytes = static_cast<size_t>(previewW) * previewH * 4;
-            m_workBuf  = cl::Buffer(m_context, CL_MEM_READ_WRITE, previewBytes);
-            m_auxBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE, previewBytes);
-            m_previewW = previewW;
-            m_previewH = previewH;
+            const size_t f4Bytes     = static_cast<size_t>(previewW) * previewH * sizeof(cl_float4);
+            const size_t packedBytes = static_cast<size_t>(previewW) * previewH * sizeof(cl_uint);
+            m_workBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
+            m_auxBuf    = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
+            m_packedBuf = cl::Buffer(m_context, CL_MEM_READ_WRITE, packedBytes);
+            m_previewW  = previewW;
+            m_previewH  = previewH;
         }
 
-        // Step 1: Downsample srcBuf → workBuf (preview-sized RGB32).
-        cl::Kernel& dsKernel = m_is16bit ? m_downsampleKernel16 : m_downsampleKernel8;
-        dsKernel.setArg(0, m_srcBuf);
-        dsKernel.setArg(1, m_workBuf);
-        dsKernel.setArg(2, m_width);
-        dsKernel.setArg(3, m_height);
-        dsKernel.setArg(4, m_stride);
-        dsKernel.setArg(5, previewW);
-        dsKernel.setArg(6, previewH);
-        dsKernel.setArg(7, cropX0);
-        dsKernel.setArg(8, cropY0);
-        dsKernel.setArg(9, cropX1);
-        dsKernel.setArg(10, cropY1);
-        m_queue.enqueueNDRangeKernel(dsKernel, cl::NullRange,
+        // Step 1: Downsample srcBuf → workBuf (preview-sized float4 linear).
+        cl::Kernel* dsKernel = nullptr;
+        if (m_is16bit)
+            dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear
+                                       : &m_downsampleKernel16Srgb;
+        else
+            dsKernel = &m_downsampleKernel8Srgb;
+
+        dsKernel->setArg(0, m_srcBuf);
+        dsKernel->setArg(1, m_workBuf);
+        dsKernel->setArg(2, m_width);
+        dsKernel->setArg(3, m_height);
+        dsKernel->setArg(4, m_stride);
+        dsKernel->setArg(5, previewW);
+        dsKernel->setArg(6, previewH);
+        dsKernel->setArg(7, cropX0);
+        dsKernel->setArg(8, cropY0);
+        dsKernel->setArg(9, cropX1);
+        dsKernel->setArg(10, cropY1);
+        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange,
                                      cl::NDRange(previewW, previewH));
         m_queue.finish();
         const qint64 t1 = t.nsecsElapsed();
@@ -165,7 +239,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         // regardless of zoom level.
         const float srcPixelsPerPreviewPixel = regionW / static_cast<float>(previewW);
 
-        // Step 2: Run all effects on the preview-sized RGB32 workBuf.
+        // Step 2: Run all effects on the preview-sized float4 linear workBuf.
         for (const auto& call : calls) {
             auto* g = dynamic_cast<IGpuEffect*>(call.effect);
             QMap<QString, QVariant> scaledParams = call.params;
@@ -174,8 +248,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             scaledParams.insert("_cropX0", static_cast<double>(cropX0));
             scaledParams.insert("_cropY0", static_cast<double>(cropY0));
             if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
-                               previewW, previewH, previewW,
-                               /*is16bit=*/false, scaledParams)) {
+                               previewW, previewH, scaledParams)) {
                 qWarning() << "[GpuPipeline]" << call.effect->getName()
                            << "enqueueGpu() failed — aborting pipeline";
                 return {};
@@ -184,19 +257,27 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         m_queue.finish();
         const qint64 t2 = t.nsecsElapsed();
 
-        // Step 3: Read workBuf back to CPU as RGB32.
+        // Step 3: Pack float4 linear workBuf → uint sRGB packedBuf, then read back.
+        m_packKernel.setArg(0, m_workBuf);
+        m_packKernel.setArg(1, m_packedBuf);
+        m_packKernel.setArg(2, previewW);
+        m_packKernel.setArg(3, previewH);
+        m_queue.enqueueNDRangeKernel(m_packKernel, cl::NullRange,
+                                     cl::NDRange(previewW, previewH));
+
         QImage result(previewW, previewH, QImage::Format_RGB32);
-        m_queue.enqueueReadBuffer(m_workBuf, CL_TRUE, 0,
-                                  static_cast<size_t>(previewW) * previewH * 4,
+        m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0,
+                                  static_cast<size_t>(previewW) * previewH * sizeof(cl_uint),
                                   result.bits());
         const qint64 t3 = t.nsecsElapsed();
 
         qDebug() << "[GpuPipeline]"
                  << "downsample:" << (t1 + 500) / 1000 << "µs"
                  << " effects:"   << (t2 - t1 + 500) / 1000 << "µs"
-                 << " readback:"  << (t3 - t2 + 500) / 1000 << "µs"
+                 << " pack+read:" << (t3 - t2 + 500) / 1000 << "µs"
                  << " total:"     << (t3 + 500) / 1000 << "µs"
-                 << " preview:"   << previewW << "x" << previewH;
+                 << " preview:"   << previewW << "x" << previewH
+                 << (m_inputIsLinear ? "(linear src)" : "(sRGB src)");
         return result;
 
     }
@@ -248,10 +329,12 @@ bool GpuPipeline::initContext() {
 
 bool GpuPipeline::initDownsampleKernels() {
     try {
-        cl::Program prog(m_context, DOWNSAMPLE_KERNEL_SOURCE);
+        cl::Program prog(m_context, PIPELINE_KERNEL_SOURCE);
         prog.build({m_device});
-        m_downsampleKernel8  = cl::Kernel(prog, "preview_downsample_8bit_rgb32");
-        m_downsampleKernel16 = cl::Kernel(prog, "preview_downsample_16bit_rgb32");
+        m_downsampleKernel8Srgb     = cl::Kernel(prog, "preview_downsample_8bit_srgb_to_linear");
+        m_downsampleKernel16Srgb    = cl::Kernel(prog, "preview_downsample_16bit_srgb_to_linear");
+        m_downsampleKernel16Linear  = cl::Kernel(prog, "preview_downsample_16bit_linear");
+        m_packKernel                = cl::Kernel(prog, "pack_linear_to_srgb_rgb32");
         return true;
     }
     // GCOVR_EXCL_START
@@ -259,7 +342,7 @@ bool GpuPipeline::initDownsampleKernels() {
         qWarning() << "[GpuPipeline] initDownsampleKernels failed:" << e.what()
                    << "(err" << e.err() << ")";
         try {
-            cl::Program prog(m_context, DOWNSAMPLE_KERNEL_SOURCE);
+            cl::Program prog(m_context, PIPELINE_KERNEL_SOURCE);
             std::string log = prog.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
             qWarning() << "Build log:" << QString::fromStdString(log);
         } catch (...) {}
@@ -279,6 +362,10 @@ void GpuPipeline::uploadImageLocked(const QImage& image) {
     m_stride   = src.bytesPerLine() / bpp;
     m_bufBytes = static_cast<size_t>(src.bytesPerLine()) * m_height;
     m_is16bit  = is16bit;
+    // RawLoader tags linear 16-bit inputs; any other QImage (JPEG/PNG/convertTo)
+    // is sRGB-gamma encoded.  Read tag from the original image, not the converted
+    // copy, to survive the convertToFormat round-trip.
+    m_inputIsLinear = (image.text("color_space") == QStringLiteral("linear"));
 
     m_previewW = 0;
     m_previewH = 0;
@@ -293,6 +380,7 @@ void GpuPipeline::uploadImageLocked(const QImage& image) {
 
         qDebug() << "[GpuPipeline] uploaded" << m_width << "x" << m_height
                  << (m_is16bit ? "16-bit" : "8-bit")
+                 << (m_inputIsLinear ? "linear" : "sRGB")
                  << "bufBytes" << m_bufBytes
                  << "in" << (t.nsecsElapsed() + 500) / 1000 << "µs";
 

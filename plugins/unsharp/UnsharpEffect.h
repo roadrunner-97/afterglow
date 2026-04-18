@@ -25,7 +25,7 @@ public:
     bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
     bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
-                    int w, int h, int stride, bool is16bit,
+                    int w, int h,
                     const QMap<QString, QVariant>& params) override;
 
 private:
@@ -35,12 +35,10 @@ private:
     ParamSlider* thresholdParam;// 0 – 20:   minimum channel diff to sharpen
 
     cl::Context m_pipelineCtx;  // saved in initGpuKernels for temp buffer allocation
-    cl::Kernel  m_kernelH;
-    cl::Kernel  m_kernelV;
-    cl::Kernel  m_kernelUnsharp;
-    cl::Kernel  m_kernelH16;
-    cl::Kernel  m_kernelV16;
-    cl::Kernel  m_kernelUnsharp16;
+    // Pipeline (float4 linear) kernels.
+    cl::Kernel  m_kernelBlurHLinear;
+    cl::Kernel  m_kernelBlurVLinear;
+    cl::Kernel  m_kernelUnsharpLinear;
 };
 
 #endif // UNSHARPEFFECT_H

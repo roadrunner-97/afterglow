@@ -26,7 +26,7 @@ public:
     bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
     bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
-                    int w, int h, int stride, bool is16bit,
+                    int w, int h,
                     const QMap<QString, QVariant>& params) override;
 
 private:
@@ -36,14 +36,11 @@ private:
     ParamSlider* m_colorNoiseParam;     // 0–100: chroma smoothing
 
     cl::Context m_pipelineCtx;  // saved in initGpuKernels for temp buffer allocation
-    cl::Kernel  m_kernelBlurH;
-    cl::Kernel  m_kernelBlurV;
-    cl::Kernel  m_kernelDenoiseBlend;
-    cl::Kernel  m_kernelColorNoiseBlend;
-    cl::Kernel  m_kernelBlurH16;
-    cl::Kernel  m_kernelBlurV16;
-    cl::Kernel  m_kernelDenoiseBlend16;
-    cl::Kernel  m_kernelColorNoiseBlend16;
+    // Pipeline (float4 linear) kernels.
+    cl::Kernel  m_kernelBlurHLinear;
+    cl::Kernel  m_kernelBlurVLinear;
+    cl::Kernel  m_kernelDenoiseBlendLinear;
+    cl::Kernel  m_kernelColorNoiseBlendLinear;
 };
 
 #endif // DENOISEEFFECT_H

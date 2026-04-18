@@ -1,5 +1,6 @@
 #include "WhiteBalanceEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
 #include <cmath>
@@ -264,15 +265,40 @@ static QImage processImageGPU16(const QImage& image,
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
+// The Kang-derived multipliers are already in linear sRGB primaries, so the
+// linear-light kernel is a plain per-channel multiply — no gamma decode/encode
+// ceremony.  Don't clamp outputs; the final pack kernel clamps once.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+__kernel void applyWBLinear(__global float4* pixels,
+                             int   w,
+                             int   h,
+                             float rMul,
+                             float gMul,
+                             float bMul)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 px = pixels[y * w + x];
+    pixels[y * w + x] = (float4)(px.x * rMul,
+                                 px.y * gMul,
+                                 px.z * bMul,
+                                 1.0f);
+}
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool WhiteBalanceEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernel   = cl::Kernel(prog, "applyWB");
-        m_kernel16 = cl::Kernel(prog, "applyWB16");
+        m_kernelLinear = cl::Kernel(prog, "applyWBLinear");
         return true;
     }
     // GCOVR_EXCL_START
@@ -286,25 +312,26 @@ bool WhiteBalanceEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool WhiteBalanceEffect::enqueueGpu(cl::CommandQueue& queue,
                                     cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                    int w, int h, int stride, bool is16bit,
-                                    const QMap<QString, QVariant>& params)
-{
-    const float shotK   = static_cast<float>(params.value("shot_temp",   5500.0).toDouble());
-    const float targetK = static_cast<float>(params.value("temperature", 5500.0).toDouble());
-    const float tint    = static_cast<float>(params.value("tint",        0.0).toDouble());
+                                    int w, int h,
+                                    const QMap<QString, QVariant>& params) {
+    const float shotK   = float(params.value("shot_temp",   5500.0).toDouble());
+    const float targetK = float(params.value("temperature", 5500.0).toDouble());
+    const float tint    = float(params.value("tint",        0.0).toDouble());
+
+    // No-op shortcut: same source/target temp and zero tint → all muls are 1.
+    if (shotK == targetK && tint == 0.0f) return true;
 
     float rMul, gMul, bMul;
     computeWBMuls(shotK, targetK, tint, rMul, gMul, bMul);
 
-    cl::Kernel& k = is16bit ? m_kernel16 : m_kernel;
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    k.setArg(4, rMul);
-    k.setArg(5, gMul);
-    k.setArg(6, bMul);
-    queue.enqueueNDRangeKernel(k, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, rMul);
+    m_kernelLinear.setArg(4, gMul);
+    m_kernelLinear.setArg(5, bMul);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 

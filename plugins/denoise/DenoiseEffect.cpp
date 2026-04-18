@@ -1,7 +1,9 @@
 #include "DenoiseEffect.h"
 #include "ParamSlider.h"
+#include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <mutex>
 
 // ============================================================================
@@ -394,22 +396,97 @@ static QImage processImageGPU16(const QImage& image,
 } // namespace
 
 // ============================================================================
+// Pipeline kernel — float4 linear sRGB.
+//
+// Two phases, identical in shape to the sRGB test path but in linear light:
+//
+//   Phase 1 (luma denoise):
+//     H blur(buf→aux), V blur(aux→tempBuf), denoiseBlend(orig=buf,
+//     blurred=tempBuf → aux), copy(aux→buf).
+//     Shadow-protection mask uses sRGB-encoded luminance so its dark-vs-light
+//     behaviour matches the test path's 0.299/0.587/0.114-in-sRGB weighting.
+//
+//   Phase 2 (colour noise):
+//     H blur(buf→aux), V blur(aux→tempBuf), colorNoiseBlend(current=buf,
+//     smoothed=tempBuf → aux), copy(aux→buf).
+//     We keep linear luma exactly from the current pixel and blend
+//     (Cb, Cr) toward the smoothed reference using BT.601 in linear.
+// ============================================================================
+static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
+
+// Phase 1: blend original -> blurred, with shadow-based attenuation.
+__kernel void denoiseBlendLinear(__global const float4* original,
+                                  __global const float4* blurred,
+                                  __global       float4* output,
+                                  int w, int h,
+                                  float strength, float shadowPreserve)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 o = original[y * w + x];
+    float4 b = blurred [y * w + x];
+
+    // Shadow mask evaluated on sRGB-encoded luminance so "dark pixel"
+    // means what it means perceptually (matches the test path).
+    float L_linear = linear_luma(o);
+    float L_srgb   = linear_to_srgb(L_linear);
+    float blend = strength * (1.0f - shadowPreserve * (1.0f - L_srgb));
+    blend = clamp(blend, 0.0f, 1.0f);
+
+    float r  = o.x + blend * (b.x - o.x);
+    float g  = o.y + blend * (b.y - o.y);
+    float bl = o.z + blend * (b.z - o.z);
+    output[y * w + x] = (float4)(r, g, bl, 1.0f);
+}
+
+// Phase 2: keep luma from `current`; blend Cb/Cr toward `smoothed`.
+// BT.601 in linear RGB — the exact primaries matter less than round-tripping.
+__kernel void colorNoiseBlendLinear(__global const float4* current,
+                                     __global const float4* smoothed,
+                                     __global       float4* output,
+                                     int w, int h,
+                                     float colorNoise)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 c = current [y * w + x];
+    float4 s = smoothed[y * w + x];
+
+    // BT.601 RGB -> YCbCr (centred at 0 for Cb/Cr; keep math in float).
+    float Y   =  0.299f * c.x + 0.587f * c.y + 0.114f * c.z;
+    float Cb  = -0.169f * c.x - 0.331f * c.y + 0.500f * c.z;
+    float Cr  =  0.500f * c.x - 0.419f * c.y - 0.081f * c.z;
+
+    float sCb = -0.169f * s.x - 0.331f * s.y + 0.500f * s.z;
+    float sCr =  0.500f * s.x - 0.419f * s.y - 0.081f * s.z;
+
+    float rCb = Cb + colorNoise * (sCb - Cb);
+    float rCr = Cr + colorNoise * (sCr - Cr);
+
+    // YCbCr -> RGB (inverse BT.601)
+    float r  = Y + 1.402f  * rCr;
+    float g  = Y - 0.344f  * rCb - 0.714f * rCr;
+    float bl = Y + 1.772f  * rCb;
+    output[y * w + x] = (float4)(r, g, bl, 1.0f);
+}
+
+)CL";
+
+// ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
 bool DenoiseEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
-        cl::Program prog(ctx, GPU_KERNEL_SOURCE);
+        cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernelBlurH             = cl::Kernel(prog, "blurH");
-        m_kernelBlurV             = cl::Kernel(prog, "blurV");
-        m_kernelDenoiseBlend      = cl::Kernel(prog, "denoiseBlend");
-        m_kernelColorNoiseBlend   = cl::Kernel(prog, "colorNoiseBlend");
-        m_kernelBlurH16           = cl::Kernel(prog, "blurH16");
-        m_kernelBlurV16           = cl::Kernel(prog, "blurV16");
-        m_kernelDenoiseBlend16    = cl::Kernel(prog, "denoiseBlend16");
-        m_kernelColorNoiseBlend16 = cl::Kernel(prog, "colorNoiseBlend16");
-        m_pipelineCtx             = ctx;
+        m_kernelBlurHLinear           = cl::Kernel(prog, "blurHLinear");
+        m_kernelBlurVLinear           = cl::Kernel(prog, "blurVLinear");
+        m_kernelDenoiseBlendLinear    = cl::Kernel(prog, "denoiseBlendLinear");
+        m_kernelColorNoiseBlendLinear = cl::Kernel(prog, "colorNoiseBlendLinear");
+        m_pipelineCtx                 = ctx;
         return true;
     }
     // GCOVR_EXCL_START
@@ -423,75 +500,93 @@ bool DenoiseEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
 
 bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
                                 cl::Buffer& buf, cl::Buffer& aux,
-                                int w, int h, int stride, bool is16bit,
-                                const QMap<QString, QVariant>& params)
-{
+                                int w, int h,
+                                const QMap<QString, QVariant>& params) {
     const float strength       = params.value("strength",       30).toInt() / 100.0f;
     const float shadowPreserve = params.value("shadowPreserve", 50).toInt() / 100.0f;
     const float colorNoise     = params.value("colorNoise",     50).toInt() / 100.0f;
 
     if (strength == 0.0f && colorNoise == 0.0f) return true;
 
-    // Scale radii from source-image pixels to preview pixels.
-    const double srcPPP    = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    int lumRadius    = static_cast<int>(strength   * 5.0f / srcPPP + 0.5f);
-    int chromaRadius = static_cast<int>(colorNoise * 10.0f / srcPPP + 0.5f);
-    if (lumRadius    < 1) lumRadius    = 1;
-    if (chromaRadius < 2) chromaRadius = 2;
+    // Scale the (source-pixel) radii to preview pixels.  The base formula
+    // matches the test path (5 * strength, 10 * colorNoise source pixels).
+    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    const double invScale = 1.0 / std::max(scale, 1e-6);
+    int lumRadiusSrc    = static_cast<int>(strength   * 5.0f + 0.5f);
+    int chromaRadiusSrc = static_cast<int>(colorNoise * 10.0f + 0.5f);
+    if (lumRadiusSrc    < 1) lumRadiusSrc    = 1;
+    if (chromaRadiusSrc < 2) chromaRadiusSrc = 2;
+    int lumRadius    = std::max(1, static_cast<int>(lumRadiusSrc    * invScale + 0.5));
+    int chromaRadius = std::max(2, static_cast<int>(chromaRadiusSrc * invScale + 0.5));
 
-    const size_t bytesPerPixel = is16bit ? 8 : 4;
-    const size_t bufBytes      = static_cast<size_t>(stride) * bytesPerPixel * h;
-
-    // Extra scratch buffer; only GPU memory, no host copy.
-    cl::Buffer blurBuf(m_pipelineCtx, CL_MEM_READ_WRITE, bufBytes);
-
+    const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    cl::Buffer tempBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
     const cl::NDRange global(w, h);
-
-    cl::Kernel& kH   = is16bit ? m_kernelBlurH16           : m_kernelBlurH;
-    cl::Kernel& kV   = is16bit ? m_kernelBlurV16           : m_kernelBlurV;
-    cl::Kernel& kDen = is16bit ? m_kernelDenoiseBlend16    : m_kernelDenoiseBlend;
-    cl::Kernel& kCol = is16bit ? m_kernelColorNoiseBlend16 : m_kernelColorNoiseBlend;
 
     // Phase 1: luma denoising
     if (strength > 0.0f) {
-        // H blur: buf → aux
-        kH.setArg(0, buf); kH.setArg(1, aux);
-        kH.setArg(2, stride); kH.setArg(3, w); kH.setArg(4, h); kH.setArg(5, lumRadius);
-        queue.enqueueNDRangeKernel(kH, cl::NullRange, global, cl::NullRange);
+        // H: buf → aux
+        m_kernelBlurHLinear.setArg(0, buf);
+        m_kernelBlurHLinear.setArg(1, aux);
+        m_kernelBlurHLinear.setArg(2, w);
+        m_kernelBlurHLinear.setArg(3, h);
+        m_kernelBlurHLinear.setArg(4, lumRadius);
+        m_kernelBlurHLinear.setArg(5, 1);
+        queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-        // V blur: aux → blurBuf
-        kV.setArg(0, aux); kV.setArg(1, blurBuf);
-        kV.setArg(2, stride); kV.setArg(3, w); kV.setArg(4, h); kV.setArg(5, lumRadius);
-        queue.enqueueNDRangeKernel(kV, cl::NullRange, global, cl::NullRange);
+        // V: aux → tempBuf
+        m_kernelBlurVLinear.setArg(0, aux);
+        m_kernelBlurVLinear.setArg(1, tempBuf);
+        m_kernelBlurVLinear.setArg(2, w);
+        m_kernelBlurVLinear.setArg(3, h);
+        m_kernelBlurVLinear.setArg(4, lumRadius);
+        m_kernelBlurVLinear.setArg(5, 1);
+        queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-        // Blend: (original=buf, blurred=blurBuf) → aux
-        kDen.setArg(0, buf); kDen.setArg(1, blurBuf); kDen.setArg(2, aux);
-        kDen.setArg(3, stride); kDen.setArg(4, w); kDen.setArg(5, h);
-        kDen.setArg(6, strength); kDen.setArg(7, shadowPreserve);
-        queue.enqueueNDRangeKernel(kDen, cl::NullRange, global, cl::NullRange);
+        // Blend: (original=buf, blurred=tempBuf) → aux
+        m_kernelDenoiseBlendLinear.setArg(0, buf);
+        m_kernelDenoiseBlendLinear.setArg(1, tempBuf);
+        m_kernelDenoiseBlendLinear.setArg(2, aux);
+        m_kernelDenoiseBlendLinear.setArg(3, w);
+        m_kernelDenoiseBlendLinear.setArg(4, h);
+        m_kernelDenoiseBlendLinear.setArg(5, strength);
+        m_kernelDenoiseBlendLinear.setArg(6, shadowPreserve);
+        queue.enqueueNDRangeKernel(m_kernelDenoiseBlendLinear, cl::NullRange, global, cl::NullRange);
 
-        queue.enqueueCopyBuffer(aux, buf, 0, 0, bufBytes); // buf = luma denoised
+        // Fold denoised result back into buf so Phase 2 sees the updated image.
+        queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
     }
 
-    // Phase 2: colour noise reduction
+    // Phase 2: chroma smoothing
     if (colorNoise > 0.0f) {
-        // H blur (wide): buf → aux
-        kH.setArg(0, buf); kH.setArg(1, aux);
-        kH.setArg(2, stride); kH.setArg(3, w); kH.setArg(4, h); kH.setArg(5, chromaRadius);
-        queue.enqueueNDRangeKernel(kH, cl::NullRange, global, cl::NullRange);
+        // H: buf → aux
+        m_kernelBlurHLinear.setArg(0, buf);
+        m_kernelBlurHLinear.setArg(1, aux);
+        m_kernelBlurHLinear.setArg(2, w);
+        m_kernelBlurHLinear.setArg(3, h);
+        m_kernelBlurHLinear.setArg(4, chromaRadius);
+        m_kernelBlurHLinear.setArg(5, 1);
+        queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-        // V blur: aux → blurBuf
-        kV.setArg(0, aux); kV.setArg(1, blurBuf);
-        kV.setArg(2, stride); kV.setArg(3, w); kV.setArg(4, h); kV.setArg(5, chromaRadius);
-        queue.enqueueNDRangeKernel(kV, cl::NullRange, global, cl::NullRange);
+        // V: aux → tempBuf
+        m_kernelBlurVLinear.setArg(0, aux);
+        m_kernelBlurVLinear.setArg(1, tempBuf);
+        m_kernelBlurVLinear.setArg(2, w);
+        m_kernelBlurVLinear.setArg(3, h);
+        m_kernelBlurVLinear.setArg(4, chromaRadius);
+        m_kernelBlurVLinear.setArg(5, 1);
+        queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-        // Chroma merge: (current=buf, smoothed=blurBuf) → aux
-        kCol.setArg(0, buf); kCol.setArg(1, blurBuf); kCol.setArg(2, aux);
-        kCol.setArg(3, stride); kCol.setArg(4, w); kCol.setArg(5, h);
-        kCol.setArg(6, colorNoise);
-        queue.enqueueNDRangeKernel(kCol, cl::NullRange, global, cl::NullRange);
+        // Chroma merge: (current=buf, smoothed=tempBuf) → aux
+        m_kernelColorNoiseBlendLinear.setArg(0, buf);
+        m_kernelColorNoiseBlendLinear.setArg(1, tempBuf);
+        m_kernelColorNoiseBlendLinear.setArg(2, aux);
+        m_kernelColorNoiseBlendLinear.setArg(3, w);
+        m_kernelColorNoiseBlendLinear.setArg(4, h);
+        m_kernelColorNoiseBlendLinear.setArg(5, colorNoise);
+        queue.enqueueNDRangeKernel(m_kernelColorNoiseBlendLinear, cl::NullRange, global, cl::NullRange);
 
-        queue.enqueueCopyBuffer(aux, buf, 0, 0, bufBytes); // buf = final
+        queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
     }
 
     return true;
