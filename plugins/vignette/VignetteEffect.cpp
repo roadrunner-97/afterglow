@@ -18,21 +18,23 @@
 
 namespace {
 
-// Distance metric: L^p norm on the image's aspect-normalised coordinates,
-// where p is derived from the roundness slider.  Higher p → the level curve
-// at d=1 approaches a rectangle (corners no longer darker than sides);
-// lower p → the level curve approaches a diamond (corners much farther, very
-// heavy corner darkening).  p=2 is the plain ellipse inscribed in the frame.
+// Distance metric: L^p norm on isotropic (pixel-space) coordinates — the
+// same scale (halfD = half the image diagonal) is used for both axes, so at
+// p=2 the level curves are true circles, matching a real lens's circular
+// image circle regardless of the frame's aspect ratio.  Higher p pushes the
+// shape toward an axis-aligned square; lower p toward an axis-aligned
+// diamond.
 //
 // In the UI:
 //   roundness = +100  →  p = 0.5  (very round/diamond, corners darkened heavily)
-//   roundness =    0  →  p = 2    (aspect-matching ellipse)
+//   roundness =    0  →  p = 2    (circle through the image corners)
 //   roundness = -100  →  p = 8    (rectangular, hugs the frame)
 //
 // cornerD is passed in so we can normalise d to [0..1] across the roundness
-// range — the host pre-computes cornerD = 2^(1/p), the d value at the corner
-// (|nx|=|ny|=1).  smoothstep from (midpoint-feather/2) to (midpoint+feather/2)
-// on that normalised distance gives the transition weight t; factor=1+amount*t
+// range — the host pre-computes cornerD as the d value at the image corner
+// (|nx|=halfW/halfD, |ny|=halfH/halfD), so dn=1 at the corner for any p.
+// smoothstep from (midpoint-feather/2) to (midpoint+feather/2) on that
+// normalised distance gives the transition weight t; factor=1+amount*t
 // multiplies RGB (amount<0 darkens corners, amount>0 lightens).
 static const char* GPU_KERNEL_SOURCE = R"CL(
 __kernel void applyVignette(__global uint* pixels,
@@ -145,7 +147,6 @@ struct VignetteArgs {
     float midpoint;  // 0..1
     float feather;   // 0..1
     float p;         // L^p exponent
-    float cornerD;   // 2^(1/p) — distance at (|nx|=1,|ny|=1)
 };
 
 static VignetteArgs makeArgs(int amount, int midpoint, int feather, int roundness) {
@@ -155,25 +156,35 @@ static VignetteArgs makeArgs(int amount, int midpoint, int feather, int roundnes
     a.feather  = feather  / 100.0f;
     float rn   = roundness / 100.0f;                 // [-1, 1]
     a.p        = std::exp2(1.0f - rn * 3.0f);        // roundness=0 → p=2
-    a.cornerD  = std::exp2(1.0f / a.p);              // L^p of (1,1) = 2^(1/p)
     return a;
 }
 
 static void setKernelArgs(cl::Kernel& k, cl::Buffer& buf,
                            int stride, int w, int h, const VignetteArgs& a) {
+    const float halfW = w * 0.5f;
+    const float halfH = h * 0.5f;
+    const float halfD = std::sqrt(halfW * halfW + halfH * halfH);
+    // Isotropic normalisation: feed halfD as the scale on BOTH axes so level
+    // curves are circles at p=2.  cornerD is the d value at the image corner
+    // (halfW/halfD, halfH/halfD), so dn=1 at the corner for any aspect & p.
+    const float nxCorner = halfW / halfD;
+    const float nyCorner = halfH / halfD;
+    const float cornerD  = std::pow(std::pow(nxCorner, a.p) +
+                                    std::pow(nyCorner, a.p), 1.0f / a.p);
+
     k.setArg(0, buf);
     k.setArg(1, stride);
     k.setArg(2, w);
     k.setArg(3, h);
-    k.setArg(4, w * 0.5f);
-    k.setArg(5, h * 0.5f);
-    k.setArg(6, w * 0.5f);
-    k.setArg(7, h * 0.5f);
+    k.setArg(4, halfW);
+    k.setArg(5, halfH);
+    k.setArg(6, halfD);
+    k.setArg(7, halfD);
     k.setArg(8, a.amount);
     k.setArg(9, a.midpoint);
     k.setArg(10, a.feather);
     k.setArg(11, a.p);
-    k.setArg(12, a.cornerD);
+    k.setArg(12, cornerD);
 }
 
 static QImage processImageGPU(const QImage& image, const VignetteArgs& a) {

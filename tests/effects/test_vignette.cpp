@@ -128,6 +128,60 @@ private slots:
                  qPrintable(QString("rectSide=%1 roundSide=%2").arg(rectSide).arg(roundSide)));
     }
 
+    // On a non-square image at roundness=0, the falloff is a circle through
+    // the corners (radius = half-diagonal) — NOT an ellipse inscribed in the
+    // frame.  Consequence on a 128x64 image: the long-edge midpoint sits at
+    // ~0.894 of the way to the corner, while the short-edge midpoint sits at
+    // only ~0.447.  With midpoint=80, feather=20 (falloff window 0.7..0.9),
+    // the long-edge midpoint is deep inside the falloff (fully darkened) and
+    // the short-edge midpoint is below edge0 (entirely untouched).  An
+    // inscribed-ellipse metric would put both at ~0.707 and darken them
+    // identically.
+    void nonSquare_roundnessZero_isCircularThroughCorners() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        VignetteEffect e;
+        QImage input = makeSolid(128, 64, 200, 200, 200);
+        QMap<QString, QVariant> params;
+        params["amount"]    = -100;
+        params["midpoint"]  = 80;
+        params["feather"]   = 20;
+        params["roundness"] = 0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+
+        int longEdgeMid  = pixelR(out,  0, 32);   // middle of left edge
+        int shortEdgeMid = pixelR(out, 64,  0);   // middle of top edge
+
+        QVERIFY2(longEdgeMid  < 20,  qPrintable(QString("longEdgeMid=%1").arg(longEdgeMid)));
+        QVERIFY2(shortEdgeMid > 190, qPrintable(QString("shortEdgeMid=%1").arg(shortEdgeMid)));
+    }
+
+    // On a non-square image at roundness=0, darkening depends only on the
+    // pixel-space distance from centre: two points at equal radius but on
+    // perpendicular axes (30 px left of centre, 30 px above centre) must
+    // receive matching darkening.  Under the previous aspect-normalised
+    // metric these points mapped to very different d values (0.332 vs 0.663)
+    // and darkened unequally.
+    void nonSquare_roundnessZero_isIsotropic() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        VignetteEffect e;
+        QImage input = makeSolid(128, 64, 200, 200, 200);
+        QMap<QString, QVariant> params;
+        params["amount"]    = -100;
+        params["midpoint"]  = 30;
+        params["feather"]   = 30;
+        params["roundness"] = 0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+
+        int alongLong  = pixelR(out, 34, 32);  // 30 px left of centre (64,32)
+        int alongShort = pixelR(out, 64,  2);  // 30 px above centre
+        int diff = std::abs(alongLong - alongShort);
+        QVERIFY2(diff < 5,
+                 qPrintable(QString("alongLong=%1 alongShort=%2 diff=%3")
+                            .arg(alongLong).arg(alongShort).arg(diff)));
+    }
+
     // 16-bit path: no crash and output is non-null when amount is non-zero.
     void darkening_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
