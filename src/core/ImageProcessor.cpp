@@ -83,3 +83,45 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
         ));
     }
 }
+
+void ImageProcessor::exportImageAsync(const QImage& originalImage,
+                                      const QVector<PhotoEditorEffect*>& effects) {
+    using EffectCall = QPair<PhotoEditorEffect*, QMap<QString, QVariant>>;
+    QVector<EffectCall> imageCalls;
+    QVector<GpuPipelineCall> gpuCalls;
+
+    bool allGpu = !effects.isEmpty();
+    for (PhotoEditorEffect* e : effects) {
+        QMap<QString, QVariant> params = e->getParameters();
+        imageCalls.append({e, params});
+        if (e->supportsGpuInPlace())
+            gpuCalls.append({e, params});
+        else
+            allGpu = false;
+    }
+
+    auto* watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcher<QImage>::finished, this,
+            [this, watcher]() {
+        emit exportComplete(watcher->result());
+        watcher->deleteLater();
+    });
+
+    if (allGpu) {
+        auto pipeline = m_pipeline;
+        watcher->setFuture(QtConcurrent::run(
+            [image = originalImage, calls = std::move(gpuCalls), pipeline]() -> QImage {
+                return pipeline->run(image, calls, {}, false);
+            }
+        ));
+    } else {
+        watcher->setFuture(QtConcurrent::run(
+            [image = originalImage, calls = std::move(imageCalls)]() -> QImage {
+                QImage result = image;
+                for (const auto& call : calls)
+                    result = call.first->processImage(result, call.second);
+                return result;
+            }
+        ));
+    }
+}

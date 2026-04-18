@@ -32,6 +32,8 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
             this, &PhotoEditorApp::onProcessingComplete);
     connect(m_processor, &ImageProcessor::processingStarted,
             this, &PhotoEditorApp::onProcessingStarted);
+    connect(m_processor, &ImageProcessor::exportComplete,
+            this, &PhotoEditorApp::onExportComplete);
 
     m_resizeDebounce->setSingleShot(true);
     m_resizeDebounce->setInterval(150);
@@ -317,12 +319,24 @@ void PhotoEditorApp::saveImage() {
 
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
+    m_pendingSavePath = fileName;
 
-    if (!m_viewport->currentImage().save(fileName)) {
+    QVector<PhotoEditorEffect*> active;
+    for (const auto& e : m_effects->entries())
+        if (e.enabled) active.append(e.effect);
+    m_processor->exportImageAsync(m_originalImage, active);
+}
+
+void PhotoEditorApp::onExportComplete(QImage result) {
+    if (m_pendingSavePath.isEmpty()) return;
+    const QString path = m_pendingSavePath;
+    m_pendingSavePath.clear();
+
+    if (result.isNull() || !result.save(path)) {
         QMessageBox::warning(this, "Save Failed",
             QString("Could not save image to:\n%1\n\n"
                     "Check that the directory is writable and you have sufficient disk space.")
-            .arg(fileName));
+            .arg(path));
     }
 }
 

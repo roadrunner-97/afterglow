@@ -30,6 +30,7 @@ private slots:
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result);
     void onProcessingStarted();
+    void onExportComplete(QImage result);
 
 private:
     void setupUI();
@@ -54,6 +55,7 @@ private:
     // processingComplete() delivers a non-null image.  While set, viewport
     // changes also trigger full reruns so pan/zoom never shows a stale frame.
     bool            m_pendingFullRun  = false;
+    QString         m_pendingSavePath;
 };
 
 #endif // PHOTOEDITORAPP_H

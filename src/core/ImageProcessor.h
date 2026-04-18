@@ -26,9 +26,13 @@ public:
                            ViewportRequest viewport = {},
                            bool viewportOnly = false);
 
+    void exportImageAsync(const QImage& originalImage,
+                          const QVector<PhotoEditorEffect*>& effects);
+
 signals:
     void processingStarted();
     void processingComplete(QImage result);
+    void exportComplete(QImage result);
 
 private:
     std::shared_ptr<std::atomic<uint64_t>> generationPtr =
