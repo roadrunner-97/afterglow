@@ -128,6 +128,34 @@ private slots:
         QCOMPARE(pixelR(out, 118, 32), 200);
     }
 
+    // Non-square (tall) image: unsharp mask chains a H then V blur with
+    // differing extents.  On a 64x128 top/bottom split, the dark side near
+    // the horizontal edge should be darkened by sharpening, the bright side
+    // brightened.  Output dimensions must match input.
+    void nonSquare_edgeSplit_sharpensAcrossHorizontalEdge() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        UnsharpEffect e;
+        // Top half dark (100), bottom half bright (200).
+        QImage input(64, 128, QImage::Format_RGB32);
+        for (int y = 0; y < 128; ++y) {
+            auto* row = reinterpret_cast<QRgb*>(input.scanLine(y));
+            for (int x = 0; x < 64; ++x)
+                row[x] = (y < 64) ? qRgb(100, 100, 100) : qRgb(200, 200, 200);
+        }
+        QMap<QString, QVariant> params;
+        params["amount"]    = 2.0;
+        params["radius"]    = 8;
+        params["threshold"] = 3;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  64);
+        QCOMPARE(out.height(), 128);
+        // 2 px above the edge (y=62) → dark side gets darker.
+        QVERIFY(pixelR(out, 32, 62) < 100);
+        // 2 px below the edge (y=66) → bright side gets brighter.
+        QVERIFY(pixelR(out, 32, 66) > 200);
+    }
+
     void meta_nonEmpty() {
         UnsharpEffect e;
         QVERIFY(!e.getName().isEmpty());

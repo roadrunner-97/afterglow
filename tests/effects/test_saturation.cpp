@@ -106,6 +106,25 @@ private slots:
         QVERIFY(gapOut > gapIn);
     }
 
+    // Non-square (wide) image: HSV saturation adjustment is per-pixel.
+    // Output dimensions must match input and a positive saturation bump
+    // must widen the R−G chroma gap.
+    void nonSquare_saturate_increasesChromaGap() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        SaturationEffect e;
+        QImage input = makeSolid(128, 64, 200, 100, 100);
+        QMap<QString, QVariant> params;
+        params["saturation"] = 20.0;
+        params["vibrancy"]   = 0.0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        int gapIn  = 200 - 100;
+        int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
+        QVERIFY(gapOut > gapIn);
+    }
+
     void meta_nonEmpty() {
         SaturationEffect e;
         QVERIFY(!e.getName().isEmpty());

@@ -114,6 +114,29 @@ private slots:
         QCOMPARE(pixelR(out, 16, 16), 255);
     }
 
+    // Non-square (wide) image with a spike at a non-centred location.  The
+    // neighbourhood kernel must index correctly into a non-square buffer:
+    // the spike should be replaced and a far-from-spike pixel must remain
+    // at the background value.  Output dimensions must match input.
+    void nonSquare_hotSpike_isReplaced() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        HotPixelEffect e;
+        const int bgVal = 64;
+        // Spike placed at (96, 32) — near the right half, far from centre.
+        QImage input = makeWithSpike(128, 64, bgVal, 96, 32);
+        QMap<QString, QVariant> params;
+        params["threshold"] = 30;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        int corrected = pixelR(out, 96, 32);
+        QVERIFY(corrected < 200);
+        QVERIFY(qAbs(corrected - bgVal) <= 5);
+        // Pixel in the left half, far from the spike, must stay at bgVal.
+        QCOMPARE(pixelR(out, 20, 32), bgVal);
+    }
+
     void meta_nonEmpty() {
         HotPixelEffect e;
         QVERIFY(!e.getName().isEmpty());

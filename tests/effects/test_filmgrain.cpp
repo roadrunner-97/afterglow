@@ -150,6 +150,26 @@ private slots:
         QCOMPARE(a, b);
     }
 
+    // Non-square (wide) image: grain noise is generated per-pixel with a
+    // stride-dependent index.  Dimensions must be preserved and most pixels
+    // of a solid midtone should be perturbed.
+    void nonSquare_nonZeroAmount_perturbsMidtone() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        FilmGrainEffect e;
+        QImage input = makeSolid(128, 64, 128, 128, 128);
+        QMap<QString, QVariant> params;
+        params["amount"]    = 50;
+        params["size"]      = 1;
+        params["lumWeight"] = false;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        int changed = differingPixels(out, qRgb(128, 128, 128));
+        QVERIFY2(changed > 128 * 64 * 0.9,
+                 qPrintable(QString("changed=%1").arg(changed)));
+    }
+
     // 16-bit path: no crash and output is non-null when amount is non-zero.
     void grain_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");

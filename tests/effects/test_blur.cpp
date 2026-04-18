@@ -119,6 +119,25 @@ private slots:
         QCOMPARE(params["radius"].toInt(),   0);
     }
 
+    // Non-square (wide) image: separable blur runs H pass then V pass on
+    // differing extents.  A solid-colour input must remain exactly solid and
+    // output dimensions must match input.
+    void nonSquare_solidColour_unchanged() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        BlurEffect e;
+        QImage input = makeSolid(128, 64, 100, 150, 200);
+        QMap<QString, QVariant> params;
+        params["radius"]   = 8;
+        params["blurType"] = 0;  // Gaussian
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        QVERIFY(allPixels(out, [](QRgb px) {
+            return qRed(px) == 100 && qGreen(px) == 150 && qBlue(px) == 200;
+        }));
+    }
+
     // Solid colour: blurring 16-bit should preserve value (averaging identical neighbours).
     void solidColour_gaussian_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");

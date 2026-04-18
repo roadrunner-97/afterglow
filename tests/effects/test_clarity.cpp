@@ -120,6 +120,31 @@ private slots:
         QVERIFY(pixelR(out, 66, 32) < 160);
     }
 
+    // Non-square (tall) image: clarity's internal blur is 2D (separable H+V
+    // with different extents).  On a 64x128 top/bottom midtone split, positive
+    // clarity must still increase local contrast across the horizontal edge.
+    void nonSquare_midtoneEdge_positiveClarity_increasesContrast() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        ClarityEffect e;
+        // Top half dark grey, bottom half lighter grey.
+        QImage input(64, 128, QImage::Format_RGB32);
+        for (int y = 0; y < 128; ++y) {
+            auto* row = reinterpret_cast<QRgb*>(input.scanLine(y));
+            for (int x = 0; x < 64; ++x)
+                row[x] = (y < 64) ? qRgb(100, 100, 100) : qRgb(160, 160, 160);
+        }
+        QMap<QString, QVariant> params;
+        params["amount"] = 100;
+        params["radius"] = 10;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  64);
+        QCOMPARE(out.height(), 128);
+        // 2 px above the edge (y=62) → dark side darker; 2 px below (y=66) → brighter.
+        QVERIFY(pixelR(out, 32, 62) < 100);
+        QVERIFY(pixelR(out, 32, 66) > 160);
+    }
+
     // 16-bit path: solid midtone stays unchanged (blur == orig).
     void solidMidtone_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");

@@ -123,6 +123,26 @@ private slots:
         }));
     }
 
+    // Non-square (wide) image: luminosity conversion runs per-pixel.  Output
+    // dimensions must match input and every pixel must be grey (R=G=B).
+    void nonSquare_active_convertsToGrey() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        GrayscaleEffect e;
+        QWidget* w  = e.createControlsWidget();
+        auto*    cb = w->findChild<QCheckBox*>();
+        QVERIFY(cb);
+        cb->setChecked(true);
+
+        QImage input = makeSolid(128, 64, 200, 100, 50);
+        QImage out   = e.processImage(input, {});
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        QVERIFY(allPixels(out, [](QRgb px) {
+            return qRed(px) == qGreen(px) && qGreen(px) == qBlue(px);
+        }));
+    }
+
     void supportsGpuInPlace_returnsTrue() {
         GrayscaleEffect e;
         QVERIFY(e.supportsGpuInPlace());

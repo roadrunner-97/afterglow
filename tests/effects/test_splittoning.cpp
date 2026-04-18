@@ -138,6 +138,30 @@ private slots:
                  qPrintable(QString("rShadow=%1 rHighlight=%2").arg(rShadow).arg(rHighlight)));
     }
 
+    // Non-square (tall) image: shadow tint is luminance-masked per-pixel.
+    // Output dimensions must match input and a blue shadow tint on a dark
+    // neutral must push the blue channel above red/green.
+    void nonSquare_shadowTint_biasesDarkPixels() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        SplitToningEffect e;
+        QImage input = makeSolid(64, 128, 60, 60, 60);
+        QMap<QString, QVariant> params;
+        params["shadowHue"]    = 240;  // blue
+        params["shadowSat"]    = 100;
+        params["highlightHue"] = 0;
+        params["highlightSat"] = 0;
+        params["balance"]      = 0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  64);
+        QCOMPARE(out.height(), 128);
+        int r = pixelR(out, 32, 64);
+        int g = pixelG(out, 32, 64);
+        int b = pixelB(out, 32, 64);
+        QVERIFY2(b > r && b > g,
+                 qPrintable(QString("r=%1 g=%2 b=%3").arg(r).arg(g).arg(b)));
+    }
+
     // 16-bit path: non-null output when a tint is active.
     void tint_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");

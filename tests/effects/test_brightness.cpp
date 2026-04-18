@@ -134,6 +134,22 @@ private slots:
         QVERIFY(pixelR(brightOut, 0, 0) < 200);
     }
 
+    // Non-square (wide) image: brightness kernel is a per-pixel op but must
+    // still preserve input dimensions and process every pixel correctly.
+    void nonSquare_brightnessUp_brightensAllPixels() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        BrightnessEffect e;
+        QImage input = makeSolid(128, 64, 128, 128, 128);
+        QMap<QString, QVariant> params;
+        params["brightness"] = 50;
+        params["contrast"]   = 0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 128; }));
+    }
+
     void meta_nonEmpty() {
         BrightnessEffect e;
         QVERIFY(!e.getName().isEmpty());

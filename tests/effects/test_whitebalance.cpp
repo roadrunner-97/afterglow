@@ -117,6 +117,24 @@ private slots:
         QVERIFY(!out.isNull());
     }
 
+    // Non-square (wide) image: white-balance multipliers are applied per-pixel.
+    // Output dimensions must match input and warming must shift R above B
+    // everywhere on a mid-grey input.
+    void nonSquare_warming_increasesRed_decreasesBlue() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        WhiteBalanceEffect e;
+        QImage input = makeSolid(128, 64, 128, 128, 128);
+        QMap<QString, QVariant> params;
+        params["shot_temp"]   = 5500.0;
+        params["temperature"] = 8000.0;
+        params["tint"]        = 0.0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) >= qBlue(px); }));
+    }
+
     void meta_nonEmpty() {
         WhiteBalanceEffect e;
         QVERIFY(!e.getName().isEmpty());

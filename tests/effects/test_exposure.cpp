@@ -136,6 +136,22 @@ private slots:
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 20; }));
     }
 
+    // Non-square (wide) image: zone-based exposure is a per-pixel op in linear
+    // light.  Output must preserve dimensions and positive global EV must
+    // brighten every pixel on a mid-grey input.
+    void nonSquare_positiveExposure_brightens() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        ExposureEffect e;
+        QImage input = makeSolid(128, 64, 100, 100, 100);
+        auto params  = zeroParams();
+        params["exposure"] = 2.0;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 100; }));
+    }
+
     void meta_nonEmpty() {
         ExposureEffect e;
         QVERIFY(!e.getName().isEmpty());

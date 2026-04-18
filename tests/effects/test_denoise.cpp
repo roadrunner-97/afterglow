@@ -91,6 +91,25 @@ private slots:
         }));
     }
 
+    // Non-square (wide) image: denoise runs a 2D neighbourhood pass.  A
+    // uniform input must remain uniform and preserve dimensions.
+    void nonSquare_solidColour_unchanged() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        DenoiseEffect e;
+        QImage input = makeSolid(128, 64, 128, 100, 80);
+        QMap<QString, QVariant> params;
+        params["strength"]       = 50;
+        params["shadowPreserve"] = 30;
+        params["colorNoise"]     = 50;
+        QImage out = e.processImage(input, params);
+        QVERIFY(!out.isNull());
+        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.height(), 64);
+        QVERIFY(allPixels(out, [](QRgb px) {
+            return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3;
+        }));
+    }
+
     // 16-bit path: solid colour with non-zero params stays unchanged.
     void solidColour_16bit_denoiseUnchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
