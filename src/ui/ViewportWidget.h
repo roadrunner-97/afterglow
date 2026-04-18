@@ -37,9 +37,6 @@ public:
     // Build the ViewportRequest to hand to ImageProcessor.
     ViewportRequest viewportRequest() const;
 
-    // The last image uploaded via setImage() (used by save).
-    QImage currentImage() const { return m_lastImage; }
-
 signals:
     void viewportChanged();
 
@@ -64,9 +61,6 @@ private:
     QOpenGLBuffer             m_vbo{QOpenGLBuffer::VertexBuffer};
     QOpenGLShaderProgram*     m_shader    = nullptr;
     bool                  m_hasContent = false;
-
-    // CPU image — kept for File→Save
-    QImage m_lastImage;
 
     // Pan/zoom state
     QSize   m_imageSize;

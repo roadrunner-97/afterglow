@@ -129,8 +129,6 @@ void ViewportWidget::setImageSize(QSize size) {
 void ViewportWidget::setImage(QImage image) {
     if (image.isNull()) return;
 
-    m_lastImage = image;
-
     // Upload CPU image to GL texture on the GL thread (we're on the main thread here).
     makeCurrent();
     QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
