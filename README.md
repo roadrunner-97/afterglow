@@ -81,6 +81,10 @@ See `CLAUDE.md` for conventions (pixel access via `scanLine()`, `ParamSlider` us
 
 `GpuDeviceRegistry` enumerates OpenCL devices at startup. The top-right combo box in the main window switches devices; `setDevice(idx)` bumps a revision counter so every per-effect `GpuContext` reinitialises on its next call.
 
+## TODO
+
+- [ ] **CMake `install` target** — no `install()` rules exist today, so `cmake --install build` is a no-op and there's no way to package or system-install the binary. Needs rules for `lightroom_clone` (→ `bin/`), the three shared libs (→ `lib/`), and an RPATH / `CMAKE_INSTALL_RPATH` setup so the installed binary finds `libphotoeditor_*.so`. Test with `cmake --install build --prefix /tmp/lc && /tmp/lc/bin/lightroom_clone`.
+
 ## Known limitations
 
 - OpenCL is a hard build requirement — no CPU fallback exists; if the GPU fails, `processImage` returns an empty image.
