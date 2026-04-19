@@ -1,4 +1,6 @@
 .cache
 *.md
 build
+build-coverage
 .vscode
+.claude
