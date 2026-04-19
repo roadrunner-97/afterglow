@@ -408,8 +408,8 @@ private slots:
         QVERIFY(out.isNull());
     }
 
-    // viewportOnly=true after a full run: skips the effect chain, re-downsamples only.
-    void viewportOnly_reusesLastFrame() {
+    // PanZoom mode after a Commit: reuses the cached full-res frame, skips effect kernels.
+    void panZoom_reusesCachedFrame() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
         p["brightness"] = 10;
@@ -417,12 +417,12 @@ private slots:
         QImage input = makeSolid(64, 64, 128, 128, 128);
         ViewportRequest vp = fullViewport(input);
 
-        // Full run to populate the processed frame.
-        QImage out1 = m_pipeline.run(input, {{&m_brightness, p}}, vp);
+        // Commit run populates the full-res post-effect cache.
+        QImage out1 = m_pipeline.run(input, {{&m_brightness, p}}, vp, RunMode::Commit);
         QVERIFY(!out1.isNull());
 
-        // viewportOnly=true: reuses the processed frame, skips effect kernels.
-        QImage out2 = m_pipeline.run(input, {{&m_brightness, p}}, vp, /*viewportOnly=*/true);
+        // PanZoom run: reuses the cache, skips effect kernels.
+        QImage out2 = m_pipeline.run(input, {{&m_brightness, p}}, vp, RunMode::PanZoom);
         QVERIFY(!out2.isNull());
     }
 };

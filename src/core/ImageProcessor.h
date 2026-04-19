@@ -24,7 +24,7 @@ public:
     void processImageAsync(const QImage& originalImage,
                            const QVector<PhotoEditorEffect*>& effects,
                            ViewportRequest viewport = {},
-                           bool viewportOnly = false);
+                           RunMode mode = RunMode::Commit);
 
     void exportImageAsync(const QImage& originalImage,
                           const QVector<PhotoEditorEffect*>& effects);

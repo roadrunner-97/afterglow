@@ -12,7 +12,7 @@ ImageProcessor::ImageProcessor(QObject *parent)
 void ImageProcessor::processImageAsync(const QImage &originalImage,
                                        const QVector<PhotoEditorEffect*> &effects,
                                        ViewportRequest viewport,
-                                       bool viewportOnly) {
+                                       RunMode mode) {
     auto genPtr = generationPtr;
     uint64_t myGen = ++(*genPtr);
 
@@ -56,9 +56,9 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
         auto pipeline = m_pipeline;
         watcher->setFuture(QtConcurrent::run(
             [image = originalImage, calls = std::move(gpuCalls),
-             genPtr, myGen, pipeline, viewport, viewportOnly]() -> QImage {
+             genPtr, myGen, pipeline, viewport, mode]() -> QImage {
                 if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
-                return pipeline->run(image, calls, viewport, viewportOnly);
+                return pipeline->run(image, calls, viewport, mode);
             }
         ));
     } else {
@@ -111,7 +111,7 @@ void ImageProcessor::exportImageAsync(const QImage& originalImage,
         auto pipeline = m_pipeline;
         watcher->setFuture(QtConcurrent::run(
             [image = originalImage, calls = std::move(gpuCalls), pipeline]() -> QImage {
-                return pipeline->run(image, calls, {}, false);
+                return pipeline->run(image, calls, {}, RunMode::Commit);
             }
         ));
     } else {

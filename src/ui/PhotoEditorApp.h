@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QImage>
 #include <QTimer>
+#include <QElapsedTimer>
 #include "EffectManager.h"
 #include "ImageProcessor.h"
 #include "ViewportWidget.h"
@@ -38,8 +39,10 @@ private:
     void setupMenuBar();
     void setupGpuSelector(QVBoxLayout* rightLayout);
     void setupEffectPanels(QVBoxLayout* rightLayout);
-    void triggerReprocess();       // full pipeline run (effects + downsample)
-    void triggerViewportUpdate();  // viewport-only run (downsample only, no effects)
+    void triggerReprocess();        // Commit: rebuild full-res post-effect cache
+    void triggerLiveReprocess();    // LiveDrag: preview-sized pipeline, bypasses cache
+    void triggerViewportUpdate();   // PanZoom: throttled entry; coalesces mouseMove bursts
+    void dispatchViewportUpdate();  // actual PanZoom dispatch — fires from throttle
 
     EffectManager*  m_effects;
     ImageProcessor* m_processor;
@@ -51,10 +54,8 @@ private:
     QComboBox*      m_gpuSelector      = nullptr;
     QLabel*         m_processingLabel  = nullptr;
     QTimer*         m_resizeDebounce   = nullptr;
-    // True from the moment triggerReprocess() is called until the resulting
-    // processingComplete() delivers a non-null image.  While set, viewport
-    // changes also trigger full reruns so pan/zoom never shows a stale frame.
-    bool            m_pendingFullRun  = false;
+    QTimer*         m_panThrottle      = nullptr;  // trailing edge of pan throttle
+    QElapsedTimer   m_lastPanDispatch;              // invalid until first dispatch
     QString         m_pendingSavePath;
 };
 

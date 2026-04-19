@@ -40,6 +40,13 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     m_resizeDebounce->setInterval(150);
     connect(m_resizeDebounce, &QTimer::timeout, this, &PhotoEditorApp::triggerReprocess);
 
+    // Pan throttle: coalesces mouseMove bursts (which fire at >100Hz on modern
+    // mice) into at most one pipeline dispatch per ~16ms.  Leading edge fires
+    // immediately; trailing edge covers the final state after a burst ends.
+    m_panThrottle = new QTimer(this);
+    m_panThrottle->setSingleShot(true);
+    connect(m_panThrottle, &QTimer::timeout, this, &PhotoEditorApp::dispatchViewportUpdate);
+
     setupToolBar();
     setupUI();
     setWindowTitle("Lightroom Clone");
@@ -350,30 +357,11 @@ void PhotoEditorApp::onParametersChanged() {
 }
 
 void PhotoEditorApp::onLiveParametersChanged() {
-    if (m_liveUpdate) triggerReprocess();
+    if (m_liveUpdate) triggerLiveReprocess();
 }
 
 void PhotoEditorApp::triggerReprocess() {
     if (m_originalImage.isNull()) return;
-
-    m_pendingFullRun = true;
-
-    QVector<PhotoEditorEffect*> active;
-    for (const auto& e : m_effects->entries())
-        if (e.enabled) active.append(e.effect);
-
-    m_processor->processImageAsync(m_originalImage, active, m_viewport->viewportRequest());
-}
-
-void PhotoEditorApp::triggerViewportUpdate() {
-    if (m_originalImage.isNull()) return;
-
-    // If a full reprocess is already in-flight (params changed), promote this
-    // viewport change to a full run so the displayed result is never stale.
-    if (m_pendingFullRun) {
-        triggerReprocess();
-        return;
-    }
 
     QVector<PhotoEditorEffect*> active;
     for (const auto& e : m_effects->entries())
@@ -381,7 +369,50 @@ void PhotoEditorApp::triggerViewportUpdate() {
 
     m_processor->processImageAsync(m_originalImage, active,
                                    m_viewport->viewportRequest(),
-                                   /*viewportOnly=*/true);
+                                   RunMode::Commit);
+}
+
+void PhotoEditorApp::triggerLiveReprocess() {
+    if (m_originalImage.isNull()) return;
+
+    QVector<PhotoEditorEffect*> active;
+    for (const auto& e : m_effects->entries())
+        if (e.enabled) active.append(e.effect);
+
+    m_processor->processImageAsync(m_originalImage, active,
+                                   m_viewport->viewportRequest(),
+                                   RunMode::LiveDrag);
+}
+
+void PhotoEditorApp::triggerViewportUpdate() {
+    if (m_originalImage.isNull()) return;
+
+    // Leading/trailing throttle — dispatch at most once per ~16ms so rapid
+    // mouseMove events (1000Hz gaming mice, trackpads) don't saturate the
+    // pipeline.  Zoom events go through the same path but are naturally rare
+    // (one wheel tick = one event), so they aren't affected.
+    constexpr int kIntervalMs = 16;
+    if (!m_lastPanDispatch.isValid() || m_lastPanDispatch.elapsed() >= kIntervalMs) {
+        dispatchViewportUpdate();
+        return;
+    }
+    if (!m_panThrottle->isActive()) {
+        const int remaining = kIntervalMs - static_cast<int>(m_lastPanDispatch.elapsed());
+        m_panThrottle->start(remaining > 0 ? remaining : 1);
+    }
+}
+
+void PhotoEditorApp::dispatchViewportUpdate() {
+    if (m_originalImage.isNull()) return;
+    m_lastPanDispatch.start();
+
+    QVector<PhotoEditorEffect*> active;
+    for (const auto& e : m_effects->entries())
+        if (e.enabled) active.append(e.effect);
+
+    m_processor->processImageAsync(m_originalImage, active,
+                                   m_viewport->viewportRequest(),
+                                   RunMode::PanZoom);
 }
 
 void PhotoEditorApp::onProcessingStarted() {
@@ -390,7 +421,6 @@ void PhotoEditorApp::onProcessingStarted() {
 
 void PhotoEditorApp::onProcessingComplete(QImage result) {
     m_processingLabel->setVisible(false);
-    m_pendingFullRun = false;
     if (result.isNull()) {
         m_viewport->update();
     } else {
