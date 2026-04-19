@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(LightroomClone)
+project(Afterglow VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -158,9 +158,9 @@ add_subdirectory(plugins)
 # Main Executable
 # ============================================================================
 
-add_executable(lightroom_clone src/main.cpp)
+add_executable(afterglow src/main.cpp)
 
-target_link_libraries(lightroom_clone
+target_link_libraries(afterglow
     PRIVATE
         photoeditor_ui
         photoeditor_core
@@ -171,7 +171,7 @@ target_link_libraries(lightroom_clone
         Qt6::OpenGLWidgets
 )
 
-set_target_properties(lightroom_clone PROPERTIES
+set_target_properties(afterglow PROPERTIES
     AUTOMOC ON
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )

@@ -49,10 +49,10 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
 
     setupToolBar();
     setupUI();
-    setWindowTitle("Lightroom Clone");
+    setWindowTitle("Afterglow");
 
     // Restore geometry and last-used directory from previous session
-    QSettings settings("LightroomClone", "LightroomClone");
+    QSettings settings("Afterglow", "Afterglow");
     if (settings.contains("geometry"))
         restoreGeometry(settings.value("geometry").toByteArray());
     else
@@ -435,7 +435,7 @@ void PhotoEditorApp::resizeEvent(QResizeEvent* event) {
 }
 
 void PhotoEditorApp::closeEvent(QCloseEvent* event) {
-    QSettings settings("LightroomClone", "LightroomClone");
+    QSettings settings("Afterglow", "Afterglow");
     settings.setValue("geometry", saveGeometry());
     settings.setValue("lastDir",  m_lastDir);
     QMainWindow::closeEvent(event);

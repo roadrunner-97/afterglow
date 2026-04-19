@@ -1,4 +1,4 @@
-# Lightroom Clone
+# Afterglow
 
 A Qt6 / OpenCL photo editor. Non-destructive, GPU-accelerated, effects-stacked pipeline.
 
@@ -15,12 +15,12 @@ A Qt6 / OpenCL photo editor. Non-destructive, GPU-accelerated, effects-stacked p
 ```bash
 cmake -B build -G Ninja
 cmake --build build
-./build/bin/lightroom_clone
+./build/bin/afterglow
 ```
 
 Outputs:
 
-- `build/bin/lightroom_clone` — the app
+- `build/bin/afterglow` — the app
 - `build/lib/libphotoeditor_core.so`, `libphotoeditor_widgets.so`, `libphotoeditor_ui.so`
 - `build/plugins/lib*_effect.a` — effect libraries, statically linked into the binary
 
@@ -49,7 +49,7 @@ Four Qt targets plus a set of statically-linked effect libs:
 | `libphotoeditor_core` | `EffectManager`, `ImageProcessor`, `GpuDeviceRegistry`, `GpuPipeline`, `RawLoader` |
 | `libphotoeditor_widgets` | Reusable custom widgets (`ParamSlider`) |
 | `libphotoeditor_ui` | `PhotoEditorApp` main window, `ViewportWidget` (QOpenGLWidget) |
-| `lightroom_clone` | Composition root — instantiates effects, passes them to the app |
+| `afterglow` | Composition root — instantiates effects, passes them to the app |
 | `plugins/*_effect.a` | Individual effects, statically linked (no dlopen) |
 
 ### Pipeline
@@ -83,7 +83,7 @@ See `CLAUDE.md` for conventions (pixel access via `scanLine()`, `ParamSlider` us
 
 ## TODO
 
-- [ ] **CMake `install` target** — no `install()` rules exist today, so `cmake --install build` is a no-op and there's no way to package or system-install the binary. Needs rules for `lightroom_clone` (→ `bin/`), the three shared libs (→ `lib/`), and an RPATH / `CMAKE_INSTALL_RPATH` setup so the installed binary finds `libphotoeditor_*.so`. Test with `cmake --install build --prefix /tmp/lc && /tmp/lc/bin/lightroom_clone`.
+- [ ] **CMake `install` target** — no `install()` rules exist today, so `cmake --install build` is a no-op and there's no way to package or system-install the binary. Needs rules for `afterglow` (→ `bin/`), the three shared libs (→ `lib/`), and an RPATH / `CMAKE_INSTALL_RPATH` setup so the installed binary finds `libphotoeditor_*.so`. Test with `cmake --install build --prefix /tmp/lc && /tmp/lc/bin/afterglow`.
 
 ## Known limitations
 
