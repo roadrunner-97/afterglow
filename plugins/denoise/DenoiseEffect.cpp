@@ -1,7 +1,9 @@
 #include "DenoiseEffect.h"
 #include "ParamSlider.h"
 #include "color_kernels.h"
+#include <QComboBox>
 #include <QDebug>
+#include <QLabel>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <mutex>
@@ -472,6 +474,58 @@ __kernel void colorNoiseBlendLinear(__global const float4* current,
     output[y * w + x] = (float4)(r, g, bl, 1.0f);
 }
 
+// Alternative Phase 1: bilateral filter (edge-aware luma denoise).
+// Single 2D pass — spatial Gaussian × range Gaussian.  Taps inside the
+// (2r+1)² window are weighted by both spatial distance and tonal distance
+// from the centre pixel, so flat noisy regions smooth while edges survive.
+// Output is blended back into the original with the same shadow-aware
+// strength formula as the Gaussian path, so the two algorithms can be
+// compared apples-to-apples at the same slider values.
+__kernel void bilateralDenoiseLinear(__global const float4* in,
+                                      __global       float4* out,
+                                      int w, int h,
+                                      int radius, float sigmaRange,
+                                      float strength, float shadowPreserve)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+
+    float4 c = in[y * w + x];
+
+    float sigmaSpatial = max((float)radius / 3.0f, 0.5f);
+    float invSpatial2  = 1.0f / (2.0f * sigmaSpatial * sigmaSpatial);
+    float invRange2    = 1.0f / (2.0f * sigmaRange   * sigmaRange);
+
+    float sr = 0.0f, sg = 0.0f, sb = 0.0f, wsum = 0.0f;
+    for (int dy = -radius; dy <= radius; ++dy) {
+        int sy = clamp(y + dy, 0, h - 1);
+        for (int dx = -radius; dx <= radius; ++dx) {
+            int sx = clamp(x + dx, 0, w - 1);
+            float4 q = in[sy * w + sx];
+            float spatial = native_exp(-(float)(dx * dx + dy * dy) * invSpatial2);
+            float d2 = (q.x - c.x) * (q.x - c.x)
+                     + (q.y - c.y) * (q.y - c.y)
+                     + (q.z - c.z) * (q.z - c.z);
+            float range = native_exp(-d2 * invRange2);
+            float ww = spatial * range;
+            sr += ww * q.x; sg += ww * q.y; sb += ww * q.z;
+            wsum += ww;
+        }
+    }
+    float inv = 1.0f / wsum;
+    float fr = sr * inv, fg = sg * inv, fb = sb * inv;
+
+    float L_linear = linear_luma(c);
+    float L_srgb   = linear_to_srgb(L_linear);
+    float blend = strength * (1.0f - shadowPreserve * (1.0f - L_srgb));
+    blend = clamp(blend, 0.0f, 1.0f);
+
+    float r  = c.x + blend * (fr - c.x);
+    float g  = c.y + blend * (fg - c.y);
+    float bl = c.z + blend * (fb - c.z);
+    out[y * w + x] = (float4)(r, g, bl, 1.0f);
+}
+
 )CL";
 
 // ============================================================================
@@ -482,11 +536,12 @@ bool DenoiseEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
-        m_kernelBlurHLinear           = cl::Kernel(prog, "blurHLinear");
-        m_kernelBlurVLinear           = cl::Kernel(prog, "blurVLinear");
-        m_kernelDenoiseBlendLinear    = cl::Kernel(prog, "denoiseBlendLinear");
-        m_kernelColorNoiseBlendLinear = cl::Kernel(prog, "colorNoiseBlendLinear");
-        m_pipelineCtx                 = ctx;
+        m_kernelBlurHLinear            = cl::Kernel(prog, "blurHLinear");
+        m_kernelBlurVLinear            = cl::Kernel(prog, "blurVLinear");
+        m_kernelDenoiseBlendLinear     = cl::Kernel(prog, "denoiseBlendLinear");
+        m_kernelColorNoiseBlendLinear  = cl::Kernel(prog, "colorNoiseBlendLinear");
+        m_kernelBilateralDenoiseLinear = cl::Kernel(prog, "bilateralDenoiseLinear");
+        m_pipelineCtx                  = ctx;
         return true;
     }
     // GCOVR_EXCL_START
@@ -505,6 +560,7 @@ bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
     const float strength       = params.value("strength",       30).toInt() / 100.0f;
     const float shadowPreserve = params.value("shadowPreserve", 50).toInt() / 100.0f;
     const float colorNoise     = params.value("colorNoise",     50).toInt() / 100.0f;
+    const int   algorithm      = params.value("algorithm", 0).toInt();
 
     if (strength == 0.0f && colorNoise == 0.0f) return true;
 
@@ -525,36 +581,52 @@ bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
 
     // Phase 1: luma denoising
     if (strength > 0.0f) {
-        // H: buf → aux
-        m_kernelBlurHLinear.setArg(0, buf);
-        m_kernelBlurHLinear.setArg(1, aux);
-        m_kernelBlurHLinear.setArg(2, w);
-        m_kernelBlurHLinear.setArg(3, h);
-        m_kernelBlurHLinear.setArg(4, lumRadius);
-        m_kernelBlurHLinear.setArg(5, 1);
-        queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
+        if (algorithm == 1) {
+            // Bilateral: single 2D pass, edge-aware.  sigmaRange is driven
+            // from Strength so the slider still controls overall aggression.
+            const float sigmaRange = 0.02f + strength * 0.15f;
+            m_kernelBilateralDenoiseLinear.setArg(0, buf);
+            m_kernelBilateralDenoiseLinear.setArg(1, aux);
+            m_kernelBilateralDenoiseLinear.setArg(2, w);
+            m_kernelBilateralDenoiseLinear.setArg(3, h);
+            m_kernelBilateralDenoiseLinear.setArg(4, lumRadius);
+            m_kernelBilateralDenoiseLinear.setArg(5, sigmaRange);
+            m_kernelBilateralDenoiseLinear.setArg(6, strength);
+            m_kernelBilateralDenoiseLinear.setArg(7, shadowPreserve);
+            queue.enqueueNDRangeKernel(m_kernelBilateralDenoiseLinear, cl::NullRange, global, cl::NullRange);
+            queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
+        } else {
+            // H: buf → aux
+            m_kernelBlurHLinear.setArg(0, buf);
+            m_kernelBlurHLinear.setArg(1, aux);
+            m_kernelBlurHLinear.setArg(2, w);
+            m_kernelBlurHLinear.setArg(3, h);
+            m_kernelBlurHLinear.setArg(4, lumRadius);
+            m_kernelBlurHLinear.setArg(5, 1);
+            queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-        // V: aux → tempBuf
-        m_kernelBlurVLinear.setArg(0, aux);
-        m_kernelBlurVLinear.setArg(1, tempBuf);
-        m_kernelBlurVLinear.setArg(2, w);
-        m_kernelBlurVLinear.setArg(3, h);
-        m_kernelBlurVLinear.setArg(4, lumRadius);
-        m_kernelBlurVLinear.setArg(5, 1);
-        queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
+            // V: aux → tempBuf
+            m_kernelBlurVLinear.setArg(0, aux);
+            m_kernelBlurVLinear.setArg(1, tempBuf);
+            m_kernelBlurVLinear.setArg(2, w);
+            m_kernelBlurVLinear.setArg(3, h);
+            m_kernelBlurVLinear.setArg(4, lumRadius);
+            m_kernelBlurVLinear.setArg(5, 1);
+            queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-        // Blend: (original=buf, blurred=tempBuf) → aux
-        m_kernelDenoiseBlendLinear.setArg(0, buf);
-        m_kernelDenoiseBlendLinear.setArg(1, tempBuf);
-        m_kernelDenoiseBlendLinear.setArg(2, aux);
-        m_kernelDenoiseBlendLinear.setArg(3, w);
-        m_kernelDenoiseBlendLinear.setArg(4, h);
-        m_kernelDenoiseBlendLinear.setArg(5, strength);
-        m_kernelDenoiseBlendLinear.setArg(6, shadowPreserve);
-        queue.enqueueNDRangeKernel(m_kernelDenoiseBlendLinear, cl::NullRange, global, cl::NullRange);
+            // Blend: (original=buf, blurred=tempBuf) → aux
+            m_kernelDenoiseBlendLinear.setArg(0, buf);
+            m_kernelDenoiseBlendLinear.setArg(1, tempBuf);
+            m_kernelDenoiseBlendLinear.setArg(2, aux);
+            m_kernelDenoiseBlendLinear.setArg(3, w);
+            m_kernelDenoiseBlendLinear.setArg(4, h);
+            m_kernelDenoiseBlendLinear.setArg(5, strength);
+            m_kernelDenoiseBlendLinear.setArg(6, shadowPreserve);
+            queue.enqueueNDRangeKernel(m_kernelDenoiseBlendLinear, cl::NullRange, global, cl::NullRange);
 
-        // Fold denoised result back into buf so Phase 2 sees the updated image.
-        queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
+            // Fold denoised result back into buf so Phase 2 sees the updated image.
+            queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
+        }
     }
 
     // Phase 2: chroma smoothing
@@ -600,7 +672,9 @@ DenoiseEffect::DenoiseEffect()
     : m_controls(nullptr),
       m_strengthParam(nullptr),
       m_shadowPreserveParam(nullptr),
-      m_colorNoiseParam(nullptr)
+      m_colorNoiseParam(nullptr),
+      m_algorithmCombo(nullptr),
+      m_algorithm(0)
 {}
 
 DenoiseEffect::~DenoiseEffect() {}
@@ -621,6 +695,27 @@ QWidget* DenoiseEffect::createControlsWidget() {
     QVBoxLayout* layout = new QVBoxLayout(m_controls);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
+
+    QLabel* algoLabel = new QLabel("Algorithm:");
+    algoLabel->setStyleSheet("color: #2C2018;");
+    layout->addWidget(algoLabel);
+
+    m_algorithmCombo = new QComboBox();
+    m_algorithmCombo->addItem("Gaussian blend");
+    m_algorithmCombo->addItem("Bilateral");
+    m_algorithmCombo->setToolTip(
+        "Gaussian blend: blurs the image and mixes with the original — cheap but cannot tell noise from detail.\n"
+        "Bilateral: edge-aware; smooths flat regions while preserving tonal edges. Slower.");
+    m_algorithmCombo->setStyleSheet(
+        "QComboBox { color: #2C2018; background-color: #F4F1EA;"
+        "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
+        "QComboBox::drop-down { border: none; }"
+        "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
+    layout->addWidget(m_algorithmCombo);
+    connect(m_algorithmCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+        m_algorithm = index;
+        emit parametersChanged();
+    });
 
     m_strengthParam = new ParamSlider("Strength", 0, 100);
     m_strengthParam->setValue(30);
@@ -652,6 +747,7 @@ QMap<QString, QVariant> DenoiseEffect::getParameters() const {
     params["strength"]       = m_strengthParam       ? static_cast<int>(m_strengthParam->value())       : 30;
     params["shadowPreserve"] = m_shadowPreserveParam ? static_cast<int>(m_shadowPreserveParam->value()) : 50;
     params["colorNoise"]     = m_colorNoiseParam     ? static_cast<int>(m_colorNoiseParam->value())     : 50;
+    params["algorithm"]      = m_algorithm;
     return params;
 }
 

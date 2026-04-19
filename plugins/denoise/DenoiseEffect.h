@@ -5,6 +5,7 @@
 #include "IGpuEffect.h"
 
 class ParamSlider;
+class QComboBox;
 
 class DenoiseEffect : public PhotoEditorEffect, public IGpuEffect {
     Q_OBJECT
@@ -34,6 +35,8 @@ private:
     ParamSlider* m_strengthParam;       // 0–100: overall denoise blend
     ParamSlider* m_shadowPreserveParam; // 0–100: protect dark regions
     ParamSlider* m_colorNoiseParam;     // 0–100: chroma smoothing
+    QComboBox*   m_algorithmCombo;
+    int          m_algorithm;           // 0 = Gaussian blend, 1 = Bilateral
 
     cl::Context m_pipelineCtx;  // saved in initGpuKernels for temp buffer allocation
     // Pipeline (float4 linear) kernels.
@@ -41,6 +44,7 @@ private:
     cl::Kernel  m_kernelBlurVLinear;
     cl::Kernel  m_kernelDenoiseBlendLinear;
     cl::Kernel  m_kernelColorNoiseBlendLinear;
+    cl::Kernel  m_kernelBilateralDenoiseLinear;
 };
 
 #endif // DENOISEEFFECT_H
