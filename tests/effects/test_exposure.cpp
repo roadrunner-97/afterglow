@@ -124,6 +124,39 @@ private slots:
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 160; }));
     }
 
+    // Regression: zone lookup must use the post-global-EV luminance.
+    //
+    // Before the fix, the blacks/shadows/highlights/whites sliders looked up
+    // their zone using the INPUT pixel's luminance.  So a mid-dark pixel
+    // (L ≈ 0.39) lifted +3 EV was still classified as "shadows" by the zone
+    // code — even though the displayed pixel was now clipping white — and
+    // pulling Whites down had no effect.
+    //
+    // After the fix: with exposure=+3 the factor is 8× in linear light, which
+    // pushes input(100,100,100) [lin≈0.127] to lin≈1.02 → clamped white.
+    // Whites=-3 then divides by 8, cancelling out and restoring the original
+    // pixel value.  The test asserts the Whites slider actually bites.
+    void whitesSlider_actsOnPostGlobalEvZone_regressionForZoneBug() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        ExposureEffect e;
+        QImage input = makeSolid(32, 32, 100, 100, 100);
+
+        auto paramsA = zeroParams();
+        paramsA["exposure"] = 3.0;
+        QImage outA = e.processImage(input, paramsA);
+        QVERIFY(!outA.isNull());
+
+        auto paramsB = zeroParams();
+        paramsB["exposure"] = 3.0;
+        paramsB["whites"]   = -3.0;
+        QImage outB = e.processImage(input, paramsB);
+        QVERIFY(!outB.isNull());
+
+        // outA should clip at ~255; outB should be much darker (Whites cancels).
+        QVERIFY2(qRed(outA.pixel(0, 0)) - qRed(outB.pixel(0, 0)) > 100,
+                 "Whites slider had no effect after global EV pushed pixel into whites zone");
+    }
+
     // A very dark pixel boosted by blacks=+3 EV must become brighter.
     void blacksZone_boostsDarkPixel() {
         if (!m_hasGpu) QSKIP("No GPU");

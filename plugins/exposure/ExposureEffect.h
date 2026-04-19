@@ -3,6 +3,9 @@
 
 #include "PhotoEditorEffect.h"
 #include "IGpuEffect.h"
+#include <cstdint>
+#include <functional>
+#include <vector>
 
 class ParamSlider;
 
@@ -21,6 +24,7 @@ public:
 
     QWidget* createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
+    void onImageLoaded(const ImageMetadata& meta) override;
 
     bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
@@ -35,6 +39,17 @@ private:
     ParamSlider* highlightsParam;
     ParamSlider* shadowsParam;
     ParamSlider* blacksParam;
+
+    // Callback that pushes a histogram into the tone-curve widget.  Wired in
+    // createControlsWidget() (ToneCurveWidget is an anon-namespace type, so
+    // the widget pointer stays hidden behind this lambda).  Empty until the
+    // panel is built.
+    std::function<void(const std::vector<uint32_t>&)> m_applyHistogram;
+
+    // Cached input-luminance histogram from the most recent onImageLoaded.
+    // Pushed to the widget when the panel is built (image may be loaded
+    // before the Exposure panel is ever expanded).
+    std::vector<uint32_t> m_histogram;
 
     // GPU pipeline kernel (float4 linear, compiled into the shared pipeline context).
     // The 8-bit and 16-bit sRGB kernels live only in the per-effect processImage

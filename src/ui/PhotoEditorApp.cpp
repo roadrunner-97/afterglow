@@ -1,6 +1,7 @@
 #include "PhotoEditorApp.h"
 #include "Theme.h"
 #include "GpuDeviceRegistry.h"
+#include "Histogram.h"
 #include "RawLoader.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -308,6 +309,7 @@ void PhotoEditorApp::openImage() {
     m_originalImage = img;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
+    meta.luminanceHistogram = computeLuminanceHistogram(img);
     for (const auto& e : m_effects->entries())
         e.effect->onImageLoaded(meta);
     triggerReprocess();

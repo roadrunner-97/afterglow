@@ -83,6 +83,8 @@ add_library(photoeditor_core SHARED
     src/core/IGpuEffect.h
     src/core/GpuContextBase.h
     src/core/blur_kernels.h
+    src/core/Histogram.cpp
+    src/core/Histogram.h
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h

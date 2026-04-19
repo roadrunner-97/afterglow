@@ -103,13 +103,22 @@ __kernel void adjustExposure(__global uint* pixels,
     float g_s = ((pixel >>  8) & 0xFFu) / 255.0f;
     float b_s = ( pixel        & 0xFFu) / 255.0f;
 
-    float lum = 0.2126f * r_s + 0.7152f * g_s + 0.0722f * b_s;
-    float ev      = globalEv + zoneEv(lum, blacksEv, shadowsEv, highlightsEv, whitesEv);
-    float evFactor = native_exp2(ev);
+    // Apply global EV first so the zone lookup sees the image the user sees:
+    // a 3-stop-underexposed shot raised +3 EV must treat newly-bright pixels
+    // as highlights/whites, not as blacks.
+    float r_lin = srgb_to_linear(r_s);
+    float g_lin = srgb_to_linear(g_s);
+    float b_lin = srgb_to_linear(b_s);
+    float globalFac = native_exp2(globalEv);
+    float linLum = 0.2126f * r_lin + 0.7152f * g_lin + 0.0722f * b_lin;
+    float L = linear_to_srgb(linLum * globalFac);      // linear_to_srgb clamps to [0,1]
 
-    float r = linear_to_srgb(srgb_to_linear(r_s) * evFactor);
-    float g = linear_to_srgb(srgb_to_linear(g_s) * evFactor);
-    float b = linear_to_srgb(srgb_to_linear(b_s) * evFactor);
+    float zEv       = zoneEv(L, blacksEv, shadowsEv, highlightsEv, whitesEv);
+    float totalFac  = globalFac * native_exp2(zEv);
+
+    float r = linear_to_srgb(r_lin * totalFac);
+    float g = linear_to_srgb(g_lin * totalFac);
+    float b = linear_to_srgb(b_lin * totalFac);
 
     uint ri = (uint)(r * 255.0f + 0.5f);
     uint gi = (uint)(g * 255.0f + 0.5f);
@@ -131,21 +140,26 @@ __kernel void adjustExposure16(__global ushort4* pixels,
     int y = get_global_id(1);
     if (x >= width || y >= height) return;
 
-    // Same structure as the 8-bit kernel: r_s/g_s/b_s are sRGB-encoded values;
-    // lum is perceptual (sRGB) luminance used for zone detection; EV adjustment
-    // is applied in linear light (srgb_to_linear → scale → linear_to_srgb).
+    // Same structure as the 8-bit kernel — zone lookup uses post-global-EV
+    // luminance so sliders act on the image the user sees.
     ushort4 px = pixels[y * stride + x];
     float r_s = px.s0 / 65535.0f;
     float g_s = px.s1 / 65535.0f;
     float b_s = px.s2 / 65535.0f;
 
-    float lum = 0.2126f * r_s + 0.7152f * g_s + 0.0722f * b_s;
-    float ev      = globalEv + zoneEv(lum, blacksEv, shadowsEv, highlightsEv, whitesEv);
-    float evFactor = native_exp2(ev);
+    float r_lin = srgb_to_linear(r_s);
+    float g_lin = srgb_to_linear(g_s);
+    float b_lin = srgb_to_linear(b_s);
+    float globalFac = native_exp2(globalEv);
+    float linLum = 0.2126f * r_lin + 0.7152f * g_lin + 0.0722f * b_lin;
+    float L = linear_to_srgb(linLum * globalFac);
 
-    px.s0 = (ushort)(clamp(linear_to_srgb(srgb_to_linear(r_s) * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    px.s1 = (ushort)(clamp(linear_to_srgb(srgb_to_linear(g_s) * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    px.s2 = (ushort)(clamp(linear_to_srgb(srgb_to_linear(b_s) * evFactor) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    float zEv      = zoneEv(L, blacksEv, shadowsEv, highlightsEv, whitesEv);
+    float totalFac = globalFac * native_exp2(zEv);
+
+    px.s0 = (ushort)(clamp(linear_to_srgb(r_lin * totalFac) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s1 = (ushort)(clamp(linear_to_srgb(g_lin * totalFac) * 65535.0f + 0.5f, 0.0f, 65535.0f));
+    px.s2 = (ushort)(clamp(linear_to_srgb(b_lin * totalFac) * 65535.0f + 0.5f, 0.0f, 65535.0f));
     pixels[y * stride + x] = px;
 }
 )CL";
@@ -301,8 +315,13 @@ static float cpuZoneEv(float L, const ZoneEvs& z) {
          + (      s3 - s2)             * mk1 * h;
 }
 static float cpuCurve(float L, const ZoneEvs& z) {
-    float ev = cpuZoneEv(L, z);   // zone adjustments only — global EV excluded from shape
-    return cpuLinearToSrgb(cpuSrgbToLinear(L) * std::exp2(ev));
+    // Zone adjustments only — global EV is reflected by shifting the
+    // histogram overlay, not by compressing this curve.  Keeping the curve
+    // anchored at fixed zone positions preserves diagnostic detail: the
+    // inflection points always sit at the labelled zone bands, and the
+    // shifted histogram shows where pixels actually land post-exposure.
+    float zEv = cpuZoneEv(L, z);
+    return cpuLinearToSrgb(cpuSrgbToLinear(L) * std::exp2(zEv));
 }
 
 class ToneCurveWidget : public QWidget {
@@ -313,6 +332,13 @@ public:
     }
 
     void setParams(const ZoneEvs& z) { m_z = z; update(); }
+
+    // Luminance histogram of the input image.  256 bins, perceptual-L axis
+    // (same as the widget's X axis).  Empty vector clears the overlay.
+    void setHistogram(const std::vector<uint32_t>& h) {
+        m_histogram = h;
+        update();
+    }
 
 protected:
     void paintEvent(QPaintEvent*) override {
@@ -367,6 +393,46 @@ protected:
             p.drawText(lr, Qt::AlignCenter, labels[i]);
         }
 
+        // Input luminance histogram, shifted by the global EV so it reflects
+        // where pixels actually land on the *adjusted* image.  Each input bin
+        // is remapped via perceptual L_post = linear_to_srgb(linear(L) * 2^EV),
+        // which clamps to [0,1] — so at positive EV the rightmost bin
+        // accumulates clipped pixels (correct "blowing out" cue).  log1p keeps
+        // a single bright bin from visually dominating.  Drawn after zone
+        // bands + grid, before the curve, so the tone curve and identity line
+        // remain readable on top.
+        if (!m_histogram.empty()) {
+            const int nBins = int(m_histogram.size());
+            std::vector<uint32_t> shifted(nBins, 0);
+            const float globalFac = std::exp2(m_z.global);
+            for (int i = 0; i < nBins; ++i) {
+                if (m_histogram[i] == 0) continue;
+                float inL  = (i + 0.5f) / float(nBins);
+                float outL = cpuLinearToSrgb(cpuSrgbToLinear(inL) * globalFac);
+                int   j    = int(outL * float(nBins));
+                if (j < 0)        j = 0;
+                else if (j >= nBins) j = nBins - 1;
+                shifted[j] += m_histogram[i];
+            }
+            uint32_t peak = 0;
+            for (uint32_t b : shifted) if (b > peak) peak = b;
+            if (peak > 0) {
+                const float invLogPk = 1.0f / std::log1p(float(peak));
+                QPolygonF hist;
+                hist.reserve(nBins + 2);
+                hist << toScreen(0.0f, 0.0f);
+                for (int i = 0; i < nBins; ++i) {
+                    float xL = (i + 0.5f) / float(nBins);
+                    float hN = std::log1p(float(shifted[i])) * invLogPk;
+                    hist << toScreen(xL, hN);
+                }
+                hist << toScreen(1.0f, 0.0f);
+                p.setPen(Qt::NoPen);
+                p.setBrush(QColor(230, 230, 230, 90));
+                p.drawPolygon(hist);
+            }
+        }
+
         // Identity diagonal (neutral / no adjustment)
         p.setPen(QPen(QColor(140, 140, 140, 100), 1, Qt::DashLine));
         p.drawLine(toScreen(0.0f, 0.0f), toScreen(1.0f, 1.0f));
@@ -402,17 +468,20 @@ protected:
     }
 
 private:
-    ZoneEvs m_z{};
+    ZoneEvs               m_z{};
+    std::vector<uint32_t> m_histogram;
 };
 
 } // namespace
 
 // ============================================================================
 // Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
-// Exposure is applied in linear light (just rgb *= 2^ev); zone selection uses
-// a perceptual L = linear_to_srgb(linear_luma(px)) so the zone midpoints stay
-// where the UI expects them.  Do not clamp outputs — scene-linear values above
-// 1.0 are valid HDR; the final pack kernel clamps once.
+// Exposure is applied in linear light; zone selection uses perceptual L
+// derived from the *post-global-EV* linear luminance, so the zone sliders act
+// on the image the user sees (e.g. after raising a 3-stop-underexposed shot
+// by +3 EV, newly-bright pixels now land in highlights/whites).  Outputs are
+// not clamped — scene-linear values above 1.0 are valid HDR; the final pack
+// kernel clamps once.
 // ============================================================================
 static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 
@@ -468,18 +537,21 @@ __kernel void adjustExposureLinear(__global float4* pixels,
 
     float4 px = pixels[y * w + x];
 
-    // Zone lookup uses perceptual L: gamma-encode the linear luma so zone
-    // midpoints stay where the UI/curve widget places them.
-    float linLum = linear_luma(px);
-    float L      = linear_to_srgb(linLum);
+    // Zone lookup uses perceptual L derived from post-global-EV luminance.
+    // linear_to_srgb clamps to [0,1], so linLum*globalFac above 1 lands in the
+    // whites zone — which is exactly the desired behaviour for boosted
+    // underexposed shots.
+    float linLum    = linear_luma(px);
+    float globalFac = native_exp2(globalEv);
+    float L         = linear_to_srgb(linLum * globalFac);
 
-    float ev       = globalEv + zoneEvLinear(L, blacksEv, shadowsEv, highlightsEv, whitesEv);
-    float evFactor = native_exp2(ev);
+    float zEv      = zoneEvLinear(L, blacksEv, shadowsEv, highlightsEv, whitesEv);
+    float totalFac = globalFac * native_exp2(zEv);
 
     // Exposure adjustment is a plain scale in linear light; no clamp.
-    pixels[y * w + x] = (float4)(px.x * evFactor,
-                                 px.y * evFactor,
-                                 px.z * evFactor,
+    pixels[y * w + x] = (float4)(px.x * totalFac,
+                                 px.y * totalFac,
+                                 px.z * totalFac,
                                  1.0f);
 }
 )CL";
@@ -518,8 +590,13 @@ QWidget* ExposureEffect::createControlsWidget() {
 
     // Tone curve graph — sits at the top; updated via setParams() on every drag
     auto* curve = new ToneCurveWidget();
-    curve->setToolTip("Live tone curve showing the combined effect of all zone sliders.\nThe white line is the output response; the dashed line is neutral (no adjustment).\nZone bands from left to right: Blacks, Shadows, Highlights, Whites.");
+    curve->setToolTip("Live tone curve showing the zone sliders' effect.\nThe white line is the zone response; the dashed line is neutral.\nThe grey fill is the luminance histogram, shifted rightward by the Exposure slider to show where pixels land on the adjusted image.\nZone bands from left to right: Blacks, Shadows, Highlights, Whites.");
     layout->addWidget(curve);
+
+    // Bridge histogram data into the anon-namespace widget.  If the image was
+    // loaded before this panel was built, flush the cached histogram now.
+    m_applyHistogram = [curve](const std::vector<uint32_t>& h) { curve->setHistogram(h); };
+    if (!m_histogram.empty()) curve->setHistogram(m_histogram);
 
     // Helper: re-reads all slider values and pushes them to the curve widget
     auto refreshCurve = [this, curve]() {
@@ -579,6 +656,11 @@ QMap<QString, QVariant> ExposureEffect::getParameters() const {
     params["shadows"]    = shadowsParam    ? shadowsParam->value()    : 0.0;
     params["blacks"]     = blacksParam     ? blacksParam->value()     : 0.0;
     return params;
+}
+
+void ExposureEffect::onImageLoaded(const ImageMetadata& meta) {
+    m_histogram = meta.luminanceHistogram;
+    if (m_applyHistogram) m_applyHistogram(m_histogram);
 }
 
 // ============================================================================
