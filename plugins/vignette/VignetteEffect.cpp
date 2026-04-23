@@ -259,10 +259,10 @@ static QImage processImageGPU16(const QImage& image, const VignetteArgs& a) {
 // scale each channel by factor = 1 + amount * t.  No clamping — the final
 // pack kernel clamps once before readback.
 //
-// Runs on the preview-sized float4 buffer (w = h = preview dimensions).  The
-// mask is positioned relative to that buffer, which visually matches today's
-// behaviour at fit-to-window zoom.  See VignetteEffect.cpp (sRGB kernels) for
-// the detailed math commentary.
+// Coordinates are source-anchored via _cropX0/_cropY0/_srcPixelsPerPreviewPixel
+// (passed as srcX0/srcY0/srcPPP) so the vignette stays centred on the source
+// image regardless of zoom, pan, or aspect-mismatched fit-to-window padding.
+// In Commit mode srcPPP=1 and srcX0=srcY0=0 so the transform is the identity.
 // ============================================================================
 static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 __kernel void applyVignetteLinear(__global float4* pixels,
@@ -276,14 +276,20 @@ __kernel void applyVignetteLinear(__global float4* pixels,
                                    float midpoint,
                                    float feather,
                                    float p,
-                                   float cornerD)
+                                   float cornerD,
+                                   float srcX0,
+                                   float srcY0,
+                                   float srcPPP)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
     if (x >= w || y >= h) return;
 
-    float nx = fabs(((float)x - cx) / halfW);
-    float ny = fabs(((float)y - cy) / halfH);
+    float sx = srcX0 + ((float)x + 0.5f) * srcPPP;
+    float sy = srcY0 + ((float)y + 0.5f) * srcPPP;
+
+    float nx = fabs((sx - cx) / halfW);
+    float ny = fabs((sy - cy) / halfH);
     float d  = native_powr(native_powr(nx, p) + native_powr(ny, p), 1.0f / p);
     float dn = d / cornerD;
 
@@ -404,8 +410,18 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
         params.value("feather",   50).toInt(),
         params.value("roundness",  0).toInt());
 
-    const float halfW = w * 0.5f;
-    const float halfH = h * 0.5f;
+    // Compute geometry in source-image coordinates so the vignette stays
+    // anchored to the source centre regardless of preview crop / aspect.
+    // In Commit mode srcW=w, srcH=h, srcPPP=1, srcX0=srcY0=0 — same as before.
+    const float srcPPP = static_cast<float>(
+        params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
+    const float srcX0  = static_cast<float>(params.value("_cropX0", 0.0).toDouble());
+    const float srcY0  = static_cast<float>(params.value("_cropY0", 0.0).toDouble());
+    const int   srcW   = params.value("_srcW", w).toInt();
+    const int   srcH   = params.value("_srcH", h).toInt();
+
+    const float halfW = srcW * 0.5f;
+    const float halfH = srcH * 0.5f;
     const float halfD = std::sqrt(halfW * halfW + halfH * halfH);
     // Isotropic normalisation — same scale on both axes so p=2 yields a true
     // circle regardless of aspect.  cornerD normalises dn to 1 at the corner.
@@ -417,15 +433,18 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelLinear.setArg(0,  buf);
     m_kernelLinear.setArg(1,  w);
     m_kernelLinear.setArg(2,  h);
-    m_kernelLinear.setArg(3,  halfW);   // cx
-    m_kernelLinear.setArg(4,  halfH);   // cy
-    m_kernelLinear.setArg(5,  halfD);   // halfW scale (isotropic)
-    m_kernelLinear.setArg(6,  halfD);   // halfH scale (isotropic)
+    m_kernelLinear.setArg(3,  halfW);   // cx (source centre)
+    m_kernelLinear.setArg(4,  halfH);   // cy (source centre)
+    m_kernelLinear.setArg(5,  halfD);   // halfW scale (isotropic, source)
+    m_kernelLinear.setArg(6,  halfD);   // halfH scale (isotropic, source)
     m_kernelLinear.setArg(7,  a.amount);
     m_kernelLinear.setArg(8,  a.midpoint);
     m_kernelLinear.setArg(9,  a.feather);
     m_kernelLinear.setArg(10, a.p);
     m_kernelLinear.setArg(11, cornerD);
+    m_kernelLinear.setArg(12, srcX0);
+    m_kernelLinear.setArg(13, srcY0);
+    m_kernelLinear.setArg(14, srcPPP);
 
     queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
                                cl::NDRange(w, h), cl::NullRange);

@@ -326,6 +326,8 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
                 params.insert("_srcPixelsPerPreviewPixel", 1.0);
                 params.insert("_cropX0", 0.0);
                 params.insert("_cropY0", 0.0);
+                params.insert("_srcW", m_width);
+                params.insert("_srcH", m_height);
                 if (!g->enqueueGpu(m_queue, m_processedBuf, m_fullAuxBuf,
                                    m_width, m_height, params)) {
                     qWarning() << "[GpuPipeline]" << call.effect->getName()
@@ -405,6 +407,8 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
                                 static_cast<double>(srcPixelsPerPreviewPixel));
             scaledParams.insert("_cropX0", static_cast<double>(cropX0));
             scaledParams.insert("_cropY0", static_cast<double>(cropY0));
+            scaledParams.insert("_srcW", m_width);
+            scaledParams.insert("_srcH", m_height);
             if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
                                previewW, previewH, scaledParams)) {
                 qWarning() << "[GpuPipeline]" << call.effect->getName()

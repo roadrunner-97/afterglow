@@ -1,5 +1,13 @@
 # Lightroom Clone — Developer Notes
 
+## Workflow
+
+After fixing a bug or adding a feature, commit and push without waiting to be
+asked.  The repo's `pre-push` hook (`scripts/check-coverage.sh`, installed via
+the configure step described below) runs the full coverage suite, so a passing
+push doubles as the regression check — no need for a separate "should I commit
+this?" turn.
+
 ## Build
 
 ```bash
