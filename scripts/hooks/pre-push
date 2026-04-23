@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# pre-push hook: enforce the coverage gate before publishing commits.
+#
+# Installed automatically by `cmake -B build` (sets core.hooksPath to
+# scripts/hooks/). Skip once with:
+#   touch "$(git rev-parse --show-toplevel)/.git/check-coverage-skip"
+# Threshold override: COVERAGE_MIN_LINES=<pct> git push
+
+set -euo pipefail
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+exec bash "$REPO_ROOT/scripts/check-coverage.sh"

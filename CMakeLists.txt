@@ -24,6 +24,23 @@ endif()
 # Export compile_commands.json for clangd/LSP
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Install the repo-tracked git hooks (pre-push coverage gate) by pointing
+# core.hooksPath at scripts/hooks/.  No-op outside a git working tree (e.g.
+# source tarballs).
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git" AND EXISTS "${CMAKE_SOURCE_DIR}/scripts/hooks")
+    find_program(GIT_EXECUTABLE git)
+    if(GIT_EXECUTABLE)
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} config core.hooksPath scripts/hooks
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            RESULT_VARIABLE _hooks_rc
+            OUTPUT_QUIET ERROR_QUIET)
+        if(_hooks_rc EQUAL 0)
+            message(STATUS "git hooks installed from scripts/hooks/")
+        endif()
+    endif()
+endif()
+
 # ccache
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)

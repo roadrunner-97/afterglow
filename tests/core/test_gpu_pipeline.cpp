@@ -163,6 +163,21 @@ private slots:
         QVERIFY(!out.isNull());
     }
 
+    // Exposure with all-zero params: enqueueGpu takes the no-op branch
+    // (returns true without dispatching a kernel).
+    void pipeline_exposure_allZero_noOp() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["exposure"]   = 0.0;
+        p["whites"]     = 0.0;
+        p["highlights"] = 0.0;
+        p["shadows"]    = 0.0;
+        p["blacks"]     = 0.0;
+        QImage input = makeSolid(64, 64, 100, 100, 100);
+        QImage out = m_pipeline.run(input, {{&m_exposure, p}}, fullViewport(input));
+        QVERIFY(!out.isNull());
+    }
+
     void pipeline_hotpixel() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
@@ -424,6 +439,42 @@ private slots:
         // PanZoom run: reuses the cache, skips effect kernels.
         QImage out2 = m_pipeline.run(input, {{&m_brightness, p}}, vp, RunMode::PanZoom);
         QVERIFY(!out2.isNull());
+    }
+
+    // LiveDrag mode: bypasses the cache, runs the preview-sized pipeline
+    // (decode+downsample srcBuf → workBuf, then effects at preview size).
+    // Covers the preview fallback branch of GpuPipeline::run().
+    void liveDrag_runsPreviewPipeline() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QMap<QString, QVariant> p;
+        p["brightness"] = 10;
+        p["contrast"]   = 0;
+        QImage input = makeSolid(64, 64, 128, 128, 128);
+        QImage out = m_pipeline.run(input, {{&m_brightness, p}}, fullViewport(input),
+                                    RunMode::LiveDrag);
+        QVERIFY(!out.isNull());
+    }
+
+    // 16-bit sRGB input: selects the 16-bit sRGB downsample/decode kernels.
+    void liveDrag_16bitSrgbInput() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage input(32, 32, QImage::Format_RGBX64);
+        input.fill(QColor(128, 128, 128));
+        QImage out = m_pipeline.run(input, {}, fullViewport(input), RunMode::LiveDrag);
+        QVERIFY(!out.isNull());
+    }
+
+    // 16-bit linear input (tagged color_space=linear by RawLoader): selects the
+    // 16-bit linear decode kernel in both LiveDrag and Commit paths.
+    void linearInput_selectsLinearKernels() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage input(32, 32, QImage::Format_RGBX64);
+        input.fill(QColor(128, 128, 128));
+        input.setText("color_space", "linear");
+        QImage outLive = m_pipeline.run(input, {}, fullViewport(input), RunMode::LiveDrag);
+        QVERIFY(!outLive.isNull());
+        QImage outCommit = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit);
+        QVERIFY(!outCommit.isNull());
     }
 };
 

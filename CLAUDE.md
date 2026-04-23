@@ -21,6 +21,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure -j$(nproc)
 ```
 
+### Pre-push coverage gate
+
+`cmake -B build -G Ninja` sets `core.hooksPath` to `scripts/hooks/`, so every
+contributor's `git push` runs `scripts/check-coverage.sh` first.  Skip a single
+push with `touch .git/check-coverage-skip`; lower the bar with
+`COVERAGE_MIN_LINES=<pct> git push`.
+
 ### Coverage build
 
 One-shot via the `coverage` workflow preset (configure → build → test → coverage report):

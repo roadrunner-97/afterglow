@@ -1,9 +1,11 @@
 #include <QTest>
+#include <QComboBox>
 #include <QSignalSpy>
 #include <QSlider>
 #include <QWidget>
 #include "DenoiseEffect.h"
 #include "GpuDeviceRegistry.h"
+#include "GpuPipeline.h"
 #include "ImageHelpers.h"
 #include "ParamSlider.h"
 
@@ -188,6 +190,43 @@ private slots:
         auto* e = new DenoiseEffect();
         e->createControlsWidget();
         delete e;
+    }
+
+    // Bilateral algorithm branch (algorithm=1) — covers the single-pass
+    // bilateral path in enqueueGpu.
+    void bilateralAlgorithm_solidColour_unchanged() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        DenoiseEffect e;
+        GpuPipeline pipeline;
+        QMap<QString, QVariant> params;
+        params["strength"]       = 50;
+        params["shadowPreserve"] = 30;
+        params["colorNoise"]     = 0;
+        params["algorithm"]      = 1;  // Bilateral
+        QImage input = makeSolid(64, 64, 128, 100, 80);
+        ViewportRequest vp;
+        vp.displaySize = input.size();
+        QImage out = pipeline.run(input, {{&e, params}}, vp);
+        QVERIFY(!out.isNull());
+        QVERIFY(allPixels(out, [](QRgb px) {
+            return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3;
+        }));
+    }
+
+    // Algorithm combo activation: firing the activated(int) signal updates
+    // m_algorithm and emits parametersChanged.
+    void algorithmCombo_activated_updatesAlgorithmAndEmits() {
+        DenoiseEffect e;
+        QWidget* w = e.createControlsWidget();
+        QVERIFY(w);
+        auto* combo = w->findChild<QComboBox*>();
+        QVERIFY(combo);
+
+        QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
+        emit combo->activated(1);
+
+        QCOMPARE(e.getParameters()["algorithm"].toInt(), 1);
+        QCOMPARE(spy.count(), 1);
     }
 };
 

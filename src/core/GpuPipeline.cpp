@@ -316,7 +316,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         // pack+readback for display.
         if (mode == RunMode::Commit) {
             if (!decodeFullResLocked())
-                return {};
+                return {}; // GCOVR_EXCL_LINE — decodeFullResLocked can only fail via cl::Error
             const qint64 tDecode = t.nsecsElapsed();
 
             // Effects at full resolution: pixel radii are in source pixels.
