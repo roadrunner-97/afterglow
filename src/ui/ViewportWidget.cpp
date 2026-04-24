@@ -1,10 +1,12 @@
 #include "ViewportWidget.h"
+#include "IInteractiveEffect.h"
 #include <QOpenGLShaderProgram>
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
 #include <QKeyEvent>
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QDebug>
 #include <algorithm>
 #include <cmath>
@@ -34,7 +36,7 @@ static const char* FRAG_SRC =
 ViewportWidget::ViewportWidget(QWidget* parent)
     : QOpenGLWidget(parent)
 {
-    setMouseTracking(false);
+    setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 }
 
@@ -103,6 +105,11 @@ void ViewportWidget::paintGL() {
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     m_vao.release();
     m_shader->release();
+
+    if (m_active) {
+        QPainter painter(this);
+        m_active->paintOverlay(painter, currentTransform());
+    }
 }
 
 void ViewportWidget::createOrResizeTexture(int w, int h) {
@@ -147,6 +154,15 @@ void ViewportWidget::setImage(QImage image) {
 void ViewportWidget::resetView() {
     m_zoom   = 1.0f;
     m_center = {0.5, 0.5};
+}
+
+void ViewportWidget::setActiveInteractiveEffect(IInteractiveEffect* effect) {
+    m_active = effect;
+    update();
+}
+
+ViewportTransform ViewportWidget::currentTransform() const {
+    return ViewportTransform{ m_imageSize, size(), m_center, m_zoom };
 }
 
 ViewportRequest ViewportWidget::viewportRequest() const {
@@ -236,6 +252,10 @@ void ViewportWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void ViewportWidget::mousePressEvent(QMouseEvent* event) {
+    if (m_active) {
+        const ViewportTransform vt = currentTransform();
+        if (m_active->mousePress(event, vt)) { update(); event->accept(); return; }
+    }
     const bool isPan = (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton);
     if (isPan && !m_imageSize.isEmpty()) {
         m_panning      = true;
@@ -246,6 +266,19 @@ void ViewportWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void ViewportWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (m_active) {
+        const ViewportTransform vt = currentTransform();
+        if (event->buttons() != Qt::NoButton) {
+            if (m_active->mouseMove(event, vt)) { update(); event->accept(); return; }
+        } else {
+            // Hover: update cursor, then let the event fall through (no pan while hovering).
+            const QCursor c = m_active->cursorFor(event->position(), vt);
+            setCursor(c.shape() != Qt::ArrowCursor ? c : (m_imageSize.isEmpty() ? Qt::ArrowCursor : Qt::OpenHandCursor));
+            event->accept();
+            return;
+        }
+    }
+
     if (!m_panning || m_imageSize.isEmpty()) { event->ignore(); return; }
 
     const QPoint delta = event->pos() - m_lastMousePos;
@@ -267,6 +300,10 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ViewportWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (m_active) {
+        const ViewportTransform vt = currentTransform();
+        if (m_active->mouseRelease(event, vt)) { update(); event->accept(); return; }
+    }
     const bool isPan = (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton);
     if (isPan && m_panning) {
         m_panning = false;

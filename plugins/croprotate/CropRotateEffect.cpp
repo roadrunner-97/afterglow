@@ -140,9 +140,10 @@ QMap<QString, QVariant> CropRotateEffect::getParameters() const {
 }
 
 // ============================================================================
-// IGpuEffect — no-op
+// IGpuEffect — no-op (crop/rotate is pure metadata, no kernel work)
 // ============================================================================
 
+// GCOVR_EXCL_START
 bool CropRotateEffect::initGpuKernels(cl::Context& /*ctx*/, cl::Device& /*dev*/) {
     return true;
 }
@@ -153,6 +154,7 @@ bool CropRotateEffect::enqueueGpu(cl::CommandQueue& /*queue*/,
                                    const QMap<QString, QVariant>& /*params*/) {
     return true;
 }
+// GCOVR_EXCL_STOP
 
 // ============================================================================
 // ICropSource
@@ -410,11 +412,13 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
         // Clamp
         float newAngle = std::max(-45.0f, std::min(45.0f, m_dragAngleStart + delta));
         m_angleDeg = newAngle;
+        // GCOVR_EXCL_START  (UI-gated — only when controls widget has been built)
         if (m_angleSlider) {
             m_angleSlider->blockSignals(true);
             m_angleSlider->setValue(static_cast<double>(m_angleDeg));
             m_angleSlider->blockSignals(false);
         }
+        // GCOVR_EXCL_STOP
         emit liveParametersChanged();
         return true;
     }
@@ -475,7 +479,7 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
             if (x1 - x0 < MIN_CROP_SIZE) x0 = x1 - MIN_CROP_SIZE;
             if (y1 - y0 < MIN_CROP_SIZE) y1 = y0 + MIN_CROP_SIZE;
             break;
-        default: break;
+        default: break; // GCOVR_EXCL_LINE
         }
         m_crop = QRectF(static_cast<double>(x0),
                         static_cast<double>(y0),

@@ -38,6 +38,7 @@ add_subdirectory(filmgrain)
 add_subdirectory(splittoning)
 add_subdirectory(clarity)
 add_subdirectory(colorbalance)
+add_subdirectory(croprotate)
 
 # Aggregator target: link this to get all effects + their include dirs
 add_library(all_effects INTERFACE)
@@ -56,4 +57,5 @@ target_link_libraries(all_effects INTERFACE
     splittoning_effect
     clarity_effect
     colorbalance_effect
+    croprotate_effect
 )

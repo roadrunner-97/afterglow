@@ -51,3 +51,4 @@ add_effect_test(test_filmgrain    test_filmgrain.cpp    filmgrain_effect    Effe
 add_effect_test(test_splittoning  test_splittoning.cpp  splittoning_effect  Effects_SplitToning)
 add_effect_test(test_clarity      test_clarity.cpp      clarity_effect      Effects_Clarity)
 add_effect_test(test_colorbalance test_colorbalance.cpp colorbalance_effect Effects_ColorBalance)
+add_effect_test(test_croprotate  test_croprotate.cpp  croprotate_effect   Effects_CropRotate)

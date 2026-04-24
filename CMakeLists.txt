@@ -98,6 +98,8 @@ add_library(photoeditor_core SHARED
     src/core/GpuPipeline.cpp
     src/core/GpuPipeline.h
     src/core/IGpuEffect.h
+    src/core/IInteractiveEffect.h
+    src/core/ICropSource.h
     src/core/GpuContextBase.h
     src/core/blur_kernels.h
     src/core/Histogram.cpp

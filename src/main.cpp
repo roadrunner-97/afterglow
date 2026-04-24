@@ -16,6 +16,7 @@
 #include "SplitToningEffect.h"
 #include "ClarityEffect.h"
 #include "ColorBalanceEffect.h"
+#include "CropRotateEffect.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -23,6 +24,7 @@ int main(int argc, char *argv[]) {
     GpuDeviceRegistry::instance().enumerate();
 
     EffectManager* effects = new EffectManager();
+    effects->addEffect(new CropRotateEffect());
     effects->addEffect(new HotPixelEffect());
     effects->addEffect(new ExposureEffect());
     effects->addEffect(new WhiteBalanceEffect());

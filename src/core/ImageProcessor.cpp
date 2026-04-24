@@ -1,5 +1,6 @@
 #include "ImageProcessor.h"
 #include "GpuPipeline.h"
+#include "ICropSource.h"
 #include "PhotoEditorEffect.h"
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
@@ -8,6 +9,34 @@
 
 ImageProcessor::ImageProcessor(QObject *parent)
     : QObject(parent) {}
+
+// Build the injection map for non-destructive crop.  Geometry-aware effects
+// (vignette, film grain, ...) read these keys to operate on the cropped
+// frame; effects that ignore them pay only a QMap lookup miss.  No-op if no
+// crop effect is registered.
+static QMap<QString, QVariant> buildCropInjection(
+        const QVector<PhotoEditorEffect*>& effects) {
+    for (PhotoEditorEffect* e : effects) {
+        if (auto* src = dynamic_cast<ICropSource*>(e)) {
+            const QRectF r = src->userCropRect();
+            return {
+                {"_userCropX0",    r.left()},
+                {"_userCropY0",    r.top()},
+                {"_userCropX1",    r.right()},
+                {"_userCropY1",    r.bottom()},
+                {"_userCropAngle", static_cast<double>(src->userCropAngle())},
+                {"_userCropFlip",  src->userCropFlip() ? 1 : 0},
+            };
+        }
+    }
+    return {};
+}
+
+static void mergeInto(QMap<QString, QVariant>& dst,
+                      const QMap<QString, QVariant>& src) {
+    for (auto it = src.constBegin(); it != src.constEnd(); ++it)
+        dst.insert(it.key(), it.value());
+}
 
 void ImageProcessor::processImageAsync(const QImage &originalImage,
                                        const QVector<PhotoEditorEffect*> &effects,
@@ -25,9 +54,12 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
     QVector<GpuPipelineCall> gpuCalls;
     gpuCalls.reserve(effects.size());
 
+    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects);
+
     bool allGpu = !effects.isEmpty();
     for (PhotoEditorEffect *e : effects) {
         QMap<QString, QVariant> params = e->getParameters();
+        mergeInto(params, cropInjected);
         imageCalls.append({e, params});
         if (e->supportsGpuInPlace())
             gpuCalls.append({e, params});
@@ -90,9 +122,12 @@ void ImageProcessor::exportImageAsync(const QImage& originalImage,
     QVector<EffectCall> imageCalls;
     QVector<GpuPipelineCall> gpuCalls;
 
+    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects);
+
     bool allGpu = !effects.isEmpty();
     for (PhotoEditorEffect* e : effects) {
         QMap<QString, QVariant> params = e->getParameters();
+        mergeInto(params, cropInjected);
         imageCalls.append({e, params});
         if (e->supportsGpuInPlace())
             gpuCalls.append({e, params});

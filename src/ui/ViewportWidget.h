@@ -11,6 +11,8 @@
 
 class QOpenGLShaderProgram;
 class QKeyEvent;
+class IInteractiveEffect;
+struct ViewportTransform;
 
 /**
  * @brief Image display widget with scroll-wheel zoom and left-drag pan.
@@ -37,6 +39,10 @@ public:
     // Build the ViewportRequest to hand to ImageProcessor.
     ViewportRequest viewportRequest() const;
 
+    // Set the currently active interactive effect (nullptr to clear).
+    // Triggers an immediate repaint so the overlay appears/disappears.
+    void setActiveInteractiveEffect(IInteractiveEffect* effect);
+
 signals:
     void viewportChanged();
 
@@ -54,6 +60,7 @@ protected:
 private:
     void createOrResizeTexture(int w, int h);
     void clampCenter();
+    ViewportTransform currentTransform() const;
 
     // GL resources
     GLuint                    m_glTexture = 0;
@@ -68,6 +75,9 @@ private:
     QPointF m_center = {0.5, 0.5};
     QPoint  m_lastMousePos;
     bool    m_panning = false;
+
+    // Optional overlay / event consumer
+    IInteractiveEffect* m_active = nullptr;
 };
 
 #endif // VIEWPORTWIDGET_H

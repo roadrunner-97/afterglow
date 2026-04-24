@@ -2,7 +2,11 @@
 #include "Theme.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
+#include "ICropSource.h"
+#include "IInteractiveEffect.h"
 #include "RawLoader.h"
+#include <QPainter>
+#include <QTransform>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -262,21 +266,35 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
             panelLayout->addWidget(controls);
         }
 
+        // If this effect owns an on-canvas tool (crop handles, etc.), track it so
+        // expanding/collapsing the panel activates/deactivates the overlay.
+        IInteractiveEffect* interactive = dynamic_cast<IInteractiveEffect*>(effect);
+
         // Collapse toggle — shared_ptr so the lambda stays valid after panel is reparented
         auto expanded = std::make_shared<bool>(true);
         connect(collapseBtn, &QPushButton::clicked, this,
-                [controls, collapseBtn, expanded]() {
+                [this, controls, collapseBtn, expanded, interactive]() {
             *expanded = !*expanded;
             if (controls) controls->setVisible(*expanded);
             collapseBtn->setText(*expanded ? "−" : "+");
+            if (interactive)
+                m_viewport->setActiveInteractiveEffect(*expanded ? interactive : nullptr);
         });
 
         // Show/hide panel when effect is toggled from the View menu
         panel->setVisible(entries[i].enabled);
         connect(m_effects, &EffectManager::effectToggled, panel,
-                [panel, i](int idx, bool on) {
-            if (idx == i) panel->setVisible(on);
+                [this, panel, i, interactive](int idx, bool on) {
+            if (idx != i) return;
+            panel->setVisible(on);
+            if (interactive && !on)
+                m_viewport->setActiveInteractiveEffect(nullptr);
         });
+
+        // Initial activation: if an interactive effect starts enabled + expanded,
+        // attach it to the viewport so the overlay shows up on first image load.
+        if (interactive && entries[i].enabled)
+            m_viewport->setActiveInteractiveEffect(interactive);
 
         // Wire parametersChanged (committed) and liveParametersChanged (drag)
         connect(effect, &PhotoEditorEffect::parametersChanged,
@@ -339,10 +357,53 @@ void PhotoEditorApp::saveImage() {
     m_processor->exportImageAsync(m_originalImage, active);
 }
 
+// Bake the user's non-destructive crop + rotation + flip into the exported
+// QImage.  Pipeline output is still full-frame because crop/rotate is metadata;
+// this is the one place where those metadata choices become real pixels.
+static QImage applyCropAndRotate(const QImage& image, const ICropSource& cs) {
+    if (image.isNull()) return image;
+
+    QImage src = cs.userCropFlip() ? image.flipped(Qt::Horizontal) : image;
+
+    const QRectF cropN = cs.userCropRect();
+    const double cx = cropN.center().x() * src.width();
+    const double cy = cropN.center().y() * src.height();
+    const QSize dstSize(static_cast<int>(std::round(cropN.width()  * src.width())),
+                        static_cast<int>(std::round(cropN.height() * src.height())));
+    if (dstSize.isEmpty()) return src;
+
+    // Map source→dst: translate crop centre to origin, rotate by -angle (Qt
+    // rotates CW by default; our angle convention is CCW-positive), translate
+    // out to the centre of the destination canvas.
+    QTransform t;
+    t.translate(dstSize.width() * 0.5, dstSize.height() * 0.5);
+    t.rotate(-static_cast<double>(cs.userCropAngle()));
+    t.translate(-cx, -cy);
+
+    QImage dst(dstSize, src.format());
+    dst.fill(Qt::black);
+    QPainter p(&dst);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+    p.setTransform(t);
+    p.drawImage(0, 0, src);
+    p.end();
+    return dst;
+}
+
 void PhotoEditorApp::onExportComplete(QImage result) {
     if (m_pendingSavePath.isEmpty()) return;
     const QString path = m_pendingSavePath;
     m_pendingSavePath.clear();
+
+    if (!result.isNull()) {
+        for (const auto& e : m_effects->entries()) {
+            if (!e.enabled) continue;
+            if (auto* cs = dynamic_cast<ICropSource*>(e.effect)) {
+                result = applyCropAndRotate(result, *cs);
+                break;
+            }
+        }
+    }
 
     if (result.isNull() || !result.save(path)) {
         QMessageBox::warning(this, "Save Failed",
