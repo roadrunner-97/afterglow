@@ -420,8 +420,34 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     const int   srcW   = params.value("_srcW", w).toInt();
     const int   srcH   = params.value("_srcH", h).toInt();
 
-    const float halfW = srcW * 0.5f;
-    const float halfH = srcH * 0.5f;
+    // Post-crop vignette: centre and extents are derived from the user crop
+    // rectangle (normalised 0..1 source coords) so the falloff is anchored to
+    // the crop boundary rather than the full source frame.  Default values
+    // {0,0,1,1} reproduce the previous full-frame behaviour when no crop is set.
+    const double uX0 = params.value("_userCropX0", 0.0).toDouble();
+    const double uY0 = params.value("_userCropY0", 0.0).toDouble();
+    const double uX1 = params.value("_userCropX1", 1.0).toDouble();
+    const double uY1 = params.value("_userCropY1", 1.0).toDouble();
+
+    // Convert user-crop rect to source-pixel coords.
+    const float cropCxSrc    = static_cast<float>((uX0 + uX1) * 0.5 * srcW);
+    const float cropCySrc    = static_cast<float>((uY0 + uY1) * 0.5 * srcH);
+    const float cropHalfWSrc = static_cast<float>((uX1 - uX0) * 0.5 * srcW);
+    const float cropHalfHSrc = static_cast<float>((uY1 - uY0) * 0.5 * srcH);
+
+    // TODO: _userCropAngle is not yet applied to the vignette falloff.  The
+    // full rotation-aware math rotates the nx/ny axes by the crop angle before
+    // taking the L^p norm; this can be added later without changing the param
+    // schema.
+
+    // Transform crop centre and extents from source-pixel coords to
+    // current-buffer coords using the same srcX0/srcPPP translation the kernel
+    // already uses for each pixel.
+    const float cx    = (cropCxSrc - srcX0) / srcPPP;
+    const float cy    = (cropCySrc - srcY0) / srcPPP;
+    const float halfW = std::max(cropHalfWSrc / srcPPP, 1.0f);
+    const float halfH = std::max(cropHalfHSrc / srcPPP, 1.0f);
+
     const float halfD = std::sqrt(halfW * halfW + halfH * halfH);
     // Isotropic normalisation — same scale on both axes so p=2 yields a true
     // circle regardless of aspect.  cornerD normalises dn to 1 at the corner.
@@ -433,10 +459,10 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelLinear.setArg(0,  buf);
     m_kernelLinear.setArg(1,  w);
     m_kernelLinear.setArg(2,  h);
-    m_kernelLinear.setArg(3,  halfW);   // cx (source centre)
-    m_kernelLinear.setArg(4,  halfH);   // cy (source centre)
-    m_kernelLinear.setArg(5,  halfD);   // halfW scale (isotropic, source)
-    m_kernelLinear.setArg(6,  halfD);   // halfH scale (isotropic, source)
+    m_kernelLinear.setArg(3,  cx);     // cx (crop centre in buffer coords)
+    m_kernelLinear.setArg(4,  cy);     // cy (crop centre in buffer coords)
+    m_kernelLinear.setArg(5,  halfD);  // halfW scale (isotropic, crop-relative)
+    m_kernelLinear.setArg(6,  halfD);  // halfH scale (isotropic, crop-relative)
     m_kernelLinear.setArg(7,  a.amount);
     m_kernelLinear.setArg(8,  a.midpoint);
     m_kernelLinear.setArg(9,  a.feather);

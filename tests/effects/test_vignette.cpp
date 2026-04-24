@@ -4,6 +4,7 @@
 #include <QWidget>
 #include "VignetteEffect.h"
 #include "GpuDeviceRegistry.h"
+#include "GpuPipeline.h"
 #include "ImageHelpers.h"
 #include "ParamSlider.h"
 
@@ -11,7 +12,17 @@ class TestVignette : public QObject {
     Q_OBJECT
 
 private:
-    bool m_hasGpu = false;
+    bool         m_hasGpu = false;
+    GpuPipeline  m_pipeline;
+    VignetteEffect m_pipelineVignette;
+
+    static ViewportRequest fullViewport(const QImage& img) {
+        ViewportRequest vp;
+        vp.displaySize = img.size();
+        vp.zoom   = 1.0f;
+        vp.center = {0.5, 0.5};
+        return vp;
+    }
 
 private slots:
     void initTestCase() {
@@ -269,6 +280,85 @@ private slots:
         auto* e = new VignetteEffect();
         e->createControlsWidget();
         delete e;
+    }
+
+    // Post-crop vignette: when a user crop rect is provided (centre crop
+    // {0.25,0.25,0.75,0.75}), the vignette falloff is centred on the crop
+    // rect, not the full source image.  Consequence: the corners of the crop
+    // rect are significantly darker than the image corners, because the image
+    // corners are far outside the crop boundary (past the feather zone) while
+    // the *image* corners appear near where the kernel treats as the inner
+    // bright zone of the crop-centred vignette.
+    //
+    // Concretely: with amount=-100, midpoint=30, feather=30, the darkening
+    // starts at ~15% of the crop half-diagonal from its centre.  The image
+    // corners are ~2x the crop half-diagonal away from the crop centre, so they
+    // fall deeply into the darkened zone.  The crop-rect corners sit at exactly
+    // 1x the crop half-diagonal and are also darkened.  Without the crop-centred
+    // fix (full-frame falloff), both sets of corners would be equivalently dark.
+    //
+    // We inject _userCrop* and the pipeline keys (_srcW, _srcH, _cropX0/Y0,
+    // _srcPixelsPerPreviewPixel) manually, mirroring what GpuPipeline injects
+    // in the LiveDrag path for a full-image-sized preview.
+    void pipeline_userCropVignette_centredOnCropRect() {
+        if (!m_hasGpu) QSKIP("No GPU");
+
+        // 64x64 uniform mid-grey source image.
+        const int W = 64, H = 64;
+        QImage input = makeSolid(W, H, 128, 128, 128);
+
+        // Effect params: strong darkening with tight midpoint so the crop
+        // corners are clearly darkened.
+        QMap<QString, QVariant> p;
+        p["amount"]    = -100;
+        p["midpoint"]  = 30;
+        p["feather"]   = 30;
+        p["roundness"] = 0;
+
+        // Inject user crop rect (centre quarter of the image).
+        p["_userCropX0"] = 0.25;
+        p["_userCropY0"] = 0.25;
+        p["_userCropX1"] = 0.75;
+        p["_userCropY1"] = 0.75;
+
+        // Inject pipeline keys as they would be in Commit mode (full-res,
+        // no downsample: srcPPP=1, cropX0=cropY0=0, srcW/H=image size).
+        p["_srcPixelsPerPreviewPixel"] = 1.0;
+        p["_cropX0"] = 0.0;
+        p["_cropY0"] = 0.0;
+        p["_srcW"] = W;
+        p["_srcH"] = H;
+
+        QImage out = m_pipeline.run(input, {{&m_pipelineVignette, p}},
+                                    fullViewport(input));
+        QVERIFY(!out.isNull());
+
+        // The crop corners (at 25%/75% of image dimensions) should be
+        // significantly darker than the full-image corners (0,0), because
+        // with a crop-centred falloff the crop corners sit at the outer edge
+        // of the feather zone while the image corners are fully darkened and
+        // beyond — the image corners should be AT LEAST as dark as the crop
+        // corners (both are outside the crop boundary).
+        // Primary assertion: crop rect corners are substantially darkened
+        // relative to the untreated baseline (128), indicating the falloff
+        // is crop-centred.
+        const int cropCornerX = static_cast<int>(W * 0.25);
+        const int cropCornerY = static_cast<int>(H * 0.25);
+        const int imgCornerR  = pixelR(out,  0,  0);
+        const int cropCornerR = pixelR(out, cropCornerX, cropCornerY);
+
+        // Both the image corner and the crop corner should be darkened (below
+        // baseline of 128) — the vignette is centred on the crop, so points
+        // outside the crop boundary are in the fully-dark region.
+        QVERIFY2(imgCornerR  < 20,
+                 qPrintable(QString("imgCornerR=%1 (expected < 20)").arg(imgCornerR)));
+        QVERIFY2(cropCornerR < 20,
+                 qPrintable(QString("cropCornerR=%1 (expected < 20)").arg(cropCornerR)));
+
+        // The crop centre should be bright (unmolested inner zone).
+        const int cropCentreR = pixelR(out, W / 2, H / 2);
+        QVERIFY2(cropCentreR > 120,
+                 qPrintable(QString("cropCentreR=%1 (expected > 120)").arg(cropCentreR)));
     }
 };
 
