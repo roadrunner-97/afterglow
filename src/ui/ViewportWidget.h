@@ -43,6 +43,12 @@ public:
     // Triggers an immediate repaint so the overlay appears/disappears.
     void setActiveInteractiveEffect(IInteractiveEffect* effect);
 
+    // Rotation applied to the displayed image (and the overlay, which uses
+    // the same pivot so handles stay anchored to the image content).  Pivot
+    // is in normalised source coords (0..1).  Angle is CCW-positive in
+    // screen-space degrees.
+    void setImageRotation(float angleDeg, QPointF pivotNorm);
+
 signals:
     void viewportChanged();
 
@@ -78,6 +84,11 @@ private:
 
     // Optional overlay / event consumer
     IInteractiveEffect* m_active = nullptr;
+
+    // Image rotation (degrees, CCW-positive on screen) applied in the GL
+    // quad's vertex shader.  Pivot is normalised source coords.
+    float   m_imgAngleDeg = 0.0f;
+    QPointF m_imgPivotNorm{0.5, 0.5};
 };
 
 #endif // VIEWPORTWIDGET_H

@@ -3,6 +3,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
+#include <QVector2D>
 #include <QKeyEvent>
 #include <QWheelEvent>
 #include <QMouseEvent>
@@ -19,12 +20,28 @@ static const float QUAD_VERTS[] = {
      1.f,  1.f,  1.f, 0.f,
 };
 
+// Vertex shader rotates NDC around an arbitrary pivot in pixel-correct
+// space (aspect-corrected via uViewport), so a 90° rotation looks like a
+// real 90° rotation regardless of widget aspect.  Screen-CCW uses the
+// NDC-Y-up rotation (c, -s) / (s, c).
 static const char* VERT_SRC =
     "#version 330 core\n"
     "layout(location=0) in vec2 aPos;\n"
     "layout(location=1) in vec2 aUv;\n"
+    "uniform float uAngleRad;\n"
+    "uniform vec2  uPivotNdc;\n"
+    "uniform vec2  uViewport;\n"
     "out vec2 vUv;\n"
-    "void main() { gl_Position = vec4(aPos, 0.0, 1.0); vUv = aUv; }\n";
+    "void main() {\n"
+    "    vec2 delta = aPos - uPivotNdc;\n"
+    "    vec2 px = delta * uViewport * 0.5;\n"
+    "    float c = cos(uAngleRad);\n"
+    "    float s = sin(uAngleRad);\n"
+    "    vec2 rotPx = vec2(c * px.x - s * px.y, s * px.x + c * px.y);\n"
+    "    vec2 rotNdc = rotPx * 2.0 / uViewport;\n"
+    "    gl_Position = vec4(rotNdc + uPivotNdc, 0.0, 1.0);\n"
+    "    vUv = aUv;\n"
+    "}\n";
 
 static const char* FRAG_SRC =
     "#version 330 core\n"
@@ -98,6 +115,17 @@ void ViewportWidget::paintGL() {
 
     m_shader->bind();
     m_shader->setUniformValue("uTex", 0);
+    // Bind the rotation uniforms every frame.  uViewport must be non-zero
+    // (the vertex shader divides by it).  With angle=0, pivot=(0,0), the
+    // shader is mathematically identical to a passthrough.
+    const float angleRad = -m_imgAngleDeg * static_cast<float>(M_PI) / 180.0f;
+    const QVector2D pivotNdc(static_cast<float>(m_imgPivotNorm.x()) * 2.0f - 1.0f,
+                             1.0f - static_cast<float>(m_imgPivotNorm.y()) * 2.0f);
+    const QVector2D viewport(static_cast<float>(std::max(1, width())),
+                             static_cast<float>(std::max(1, height())));
+    m_shader->setUniformValue("uAngleRad", angleRad);
+    m_shader->setUniformValue("uPivotNdc", pivotNdc);
+    m_shader->setUniformValue("uViewport", viewport);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_glTexture);
@@ -158,6 +186,12 @@ void ViewportWidget::resetView() {
 
 void ViewportWidget::setActiveInteractiveEffect(IInteractiveEffect* effect) {
     m_active = effect;
+    update();
+}
+
+void ViewportWidget::setImageRotation(float angleDeg, QPointF pivotNorm) {
+    m_imgAngleDeg  = angleDeg;
+    m_imgPivotNorm = pivotNorm;
     update();
 }
 
