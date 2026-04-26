@@ -116,16 +116,24 @@ void ViewportWidget::paintGL() {
     m_shader->bind();
     m_shader->setUniformValue("uTex", 0);
     // Bind the rotation uniforms every frame.  uViewport must be non-zero
-    // (the vertex shader divides by it).  With angle=0, pivot=(0,0), the
-    // shader is mathematically identical to a passthrough.
-    const float angleRad = -m_imgAngleDeg * static_cast<float>(M_PI) / 180.0f;
-    const QVector2D pivotNdc(static_cast<float>(m_imgPivotNorm.x()) * 2.0f - 1.0f,
-                             1.0f - static_cast<float>(m_imgPivotNorm.y()) * 2.0f);
-    const QVector2D viewport(static_cast<float>(std::max(1, width())),
-                             static_cast<float>(std::max(1, height())));
+    // (the vertex shader divides by it).  Pivot conversion: m_imgPivotNorm
+    // is in normalised image-source coords; the on-screen position depends
+    // on pan and zoom, so route it through the same ViewportTransform the
+    // overlay uses, then map screen pixels → NDC.
+    const float Vw = static_cast<float>(std::max(1, width()));
+    const float Vh = static_cast<float>(std::max(1, height()));
+    QPointF pivotScreen(Vw * 0.5f, Vh * 0.5f);
+    if (!m_imageSize.isEmpty()) {
+        pivotScreen = currentTransform().sourceToScreen({
+            m_imgPivotNorm.x() * m_imageSize.width(),
+            m_imgPivotNorm.y() * m_imageSize.height() });
+    }
+    const float angleRad = m_imgAngleDeg * static_cast<float>(M_PI) / 180.0f;
+    const QVector2D pivotNdc(2.0f * static_cast<float>(pivotScreen.x()) / Vw - 1.0f,
+                             1.0f - 2.0f * static_cast<float>(pivotScreen.y()) / Vh);
     m_shader->setUniformValue("uAngleRad", angleRad);
     m_shader->setUniformValue("uPivotNdc", pivotNdc);
-    m_shader->setUniformValue("uViewport", viewport);
+    m_shader->setUniformValue("uViewport", QVector2D(Vw, Vh));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_glTexture);

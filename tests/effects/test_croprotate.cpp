@@ -1123,6 +1123,96 @@ private slots:
         QVERIFY(true);
     }
 
+    // ── Bound clamping with rotation ────────────────────────────────────────
+
+    // Helper: shrink the full crop to a known sub-rect by dragging BR inward.
+    static void shrinkCropToCenter(CropRotateEffect& e, ViewportTransform vt) {
+        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove,         { 70.0,  70.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{ 70.0,  70.0});
+        e.mousePress(&p, vt);  e.mouseMove(&m, vt);  e.mouseRelease(&r, vt);
+    }
+
+    // After rotating, the rotated source-space footprint of the crop must
+    // fit inside [0, 1]² — i.e. half-AABB ≤ centre.x ≤ 1 - half-AABB, and
+    // similarly for y.  Drive the rotation slider with a non-trivial angle
+    // and verify the shrunk crop, when un-rotated, doesn't poke out.
+    void rotation_shrinksOversizedCropToFitImageBounds() {
+        CropRotateEffect e;
+        QWidget* w = e.createControlsWidget();
+
+        // Drive the rotation slider to 30°.  The full-frame crop's AABB at
+        // 30° is bigger than 1×1, so the clamp must shrink the crop.
+        auto* slider = w->findChild<QSlider*>();
+        QVERIFY(slider);
+        slider->setValue(300);  // 300 * 0.1 = 30°
+
+        const QRectF c = e.userCropRect();
+        const double half = std::abs(std::cos(30.0 * M_PI / 180.0)) * c.width()  * 0.5
+                          + std::abs(std::sin(30.0 * M_PI / 180.0)) * c.height() * 0.5;
+        QVERIFY(c.center().x() + half <= 1.0 + 1e-6);
+        QVERIFY(c.center().x() - half >= 0.0 - 1e-6);
+    }
+
+    // Move drag with rotation: pushing the crop toward the edge stops at
+    // the rotated-AABB bound, not at the unrotated edge.
+    void move_withRotation_clampsToRotatedBound() {
+        CropRotateEffect e;
+        QWidget* w = e.createControlsWidget();
+        ViewportTransform vt = makeVT();
+        shrinkCropToCenter(e, vt);
+
+        // Apply a 20° rotation via the slider.
+        auto* slider = w->findChild<QSlider*>();
+        QVERIFY(slider);
+        slider->setValue(200);
+
+        const QRectF before = e.userCropRect();
+        const double cxBefore = before.center().x();
+        const double cyBefore = before.center().y();
+
+        // Try to slam the crop centre toward (1, 1) with a giant move drag.
+        const double sxBefore = cxBefore * 100.0;
+        const double syBefore = cyBefore * 100.0;
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {sxBefore, syBefore});
+        e.mousePress(&p, vt);
+        auto m = makeMouseEvent(QEvent::MouseMove, {500.0, 500.0});
+        e.mouseMove(&m, vt);
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {500.0, 500.0});
+        e.mouseRelease(&r, vt);
+
+        const QRectF after = e.userCropRect();
+        const double half = std::abs(std::cos(20.0 * M_PI / 180.0)) * after.width()  * 0.5
+                          + std::abs(std::sin(20.0 * M_PI / 180.0)) * after.height() * 0.5;
+        QVERIFY(after.center().x() + half <= 1.0 + 1e-6);
+        QVERIFY(after.center().y() + half <= 1.0 + 1e-6);
+        // Centre actually moved (otherwise the test isn't proving anything)
+        QVERIFY(after.center().x() > cxBefore - 1e-6);
+    }
+
+    // Quarter-turn re-clamps the crop too.
+    void quarterTurn_reclampsCropAfterRotation() {
+        CropRotateEffect e;
+        QWidget* w = e.createControlsWidget();
+        ViewportTransform vt = makeVT();
+        // Make a tall thin crop in a corner.
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove,         { 90.0,  20.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease,{ 90.0,  20.0});
+        e.mousePress(&p1, vt); e.mouseMove(&m1, vt); e.mouseRelease(&r1, vt);
+
+        QPushButton* ccw = nullptr;
+        for (auto* b : w->findChildren<QPushButton*>())
+            if (b->text().contains("CCW")) { ccw = b; break; }
+        QVERIFY(ccw);
+        ccw->click();
+        // After +90°, the rotated AABB swaps width/height. The clamp should
+        // ensure the crop still fits.
+        const QRectF c = e.userCropRect();
+        QVERIFY(c.center().x() + c.height() * 0.5 <= 1.0 + 1e-6);
+        QVERIFY(c.center().y() + c.width()  * 0.5 <= 1.0 + 1e-6);
+    }
+
     // ── Destructor ────────────────────────────────────────────────────────────
 
     void destructor_heapAllocated_doesNotCrash() {

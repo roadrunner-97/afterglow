@@ -58,6 +58,8 @@ QWidget* CropRotateEffect::createControlsWidget() {
     m_angleSlider = new ParamSlider("Rotation", -45.0, 45.0, 0.1, 1);
     connect(m_angleSlider, &ParamSlider::valueChanged, this, [this](double v) {
         m_angleDeg = static_cast<float>(v);
+        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
+                                    m_crop.width(), m_crop.height());
         emit liveParametersChanged();
     });
     connect(m_angleSlider, &ParamSlider::editingFinished, this, [this]() {
@@ -75,10 +77,14 @@ QWidget* CropRotateEffect::createControlsWidget() {
 
     connect(btn90ccw, &QPushButton::clicked, this, [this]() {
         m_quarterTurns = (m_quarterTurns + 1) % 4;
+        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
+                                    m_crop.width(), m_crop.height());
         emit parametersChanged();
     });
     connect(btn90cw, &QPushButton::clicked, this, [this]() {
         m_quarterTurns = (m_quarterTurns + 3) % 4;   // +3 mod 4 = -1 mod 4
+        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
+                                    m_crop.width(), m_crop.height());
         emit parametersChanged();
     });
 
@@ -163,21 +169,36 @@ float  CropRotateEffect::userCropAngle() const {
 // IInteractiveEffect helpers
 // ============================================================================
 
-// Rotation in screen coords.  userCropAngle() is CCW-positive; screen Y is
-// down so a screen-CCW rotation uses R(θ) = [[cos,  sin], [-sin, cos]].
-static QPointF rotateAround(QPointF p, QPointF centre, float angleRad) {
-    const float cosA = std::cos(angleRad);
-    const float sinA = std::sin(angleRad);
-    const float dx = static_cast<float>(p.x() - centre.x());
-    const float dy = static_cast<float>(p.y() - centre.y());
-    return { centre.x() + cosA * dx + sinA * dy,
-             centre.y() - sinA * dx + cosA * dy };
+// Half-extents of the AABB obtained by rotating an axis-aligned rectangle
+// of size (w, h) by angleDeg around its centre.  Used to clamp the crop so
+// that its source-space footprint (the crop box, un-rotated by the image
+// rotation) fits inside the [0, 1]² source plane.
+static QPointF rotatedAabbHalfExtents(double w, double h, float angleDeg) {
+    const double a = std::abs(static_cast<double>(angleDeg)) * M_PI / 180.0;
+    const double c = std::abs(std::cos(a));
+    const double s = std::abs(std::sin(a));
+    return { 0.5 * (w * c + h * s),
+             0.5 * (w * s + h * c) };
 }
 
-// Inverse of rotateAround — un-rotates a point back into the rect's axis-
-// aligned local frame.
-static QPointF unrotateAround(QPointF p, QPointF centre, float angleRad) {
-    return rotateAround(p, centre, -angleRad);
+// Clamp (cx, cy, w, h) — all in normalised source coords — so that the
+// rotated rectangle fits in [0, 1]².  Shrinks uniformly if it can't fit at
+// any centre, then clamps the centre.  Returns the corrected QRectF.
+QRectF CropRotateEffect::clampToImageBounds(double cx, double cy,
+                                             double w, double h) const {
+    const QPointF half = rotatedAabbHalfExtents(w, h, userCropAngle());
+    double bw = half.x();
+    double bh = half.y();
+    if (bw > 0.5 || bh > 0.5) {
+        const double scale = std::min(0.5 / bw, 0.5 / bh);
+        w *= scale;
+        h *= scale;
+        bw *= scale;
+        bh *= scale;
+    }
+    cx = std::clamp(cx, bw, 1.0 - bw);
+    cy = std::clamp(cy, bh, 1.0 - bh);
+    return QRectF(cx - w * 0.5, cy - h * 0.5, w, h);
 }
 
 CropRotateEffect::Handles
@@ -185,18 +206,14 @@ CropRotateEffect::buildHandles(const ViewportTransform& vt) const {
     const float iw = static_cast<float>(vt.imageSize.width());
     const float ih = static_cast<float>(vt.imageSize.height());
 
-    // Crop rect corners in source pixels (axis-aligned)
+    // Crop rect corners in source pixels (axis-aligned in screen — the image
+    // rotates around the crop centre, the crop frame stays put).
     const float x0 = static_cast<float>(m_crop.x())                    * iw;
     const float y0 = static_cast<float>(m_crop.y())                    * ih;
     const float x1 = static_cast<float>(m_crop.x() + m_crop.width())   * iw;
     const float y1 = static_cast<float>(m_crop.y() + m_crop.height())  * ih;
 
-    const QPointF centreSrc((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-    const float angleRad = userCropAngle() * static_cast<float>(M_PI) / 180.0f;
-
-    auto rs = [&](float x, float y) {
-        return vt.sourceToScreen(rotateAround({x, y}, centreSrc, angleRad));
-    };
+    auto rs = [&](float x, float y) { return vt.sourceToScreen({x, y}); };
 
     Handles h;
     h.tl = rs(x0, y0);
@@ -208,15 +225,8 @@ CropRotateEffect::buildHandles(const ViewportTransform& vt) const {
     h.lm = rs(x0, (y0 + y1) * 0.5f);
     h.rm = rs(x1, (y0 + y1) * 0.5f);
 
-    // Rotation grip: offset outward from the (rotated) top-edge midpoint,
-    // along the direction from crop centre to that midpoint in screen space.
-    const QPointF centreScreen = vt.sourceToScreen(centreSrc);
-    QPointF toTop = h.tm - centreScreen;
-    const double len = std::hypot(toTop.x(), toTop.y());
-    if (len > 1e-3)
-        h.rotGrip = h.tm + (toTop / len) * ROT_GRIP_OFFSET;
-    else
-        h.rotGrip = QPointF(h.tm.x(), h.tm.y() - ROT_GRIP_OFFSET); // GCOVR_EXCL_LINE
+    // Rotation grip sits straight above the top-edge midpoint.
+    h.rotGrip = QPointF(h.tm.x(), h.tm.y() - ROT_GRIP_OFFSET);
 
     return h;
 }
@@ -249,14 +259,7 @@ bool CropRotateEffect::insideCrop(QPointF screenPx, const ViewportTransform& vt)
     const float iw = static_cast<float>(vt.imageSize.width());
     const float ih = static_cast<float>(vt.imageSize.height());
     if (iw <= 0.0f || ih <= 0.0f) return false;
-
-    // Un-rotate the source point into the crop's axis-aligned frame before
-    // testing containment.
-    const QPointF centreSrc(m_crop.center().x() * iw, m_crop.center().y() * ih);
-    const float angleRad = userCropAngle() * static_cast<float>(M_PI) / 180.0f;
-    const QPointF local = unrotateAround(src, centreSrc, angleRad);
-
-    return m_crop.contains(QPointF(local.x() / iw, local.y() / ih));
+    return m_crop.contains(QPointF(src.x() / iw, src.y() / ih));
 }
 
 // ============================================================================
@@ -568,6 +571,8 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
         // Clamp
         float newAngle = std::max(-45.0f, std::min(45.0f, m_dragAngleStart + delta));
         m_angleDeg = newAngle;
+        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
+                                    m_crop.width(), m_crop.height());
         // GCOVR_EXCL_START  (UI-gated — only when controls widget has been built)
         if (m_angleSlider) {
             m_angleSlider->blockSignals(true);
@@ -579,99 +584,71 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
         return true;
     }
 
-    // Convert delta in screen space to normalised crop coords.  When the
-    // crop is rotated, un-rotate the delta so corner/edge drags resize along
-    // the crop's own tilted axes rather than the screen axes.
+    // Crop frame is now axis-aligned in screen space — convert the screen
+    // delta directly to normalised image coords, no un-rotation needed.
     const float iw = static_cast<float>(vt.imageSize.width());
     const float ih = static_cast<float>(vt.imageSize.height());
     if (iw <= 0.0f || ih <= 0.0f) return false;
 
     const QPointF srcStart = vt.screenToSource(m_dragStart);
     const QPointF srcCur   = vt.screenToSource(curScreen);
-    const float angleRad = userCropAngle() * static_cast<float>(M_PI) / 180.0f;
-    const QPointF rawDelta = srcCur - srcStart;
-    const QPointF localDelta = unrotateAround(rawDelta, {0, 0}, angleRad);
-    const float dnx = static_cast<float>(localDelta.x()) / iw;
-    const float dny = static_cast<float>(localDelta.y()) / ih;
+    const float dnx = static_cast<float>(srcCur.x() - srcStart.x()) / iw;
+    const float dny = static_cast<float>(srcCur.y() - srcStart.y()) / ih;
 
     float x0 = static_cast<float>(m_dragCropStart.x());
     float y0 = static_cast<float>(m_dragCropStart.y());
     float x1 = x0 + static_cast<float>(m_dragCropStart.width());
     float y1 = y0 + static_cast<float>(m_dragCropStart.height());
 
-    auto clamp01 = [](float v) { return std::max(0.0f, std::min(1.0f, v)); };
-
     if (m_dragKind == DragKind::Move) {
-        float w = x1 - x0;
-        float h = y1 - y0;
-        float nx0 = clamp01(x0 + dnx);
-        float ny0 = clamp01(y0 + dny);
-        // Keep size; clamp the opposite edge
-        if (nx0 + w > 1.0f) nx0 = 1.0f - w;
-        if (ny0 + h > 1.0f) ny0 = 1.0f - h;
-        m_crop = QRectF(static_cast<double>(nx0),
-                        static_cast<double>(ny0),
-                        static_cast<double>(w),
-                        static_cast<double>(h));
+        // Move just shifts the centre; clampToImageBounds takes care of
+        // keeping the rotated footprint inside [0, 1]².
+        const double w = x1 - x0;
+        const double h = y1 - y0;
+        m_crop = clampToImageBounds(static_cast<double>(x0 + dnx) + w * 0.5,
+                                    static_cast<double>(y0 + dny) + h * 0.5,
+                                    w, h);
     } else if (m_dragKind == DragKind::Corner) {
-        // 0=TL 1=TR 2=BR 3=BL
+        // 0=TL 1=TR 2=BR 3=BL — the dragged corner moves, opposite is fixed.
         switch (m_dragIndex) {
-        case 0: // TL — moves x0, y0
-            x0 = clamp01(x0 + dnx);
-            y0 = clamp01(y0 + dny);
-            if (x1 - x0 < MIN_CROP_SIZE) x0 = x1 - MIN_CROP_SIZE;
-            if (y1 - y0 < MIN_CROP_SIZE) y0 = y1 - MIN_CROP_SIZE;
-            break;
-        case 1: // TR — moves x1, y0
-            x1 = clamp01(x1 + dnx);
-            y0 = clamp01(y0 + dny);
-            if (x1 - x0 < MIN_CROP_SIZE) x1 = x0 + MIN_CROP_SIZE;
-            if (y1 - y0 < MIN_CROP_SIZE) y0 = y1 - MIN_CROP_SIZE;
-            break;
-        case 2: // BR — moves x1, y1
-            x1 = clamp01(x1 + dnx);
-            y1 = clamp01(y1 + dny);
-            if (x1 - x0 < MIN_CROP_SIZE) x1 = x0 + MIN_CROP_SIZE;
-            if (y1 - y0 < MIN_CROP_SIZE) y1 = y0 + MIN_CROP_SIZE;
-            break;
-        case 3: // BL — moves x0, y1
-            x0 = clamp01(x0 + dnx);
-            y1 = clamp01(y1 + dny);
-            if (x1 - x0 < MIN_CROP_SIZE) x0 = x1 - MIN_CROP_SIZE;
-            if (y1 - y0 < MIN_CROP_SIZE) y1 = y0 + MIN_CROP_SIZE;
-            break;
+        case 0: x0 += dnx; y0 += dny; break;
+        case 1: x1 += dnx; y0 += dny; break;
+        case 2: x1 += dnx; y1 += dny; break;
+        case 3: x0 += dnx; y1 += dny; break;
         default: break; // GCOVR_EXCL_LINE
         }
-        m_crop = QRectF(static_cast<double>(x0),
-                        static_cast<double>(y0),
-                        static_cast<double>(x1 - x0),
-                        static_cast<double>(y1 - y0));
+        // Min size enforcement around the FIXED corner (so the dragged corner
+        // can't cross the opposite one).
+        if (x1 - x0 < MIN_CROP_SIZE) {
+            if (m_dragIndex == 0 || m_dragIndex == 3) x0 = x1 - MIN_CROP_SIZE;
+            else                                       x1 = x0 + MIN_CROP_SIZE;
+        }
+        if (y1 - y0 < MIN_CROP_SIZE) {
+            if (m_dragIndex == 0 || m_dragIndex == 1) y0 = y1 - MIN_CROP_SIZE;
+            else                                       y1 = y0 + MIN_CROP_SIZE;
+        }
+        m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5,
+                                    x1 - x0, y1 - y0);
     } else if (m_dragKind == DragKind::EdgeH) {
-        // 0=top 1=bottom
         if (m_dragIndex == 0) {
-            y0 = clamp01(y0 + dny);
+            y0 += dny;
             if (y1 - y0 < MIN_CROP_SIZE) y0 = y1 - MIN_CROP_SIZE;
         } else {
-            y1 = clamp01(y1 + dny);
+            y1 += dny;
             if (y1 - y0 < MIN_CROP_SIZE) y1 = y0 + MIN_CROP_SIZE;
         }
-        m_crop = QRectF(static_cast<double>(x0),
-                        static_cast<double>(y0),
-                        static_cast<double>(x1 - x0),
-                        static_cast<double>(y1 - y0));
+        m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5,
+                                    x1 - x0, y1 - y0);
     } else if (m_dragKind == DragKind::EdgeV) {
-        // 0=left 1=right
         if (m_dragIndex == 0) {
-            x0 = clamp01(x0 + dnx);
+            x0 += dnx;
             if (x1 - x0 < MIN_CROP_SIZE) x0 = x1 - MIN_CROP_SIZE;
         } else {
-            x1 = clamp01(x1 + dnx);
+            x1 += dnx;
             if (x1 - x0 < MIN_CROP_SIZE) x1 = x0 + MIN_CROP_SIZE;
         }
-        m_crop = QRectF(static_cast<double>(x0),
-                        static_cast<double>(y0),
-                        static_cast<double>(x1 - x0),
-                        static_cast<double>(y1 - y0));
+        m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5,
+                                    x1 - x0, y1 - y0);
     }
 
     emit liveParametersChanged();
@@ -704,6 +681,8 @@ bool CropRotateEffect::mouseRelease(QMouseEvent* event, const ViewportTransform&
             const float clamped  = std::clamp(static_cast<float>(quarter - lineDeg),
                                               -45.0f, 45.0f);
             m_angleDeg = clamped;
+            m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
+                                        m_crop.width(), m_crop.height());
             // GCOVR_EXCL_START  (UI-gated — only when controls widget exists)
             if (m_angleSlider) {
                 m_angleSlider->blockSignals(true);

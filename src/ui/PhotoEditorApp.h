@@ -43,6 +43,7 @@ private:
     void triggerLiveReprocess();    // LiveDrag: preview-sized pipeline, bypasses cache
     void triggerViewportUpdate();   // PanZoom: throttled entry; coalesces mouseMove bursts
     void dispatchViewportUpdate();  // actual PanZoom dispatch — fires from throttle
+    void syncViewportRotation();    // push the user's crop angle/centre to the viewport
 
     EffectManager*  m_effects;
     ImageProcessor* m_processor;

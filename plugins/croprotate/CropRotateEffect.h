@@ -105,6 +105,10 @@ private:
     };
     Handles buildHandles(const ViewportTransform& vt) const;
 
+    // Snap (cx, cy, w, h) so the rotated source-space footprint fits in
+    // [0, 1]².  Shrinks uniformly first if needed.
+    QRectF clampToImageBounds(double cx, double cy, double w, double h) const;
+
     // Returns handle index if screen point is within hit radius, else -1.
     // Returns handle encoding: 0-3=corner(TL/TR/BR/BL), 4-7=edge(T/B/L/R),
     // 8=rotation grip, -1=miss.

@@ -412,11 +412,27 @@ void PhotoEditorApp::onExportComplete(QImage result) {
 }
 
 void PhotoEditorApp::onParametersChanged() {
+    syncViewportRotation();
     triggerReprocess();
 }
 
 void PhotoEditorApp::onLiveParametersChanged() {
+    syncViewportRotation();
     if (m_liveUpdate) triggerLiveReprocess();
+}
+
+void PhotoEditorApp::syncViewportRotation() {
+    // Push the user's crop angle/centre to the viewport so the GL shader can
+    // rotate the displayed image around the crop centre (Lightroom-style).
+    // Updates immediately, independently of pipeline reprocessing — so live
+    // dragging the rotation slider feels instant even on a slow GPU.
+    for (const auto& e : m_effects->entries()) {
+        if (auto* cs = dynamic_cast<ICropSource*>(e.effect)) {
+            const QRectF c = cs->userCropRect();
+            m_viewport->setImageRotation(cs->userCropAngle(), c.center());
+            return;
+        }
+    }
 }
 
 void PhotoEditorApp::triggerReprocess() {
