@@ -65,7 +65,7 @@ endif()
 # Widgets Library
 # ============================================================================
 
-add_library(photoeditor_widgets SHARED
+add_library(photoeditor_widgets STATIC
     src/widgets/ParamSlider.cpp
     src/widgets/ParamSlider.h
 )
@@ -79,16 +79,13 @@ target_include_directories(photoeditor_widgets
     PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/ui>
 )
 
-set_target_properties(photoeditor_widgets PROPERTIES
-    AUTOMOC ON
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-)
+set_target_properties(photoeditor_widgets PROPERTIES AUTOMOC ON)
 
 # ============================================================================
 # Core Library
 # ============================================================================
 
-add_library(photoeditor_core SHARED
+add_library(photoeditor_core STATIC
     src/core/EffectManager.cpp
     src/core/EffectManager.h
     src/core/ImageProcessor.cpp
@@ -133,16 +130,13 @@ target_include_directories(photoeditor_core
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/core>
 )
 
-set_target_properties(photoeditor_core PROPERTIES
-    AUTOMOC ON
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-)
+set_target_properties(photoeditor_core PROPERTIES AUTOMOC ON)
 
 # ============================================================================
 # UI Library
 # ============================================================================
 
-add_library(photoeditor_ui SHARED
+add_library(photoeditor_ui STATIC
     src/ui/PhotoEditorApp.cpp
     src/ui/PhotoEditorApp.h
     src/ui/ViewportWidget.cpp
@@ -162,10 +156,7 @@ target_include_directories(photoeditor_ui
     PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/ui>
 )
 
-set_target_properties(photoeditor_ui PROPERTIES
-    AUTOMOC ON
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-)
+set_target_properties(photoeditor_ui PROPERTIES AUTOMOC ON)
 
 # ============================================================================
 # Effect Plugins (static libs) — defines all_effects INTERFACE target
@@ -201,6 +192,37 @@ set_target_properties(afterglow PROPERTIES
 
 enable_testing()
 add_subdirectory(tests)
+
+# ============================================================================
+# Coverage report (gcovr)
+# ============================================================================
+
+# ============================================================================
+# Install / Uninstall
+# ============================================================================
+#
+# `cmake --install build` (or `cmake --build build --target install`) puts the
+# self-contained `afterglow` binary at ${CMAKE_INSTALL_PREFIX}/bin/.  Default
+# prefix is /usr/local, so this needs sudo; for a user-local install pass
+# --prefix ~/.local (no sudo, requires ~/.local/bin on PATH).
+#
+# `cmake --build build --target uninstall` reads install_manifest.txt and
+# removes every file the install step created.  Run with sudo iff install was.
+
+include(GNUInstallDirs)
+
+install(TARGETS afterglow
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+if(NOT TARGET uninstall)
+    add_custom_target(uninstall
+        COMMAND ${CMAKE_COMMAND}
+            -DMANIFEST=${CMAKE_BINARY_DIR}/install_manifest.txt
+            -P ${CMAKE_SOURCE_DIR}/cmake/uninstall.cmake
+        COMMENT "Removing files listed in install_manifest.txt"
+    )
+endif()
 
 # ============================================================================
 # Coverage report (gcovr)

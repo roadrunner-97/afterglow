@@ -13,12 +13,12 @@ this?" turn.
 ```bash
 cmake -B build -G Ninja    # OpenCL REQUIRED — configure fails if not found
 cmake --build build
-./build/bin/lightroom_clone
+./build/bin/afterglow
 ```
 
-Binary: `build/bin/lightroom_clone`
-Libraries: `build/lib/libphotoeditor_core.so`, `build/lib/libphotoeditor_widgets.so`, `build/lib/libphotoeditor_ui.so`
-Effect libs: `build/plugins/lib*_effect.a` (statically linked into the binary)
+Binary: `build/bin/afterglow` (single self-contained ELF — core/widgets/ui libs and
+effect plugins are all statically linked; only Qt6 / OpenCL / OpenGL / LibRaw are
+shared system deps).
 
 To reconfigure: `cmake -B build -G Ninja` from the repo root. Ninja parallelises automatically, so `-j$(nproc)` is unnecessary on `cmake --build`.
 
