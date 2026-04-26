@@ -27,7 +27,7 @@ CropRotateEffect::~CropRotateEffect() = default;
 
 QString CropRotateEffect::getName()        const { return "Crop & Rotate"; }
 QString CropRotateEffect::getDescription() const {
-    return "Non-destructive crop, rotation, and horizontal flip";
+    return "Non-destructive crop and rotation";
 }
 QString CropRotateEffect::getVersion()     const { return "1.0"; }
 bool    CropRotateEffect::initialize()           { return true; }
@@ -81,20 +81,12 @@ QWidget* CropRotateEffect::createControlsWidget() {
         emit parametersChanged();
     });
 
-    auto* btnFlip = new QPushButton("Flip Horizontal");
-    connect(btnFlip, &QPushButton::clicked, this, [this]() {
-        m_flipH = !m_flipH;
-        emit parametersChanged();
-    });
-    layout->addWidget(btnFlip);
-
     // ── Reset Crop ───────────────────────────────────────────────────────────
     auto* btnReset = new QPushButton("Reset Crop");
     connect(btnReset, &QPushButton::clicked, this, [this]() {
         m_crop        = QRectF(0.0, 0.0, 1.0, 1.0);
         m_angleDeg    = 0.0f;
         m_quarterTurns = 0;
-        m_flipH       = false;
         if (m_angleSlider) {
             m_angleSlider->blockSignals(true);
             m_angleSlider->setValue(0.0);
@@ -131,7 +123,6 @@ QMap<QString, QVariant> CropRotateEffect::getParameters() const {
     QMap<QString, QVariant> p;
     p["angle"]        = static_cast<double>(m_angleDeg);
     p["quarterTurns"] = m_quarterTurns;
-    p["flipH"]        = m_flipH;
     p["cropX0"]       = m_crop.x();
     p["cropY0"]       = m_crop.y();
     p["cropX1"]       = m_crop.x() + m_crop.width();
@@ -164,7 +155,6 @@ QRectF CropRotateEffect::userCropRect()  const { return m_crop; }
 float  CropRotateEffect::userCropAngle() const {
     return static_cast<float>(m_quarterTurns) * 90.0f + m_angleDeg;
 }
-bool   CropRotateEffect::userCropFlip()  const { return m_flipH; }
 
 // ============================================================================
 // IInteractiveEffect helpers

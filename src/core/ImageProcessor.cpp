@@ -25,7 +25,6 @@ static QMap<QString, QVariant> buildCropInjection(
                 {"_userCropX1",    r.right()},
                 {"_userCropY1",    r.bottom()},
                 {"_userCropAngle", static_cast<double>(src->userCropAngle())},
-                {"_userCropFlip",  src->userCropFlip() ? 1 : 0},
             };
         }
     }

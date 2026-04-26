@@ -18,9 +18,6 @@ public:
     // Rotation in degrees (positive = counter-clockwise), applied around
     // the crop-rect centre.
     virtual float userCropAngle() const = 0;
-
-    // Horizontal flip, applied after rotation.
-    virtual bool userCropFlip() const = 0;
 };
 
 #endif // ICROPSOURCE_H

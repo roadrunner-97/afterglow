@@ -48,7 +48,6 @@ public:
     // ICropSource
     QRectF userCropRect()  const override;
     float  userCropAngle() const override;
-    bool   userCropFlip()  const override;
 
     // IInteractiveEffect
     void    paintOverlay (QPainter& painter, const ViewportTransform& vt) override;
@@ -65,7 +64,6 @@ private:
     // ── State ──────────────────────────────────────────────────────────────
     QRectF  m_crop{0.0, 0.0, 1.0, 1.0}; // normalised [0..1]
     float   m_angleDeg   = 0.0f;         // fine rotation, range ±45°
-    bool    m_flipH      = false;
     int     m_quarterTurns = 0;           // 0..3, each = 90° CCW
     SubTool m_subTool    = SubTool::Handles;
 

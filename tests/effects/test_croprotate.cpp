@@ -73,11 +73,6 @@ private slots:
         QCOMPARE(e.userCropAngle(), 0.0f);
     }
 
-    void defaults_flip_isFalse() {
-        CropRotateEffect e;
-        QVERIFY(!e.userCropFlip());
-    }
-
     void defaults_quarterTurns_isZero() {
         CropRotateEffect e;
         QCOMPARE(e.quarterTurns(), 0);
@@ -124,7 +119,6 @@ private slots:
         auto p = e.getParameters();
         QVERIFY(p.contains("angle"));
         QVERIFY(p.contains("quarterTurns"));
-        QVERIFY(p.contains("flipH"));
         QVERIFY(p.contains("cropX0"));
         QVERIFY(p.contains("cropY0"));
         QVERIFY(p.contains("cropX1"));
@@ -136,7 +130,6 @@ private slots:
         auto p = e.getParameters();
         QCOMPARE(p["angle"].toDouble(),        0.0);
         QCOMPARE(p["quarterTurns"].toInt(),     0);
-        QCOMPARE(p["flipH"].toBool(),           false);
         QCOMPARE(p["cropX0"].toDouble(),        0.0);
         QCOMPARE(p["cropY0"].toDouble(),        0.0);
         QCOMPARE(p["cropX1"].toDouble(),        1.0);
@@ -269,28 +262,6 @@ private slots:
         QCOMPARE(e.quarterTurns(), 0);
     }
 
-    // ── Flip button ──────────────────────────────────────────────────────────
-
-    void flipButton_togglesFlipH() {
-        CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
-
-        QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* flipBtn = nullptr;
-        for (auto* b : btns)
-            if (b->text().contains("Flip")) { flipBtn = b; break; }
-        QVERIFY(flipBtn);
-
-        QVERIFY(!e.userCropFlip());
-        flipBtn->click();
-        QVERIFY(e.userCropFlip());
-        QVERIFY(spy.count() >= 1);
-
-        flipBtn->click();
-        QVERIFY(!e.userCropFlip());
-    }
-
     // ── Reset button ─────────────────────────────────────────────────────────
 
     void resetButton_restoresDefaults() {
@@ -301,23 +272,19 @@ private slots:
         QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
         auto btns = w->findChildren<QPushButton*>();
         QPushButton* ccwBtn = nullptr;
-        QPushButton* flipBtn = nullptr;
         QPushButton* resetBtn = nullptr;
         for (auto* b : btns) {
             if (b->text().contains("CCW"))   ccwBtn   = b;
-            if (b->text().contains("Flip"))  flipBtn  = b;
             if (b->text().contains("Reset")) resetBtn = b;
         }
-        QVERIFY(ccwBtn && flipBtn && resetBtn);
+        QVERIFY(ccwBtn && resetBtn);
 
         ccwBtn->click();
-        flipBtn->click();
         spy.clear();
 
         resetBtn->click();
         QCOMPARE(e.userCropRect(),  QRectF(0.0, 0.0, 1.0, 1.0));
         QCOMPARE(e.userCropAngle(), 0.0f);
-        QVERIFY(!e.userCropFlip());
         QCOMPARE(e.quarterTurns(), 0);
         QVERIFY(spy.count() >= 1);
     }
@@ -373,7 +340,6 @@ private slots:
         ICropSource* src = &e;
         QCOMPARE(src->userCropRect(),  QRectF(0.0, 0.0, 1.0, 1.0));
         QCOMPARE(src->userCropAngle(), 0.0f);
-        QVERIFY(!src->userCropFlip());
     }
 
     // ── IGpuEffect no-op interface ───────────────────────────────────────────

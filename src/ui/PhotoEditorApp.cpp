@@ -357,20 +357,18 @@ void PhotoEditorApp::saveImage() {
     m_processor->exportImageAsync(m_originalImage, active);
 }
 
-// Bake the user's non-destructive crop + rotation + flip into the exported
-// QImage.  Pipeline output is still full-frame because crop/rotate is metadata;
-// this is the one place where those metadata choices become real pixels.
+// Bake the user's non-destructive crop + rotation into the exported QImage.
+// Pipeline output is still full-frame because crop/rotate is metadata; this
+// is the one place where those metadata choices become real pixels.
 static QImage applyCropAndRotate(const QImage& image, const ICropSource& cs) {
     if (image.isNull()) return image;
 
-    QImage src = cs.userCropFlip() ? image.flipped(Qt::Horizontal) : image;
-
     const QRectF cropN = cs.userCropRect();
-    const double cx = cropN.center().x() * src.width();
-    const double cy = cropN.center().y() * src.height();
-    const QSize dstSize(static_cast<int>(std::round(cropN.width()  * src.width())),
-                        static_cast<int>(std::round(cropN.height() * src.height())));
-    if (dstSize.isEmpty()) return src;
+    const double cx = cropN.center().x() * image.width();
+    const double cy = cropN.center().y() * image.height();
+    const QSize dstSize(static_cast<int>(std::round(cropN.width()  * image.width())),
+                        static_cast<int>(std::round(cropN.height() * image.height())));
+    if (dstSize.isEmpty()) return image;
 
     // Map source→dst: translate crop centre to origin, rotate by -angle (Qt
     // rotates CW by default; our angle convention is CCW-positive), translate
@@ -380,12 +378,12 @@ static QImage applyCropAndRotate(const QImage& image, const ICropSource& cs) {
     t.rotate(-static_cast<double>(cs.userCropAngle()));
     t.translate(-cx, -cy);
 
-    QImage dst(dstSize, src.format());
+    QImage dst(dstSize, image.format());
     dst.fill(Qt::black);
     QPainter p(&dst);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
     p.setTransform(t);
-    p.drawImage(0, 0, src);
+    p.drawImage(0, 0, image);
     p.end();
     return dst;
 }
