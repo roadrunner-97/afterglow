@@ -2,6 +2,8 @@
 
 A Qt6 / OpenCL photo editor. Non-destructive, GPU-accelerated, effects-stacked pipeline.
 
+![Afterglow editing a photo](demo1.png)
+
 ## Requirements
 
 - C++17 compiler, CMake ≥ 3.16 (≥ 3.25 for workflow presets), Ninja
