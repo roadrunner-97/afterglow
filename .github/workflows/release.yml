@@ -1,0 +1,100 @@
+name: Release
+
+# Triggered by pushing a tag like v1.0.0:
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ['v*']
+
+# Required so action-gh-release can create the release.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build ccache \
+            qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
+            libgl1-mesa-dev \
+            opencl-headers opencl-clhpp-headers ocl-icd-opencl-dev \
+            pocl-opencl-icd \
+            libraw-dev
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: release-${{ runner.os }}
+
+      - name: Configure
+        run: cmake -B build -G Ninja
+
+      - name: Build
+        run: cmake --build build
+
+      # Same gate CI uses — block a release if anything is broken.
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure -j$(nproc)
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE="afterglow-${VERSION}-linux-x86_64"
+          mkdir -p "$STAGE/bin"
+          cp build/bin/afterglow "$STAGE/bin/"
+          strip "$STAGE/bin/afterglow"
+          tar -czf "${STAGE}.tar.gz" "$STAGE"
+          sha256sum "${STAGE}.tar.gz" > "${STAGE}.tar.gz.sha256"
+          ls -la "${STAGE}.tar.gz"*
+          echo "tarball=${STAGE}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            afterglow-*-linux-x86_64.tar.gz
+            afterglow-*-linux-x86_64.tar.gz.sha256
+          generate_release_notes: true
+          body: |
+            Linux x86_64 build of afterglow ${{ github.ref_name }}.
+
+            ## Install
+
+            ```sh
+            tar xzf afterglow-*-linux-x86_64.tar.gz
+            cd afterglow-*-linux-x86_64
+            ./bin/afterglow
+            ```
+
+            ## Runtime requirements
+
+            The binary statically links the project's own libraries, but
+            still depends on these system libraries at runtime — install
+            via your package manager:
+
+            - Qt6 (Core, Gui, Widgets, Concurrent, OpenGLWidgets)
+            - OpenCL ICD loader (`ocl-icd`) plus a working OpenCL driver
+              (mesa-opencl, intel-compute-runtime, rocm-opencl, nvidia,
+              or `pocl` for a CPU fallback)
+            - OpenGL (`libGL`)
+            - LibRaw — only needed for RAW file support
+
+            On Ubuntu 24.04:
+
+            ```sh
+            sudo apt-get install \
+              libqt6core6 libqt6gui6 libqt6widgets6 \
+              libqt6concurrent6 libqt6openglwidgets6 \
+              ocl-icd-libopencl1 libgl1 libraw23
+            ```
