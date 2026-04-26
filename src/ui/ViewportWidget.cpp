@@ -271,9 +271,12 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent* event) {
         if (event->buttons() != Qt::NoButton) {
             if (m_active->mouseMove(event, vt)) { update(); event->accept(); return; }
         } else {
-            // Hover: update cursor, then let the event fall through (no pan while hovering).
+            // Hover: update cursor and repaint so the overlay can reflect
+            // hover state (e.g. handle highlights).  Mouse-move events are
+            // batched against vsync, so repaints stay bounded.
             const QCursor c = m_active->cursorFor(event->position(), vt);
             setCursor(c.shape() != Qt::ArrowCursor ? c : (m_imageSize.isEmpty() ? Qt::ArrowCursor : Qt::OpenHandCursor));
+            update();
             event->accept();
             return;
         }

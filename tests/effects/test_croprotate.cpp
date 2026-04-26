@@ -958,6 +958,171 @@ private slots:
         QVERIFY(after.y() + after.height() <= 1.0 + 1e-6);
     }
 
+    // ── StraightenLine — full drag computes correct angle ───────────────────
+
+    // Helper: enter StraightenLine mode via the controls button.
+    static void enterStraighten(CropRotateEffect& e) {
+        QWidget* w = e.createControlsWidget();
+        for (auto* b : w->findChildren<QPushButton*>())
+            if (b->text().contains("Straighten")) { b->click(); break; }
+    }
+
+    // A line tilted ~5.7° above horizontal (going up-right) needs a
+    // CW rotation to flatten — m_angleDeg should come out negative.
+    void straightenLine_horizonTiltUpRight_setsNegativeAngle() {
+        CropRotateEffect e;
+        enterStraighten(e);
+        ViewportTransform vt = makeVT();
+
+        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {10.0, 50.0});
+        auto m = makeMouseEvent(QEvent::MouseMove,         {110.0, 40.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{110.0, 40.0});
+        QVERIFY(e.mousePress(&p, vt));
+        QVERIFY(e.mouseMove (&m, vt));
+        QVERIFY(e.mouseRelease(&r, vt));
+
+        // atan2(-10, 100)≈-5.71° ; lineDeg=+5.71° ; quarter=0 ; angle=-5.71°
+        QVERIFY(std::abs(e.userCropAngle() + 5.71f) < 0.1f);
+        // Tool exits back to Handles automatically
+        QCOMPARE(e.subTool(), CropRotateEffect::SubTool::Handles);
+    }
+
+    // A near-vertical line snaps to the vertical axis.
+    void straightenLine_nearVertical_snapsToVerticalAxis() {
+        CropRotateEffect e;
+        enterStraighten(e);
+        ViewportTransform vt = makeVT();
+
+        // From top (10,10) to bottom-right (20,90): slightly off vertical.
+        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {10.0, 10.0});
+        auto m = makeMouseEvent(QEvent::MouseMove,         {20.0, 90.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{20.0, 90.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+        e.mouseRelease(&r, vt);
+
+        // atan2(80, 10)≈82.87° ; lineDeg=-82.87 ; quarter=-90 ; angle=-7.13
+        QVERIFY(std::abs(e.userCropAngle() + 7.13f) < 0.1f);
+    }
+
+    // Sub-pixel "click" with no real drag: tool exits without changing angle.
+    void straightenLine_tinyDrag_leavesAngleUnchanged() {
+        CropRotateEffect e;
+        enterStraighten(e);
+        ViewportTransform vt = makeVT();
+
+        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {50.0, 50.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{51.0, 50.0});
+        e.mousePress(&p, vt);
+        e.mouseRelease(&r, vt);
+
+        QCOMPARE(e.userCropAngle(), 0.0f);
+        QCOMPARE(e.subTool(), CropRotateEffect::SubTool::Handles);
+    }
+
+    // Cancel: clicking the button again while drawing exits cleanly.
+    void straightenLine_buttonCancelsMidDraw() {
+        CropRotateEffect e;
+        QWidget* w = e.createControlsWidget();
+        QPushButton* btn = nullptr;
+        for (auto* b : w->findChildren<QPushButton*>())
+            if (b->text().contains("Straighten")) { btn = b; break; }
+        QVERIFY(btn);
+        btn->click();   // enter
+        QCOMPARE(e.subTool(), CropRotateEffect::SubTool::StraightenLine);
+
+        ViewportTransform vt = makeVT();
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 10.0});
+        auto m = makeMouseEvent(QEvent::MouseMove,        {80.0, 60.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+
+        btn->click();   // cancel
+        QCOMPARE(e.subTool(), CropRotateEffect::SubTool::Handles);
+        QCOMPARE(e.userCropAngle(), 0.0f);
+    }
+
+    // ── Cursor stays ClosedHand while actively rotating ──────────────────────
+
+    void cursorFor_duringRotationDrag_isClosedHand() {
+        CropRotateEffect e;
+        ViewportTransform vt = makeVT();
+
+        // Begin a rotation drag from the grip
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {50.0, -30.0});
+        QVERIFY(e.mousePress(&p, vt));
+
+        // Cursor query mid-drag, even off the grip, should be ClosedHand
+        QCOMPARE(e.cursorFor({200.0, 200.0}, vt).shape(), Qt::ClosedHandCursor);
+
+        auto rel = makeMouseEvent(QEvent::MouseButtonRelease, {50.0, -30.0});
+        e.mouseRelease(&rel, vt);
+    }
+
+    // ── paintOverlay — exercise the new visual states ────────────────────────
+
+    // Paints mid-drag for each handle kind so the active-handle switch in
+    // paintOverlay (corner/edgeH/edgeV arms) is exercised.
+    void paintOverlay_duringCornerAndEdgeDrags_doesNotCrash() {
+        QPixmap pm(100, 100);
+        pm.fill(Qt::black);
+        QPainter painter(&pm);
+
+        auto runDrag = [&](QPointF press) {
+            CropRotateEffect e;
+            ViewportTransform vt = makeVT();
+            auto p = makeMouseEvent(QEvent::MouseButtonPress, press);
+            e.mousePress(&p, vt);
+            e.paintOverlay(painter, vt);   // active-handle highlight branch
+            auto r = makeMouseEvent(QEvent::MouseButtonRelease, press);
+            e.mouseRelease(&r, vt);
+        };
+        runDrag({  0.0,   0.0});  // TL corner
+        runDrag({ 50.0,   0.0});  // top edge   → EdgeH
+        runDrag({  0.0,  50.0});  // left edge  → EdgeV
+
+        painter.end();
+        QVERIFY(true);
+    }
+
+    void paintOverlay_withHoverAndStraightenLine_doesNotCrash() {
+        CropRotateEffect e;
+        ViewportTransform vt = makeVT();
+
+        // Trigger hover state on the rotation grip
+        e.cursorFor({50.0, -30.0}, vt);
+
+        QPixmap pm(100, 100);
+        pm.fill(Qt::black);
+        QPainter painter(&pm);
+        e.paintOverlay(painter, vt);   // hover-state grip
+
+        // Active rotation state — grip becomes "active"
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {50.0, -30.0});
+        e.mousePress(&p, vt);
+        auto m = makeMouseEvent(QEvent::MouseMove, {80.0, -30.0});
+        e.mouseMove(&m, vt);
+        e.paintOverlay(painter, vt);   // active-state grip + degree readout
+        // Repeat with grip in the right portion of the viewport — flips the
+        // readout to the left-of-grip layout branch.
+        ViewportTransform vtRight = makeVT(100, 100, 60, 100);
+        e.paintOverlay(painter, vtRight);
+        auto rel = makeMouseEvent(QEvent::MouseButtonRelease, {80.0, -30.0});
+        e.mouseRelease(&rel, vt);
+
+        // Straighten-line overlay: hint strip + drawn line
+        enterStraighten(e);
+        e.paintOverlay(painter, vt);    // hint only
+        auto p2 = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 50.0});
+        e.mousePress(&p2, vt);
+        auto m2 = makeMouseEvent(QEvent::MouseMove, {90.0, 40.0});
+        e.mouseMove(&m2, vt);
+        e.paintOverlay(painter, vt);    // hint + line
+
+        painter.end();
+        QVERIFY(true);
+    }
+
     // ── Destructor ────────────────────────────────────────────────────────────
 
     void destructor_heapAllocated_doesNotCrash() {

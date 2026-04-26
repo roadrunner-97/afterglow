@@ -1,7 +1,8 @@
 #include "CropRotateEffect.h"
 #include "ParamSlider.h"
 
-#include <QDebug>
+#include <QFont>
+#include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -64,7 +65,7 @@ QWidget* CropRotateEffect::createControlsWidget() {
     });
     layout->addWidget(m_angleSlider);
 
-    // ── Button row: 90° turns + flip ────────────────────────────────────────
+    // ── Button row: 90° turns ───────────────────────────────────────────────
     auto* row1 = new QHBoxLayout();
     auto* btn90ccw = new QPushButton("Rotate 90° CCW");
     auto* btn90cw  = new QPushButton("Rotate 90° CW");
@@ -96,20 +97,22 @@ QWidget* CropRotateEffect::createControlsWidget() {
     });
     layout->addWidget(btnReset);
 
-    // ── Straighten by Line (stub) ────────────────────────────────────────────
-    auto* btnStraighten = new QPushButton("Straighten by Line");
-    connect(btnStraighten, &QPushButton::clicked, this, [this]() {
-        // TODO: switch to StraightenLine sub-tool and capture two mouse clicks to
-        // define a horizon line; compute atan2 of the line, update m_angleDeg.
+    // ── Straighten by Line ───────────────────────────────────────────────────
+    m_straightenButton = new QPushButton("Straighten by Line");
+    m_straightenButton->setToolTip(
+        "Drag along a line in the image that should be horizontal or vertical");
+    connect(m_straightenButton, &QPushButton::clicked, this, [this]() {
         if (m_subTool == SubTool::StraightenLine) {
             m_subTool = SubTool::Handles;
-            qDebug() << "[CropRotate] Straighten by line: cancelled";
+            m_lineDrawing = false;
+            m_straightenButton->setText("Straighten by Line");
         } else {
             m_subTool = SubTool::StraightenLine;
-            qDebug() << "[CropRotate] Straighten by line: click two points on the horizon";
+            m_lineDrawing = false;
+            m_straightenButton->setText("Cancel Straighten");
         }
     });
-    layout->addWidget(btnStraighten);
+    layout->addWidget(m_straightenButton);
 
     layout->addStretch();
     return m_controlsWidget;
@@ -323,34 +326,159 @@ void CropRotateEffect::paintOverlay(QPainter& painter, const ViewportTransform& 
     }
 
     // ── Handle squares ───────────────────────────────────────────────────────
+    // Each handle has three visual states:
+    //   normal — white fill, dark border
+    //   hover  — light-blue fill, dark border (mouse over but not pressed)
+    //   active — solid blue fill, dark border (currently being dragged)
     {
         painter.save();
         const QPointF corners[4] = { h.tl, h.tr, h.br, h.bl };
         const QPointF edges[4]   = { h.tm, h.bm, h.lm, h.rm };
         const double hs = 5.0;
 
-        auto drawHandle = [&](QPointF c) {
+        auto activeHandleIndex = [&]() -> int {
+            switch (m_dragKind) {
+                case DragKind::Corner: return m_dragIndex;          // 0..3
+                case DragKind::EdgeH:  return 4 + m_dragIndex;      // 4..5
+                case DragKind::EdgeV:  return 6 + m_dragIndex;      // 6..7
+                default: return -1;
+            }
+        };
+        const int activeIdx = activeHandleIndex();
+
+        auto drawHandle = [&](QPointF c, int idx) {
             QRectF r(c.x() - hs, c.y() - hs, hs * 2.0, hs * 2.0);
             painter.setPen(QPen(QColor(50, 50, 50), 1.5));
-            painter.setBrush(Qt::white);
+            QColor fill = Qt::white;
+            if (idx == activeIdx)             fill = QColor( 80, 160, 255);
+            else if (idx == m_hoverHandle)    fill = QColor(180, 215, 255);
+            painter.setBrush(fill);
             painter.drawRect(r);
         };
 
-        for (const auto& c : corners) drawHandle(c);
-        for (const auto& e : edges)   drawHandle(e);
+        for (int i = 0; i < 4; ++i) drawHandle(corners[i], i);
+        for (int i = 0; i < 4; ++i) drawHandle(edges[i],   4 + i);
         painter.restore();
     }
 
-    // ── Rotation grip (circle) ───────────────────────────────────────────────
+    // ── Rotation grip ────────────────────────────────────────────────────────
+    // Visual: outer ring + curved-arrow glyph.  Same three states as handles,
+    // and while rotating we also draw a small "+12.3°" readout next to the
+    // grip so the user can see what they're committing to.
     {
         painter.save();
-        painter.setPen(QPen(QColor(50, 50, 50), 1.5));
-        painter.setBrush(Qt::white);
-        painter.drawEllipse(h.rotGrip, 6.0, 6.0);
+        painter.setRenderHint(QPainter::Antialiasing, true);
 
-        // Line connecting grip to top edge midpoint
-        painter.setPen(QPen(Qt::white, 1.0, Qt::DotLine));
+        const bool gripActive = (m_dragKind == DragKind::Rotation);
+        const bool gripHover  = (m_hoverHandle == 8);
+
+        QColor fill   = Qt::white;
+        QColor accent = QColor(50, 50, 50);
+        if (gripActive)      { fill = QColor( 80, 160, 255); accent = Qt::white; }
+        else if (gripHover)  { fill = QColor(180, 215, 255); accent = QColor(20, 60, 120); }
+
+        // Tether line from top edge to grip — dotted normally, solid + accent
+        // colour when the grip is hot.  This is the main discoverability cue:
+        // a visible "stalk" sticking out of the crop frame says "grab me".
+        painter.setPen(QPen((gripActive || gripHover) ? accent : Qt::white,
+                            (gripActive || gripHover) ? 1.5    : 1.0,
+                            (gripActive || gripHover) ? Qt::SolidLine : Qt::DotLine));
         painter.drawLine(h.tm, h.rotGrip);
+
+        // Filled disc
+        painter.setPen(QPen(QColor(50, 50, 50), 1.5));
+        painter.setBrush(fill);
+        painter.drawEllipse(h.rotGrip, ROT_GRIP_RADIUS, ROT_GRIP_RADIUS);
+
+        // Curved-arrow glyph inside the disc — 270° arc with an arrowhead at
+        // one end, communicates "rotation handle" at a glance.
+        const double r = ROT_GRIP_RADIUS - 3.5;
+        QRectF arcRect(h.rotGrip.x() - r, h.rotGrip.y() - r, r * 2, r * 2);
+        painter.setPen(QPen(accent, 1.6));
+        painter.setBrush(Qt::NoBrush);
+        // Qt arc angles: 0° at 3 o'clock, CCW positive, 1/16 of a degree units.
+        const int startDeg16 = 45 * 16;
+        const int spanDeg16  = 270 * 16;
+        painter.drawArc(arcRect, startDeg16, spanDeg16);
+
+        // Arrowhead at the arc's CCW end (315°).  Compute end point and a
+        // tangent direction, then draw a small triangle.
+        const double endRad = (45 - 270) * M_PI / 180.0;  // -225°  == 135°
+        const QPointF endPt(h.rotGrip.x() + r * std::cos(endRad),
+                            h.rotGrip.y() - r * std::sin(endRad));
+        const double tx = -std::sin(endRad);
+        const double ty = -std::cos(endRad);
+        const double px = -ty, py = tx;  // perpendicular
+        const double t = 3.0, w = 2.2;
+        QPolygonF arrow;
+        arrow << endPt
+              << QPointF(endPt.x() + tx * t + px * w, endPt.y() + ty * t + py * w)
+              << QPointF(endPt.x() + tx * t - px * w, endPt.y() + ty * t - py * w);
+        painter.setBrush(accent);
+        painter.setPen(Qt::NoPen);
+        painter.drawPolygon(arrow);
+
+        // Live degree readout while rotating
+        if (gripActive) {
+            QFont f = painter.font();
+            f.setPointSizeF(10.5);
+            f.setBold(true);
+            painter.setFont(f);
+            const QString text = QString("%1%2°")
+                .arg(m_angleDeg >= 0 ? "+" : "")
+                .arg(static_cast<double>(m_angleDeg), 0, 'f', 1);
+            QFontMetrics fm(f);
+            const QRect tb = fm.boundingRect(text);
+            // Place the readout to the side of the grip that has more room
+            // (left if grip is past the right half of the viewport, else right).
+            const double pad = 6.0;
+            const bool toLeft = h.rotGrip.x() > vt.viewportSize.width() * 0.66;
+            const double bx = toLeft
+                ? h.rotGrip.x() - ROT_GRIP_RADIUS - pad - tb.width()  - 6
+                : h.rotGrip.x() + ROT_GRIP_RADIUS + pad;
+            const double by = h.rotGrip.y() - tb.height() * 0.5 - 3;
+            QRectF bg(bx - 4, by, tb.width() + 8, tb.height() + 6);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(0, 0, 0, 180));
+            painter.drawRoundedRect(bg, 3, 3);
+            painter.setPen(Qt::white);
+            painter.drawText(bg, Qt::AlignCenter, text);
+        }
+
+        painter.restore();
+    }
+
+    // ── Straighten-by-line overlay ───────────────────────────────────────────
+    if (m_subTool == SubTool::StraightenLine) {
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        // Hint text strip at the top of the viewport
+        const QString hint = m_lineDrawing
+            ? "Release on the other end of the line"
+            : "Drag along a line that should be horizontal or vertical (Esc / button to cancel)";
+        QFont f = painter.font();
+        f.setPointSizeF(10.0);
+        painter.setFont(f);
+        QFontMetrics fm(f);
+        const QRect tb = fm.boundingRect(hint);
+        QRectF strip((vt.viewportSize.width() - tb.width()) * 0.5 - 10, 8,
+                     tb.width() + 20, tb.height() + 8);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 0, 0, 180));
+        painter.drawRoundedRect(strip, 4, 4);
+        painter.setPen(Qt::white);
+        painter.drawText(strip, Qt::AlignCenter, hint);
+
+        if (m_lineDrawing) {
+            // Bright line + small disc at each endpoint
+            painter.setPen(QPen(QColor(255, 200, 60), 2.0));
+            painter.drawLine(m_lineP1, m_lineP2);
+            painter.setBrush(QColor(255, 200, 60));
+            painter.setPen(QPen(QColor(40, 40, 40), 1.0));
+            painter.drawEllipse(m_lineP1, 3.5, 3.5);
+            painter.drawEllipse(m_lineP2, 3.5, 3.5);
+        }
         painter.restore();
     }
 
@@ -364,11 +492,12 @@ void CropRotateEffect::paintOverlay(QPainter& painter, const ViewportTransform& 
 bool CropRotateEffect::mousePress(QMouseEvent* event, const ViewportTransform& vt) {
     if (event->button() != Qt::LeftButton) return false;
 
-    // ── StraightenLine sub-tool — stub ───────────────────────────────────────
+    // ── StraightenLine sub-tool ──────────────────────────────────────────────
+    // Click-and-drag: press = P1, drag updates P2, release computes the angle.
     if (m_subTool == SubTool::StraightenLine) {
-        // TODO: store first endpoint (m_lineP1 = event->pos()) and wait for
-        // second click; on second click compute angle.
-        qDebug() << "[CropRotate] StraightenLine: press at" << event->pos();
+        m_lineP1 = QPointF(event->pos());
+        m_lineP2 = m_lineP1;
+        m_lineDrawing = true;
         return true;
     }
 
@@ -412,6 +541,10 @@ bool CropRotateEffect::mousePress(QMouseEvent* event, const ViewportTransform& v
 // ============================================================================
 
 bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt) {
+    if (m_subTool == SubTool::StraightenLine && m_lineDrawing) {
+        m_lineP2 = QPointF(event->pos());
+        return true;
+    }
     if (m_dragKind == DragKind::None) return false;
 
     const QPointF curScreen = QPointF(event->pos());
@@ -552,6 +685,42 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
 bool CropRotateEffect::mouseRelease(QMouseEvent* event, const ViewportTransform& vt) {
     (void)vt;
     if (event->button() != Qt::LeftButton) return false;
+
+    // ── StraightenLine: turn the drawn line into a rotation ────────────────
+    if (m_subTool == SubTool::StraightenLine && m_lineDrawing) {
+        m_lineP2 = QPointF(event->pos());
+        m_lineDrawing = false;
+
+        const double dx = m_lineP2.x() - m_lineP1.x();
+        const double dy = m_lineP2.y() - m_lineP1.y();
+        // Reject sub-pixel "lines" (accidental clicks); just exit the tool.
+        if (std::hypot(dx, dy) >= 4.0) {
+            // Line angle in screen-CCW (m_angleDeg's convention): screen Y
+            // is down, so screen-CCW = -atan2(dy, dx).  Snap to the nearest
+            // 90° axis; the rotation needed to align the line with that axis
+            // is (axis - lineAngle).
+            const double lineDeg = -std::atan2(dy, dx) * 180.0 / M_PI;
+            const double quarter = std::round(lineDeg / 90.0) * 90.0;
+            const float clamped  = std::clamp(static_cast<float>(quarter - lineDeg),
+                                              -45.0f, 45.0f);
+            m_angleDeg = clamped;
+            // GCOVR_EXCL_START  (UI-gated — only when controls widget exists)
+            if (m_angleSlider) {
+                m_angleSlider->blockSignals(true);
+                m_angleSlider->setValue(static_cast<double>(m_angleDeg));
+                m_angleSlider->blockSignals(false);
+            }
+            // GCOVR_EXCL_STOP
+        }
+
+        m_subTool = SubTool::Handles;
+        // GCOVR_EXCL_START  (UI-gated)
+        if (m_straightenButton) m_straightenButton->setText("Straighten by Line");
+        // GCOVR_EXCL_STOP
+        emit parametersChanged();
+        return true;
+    }
+
     if (m_dragKind == DragKind::None) return false;
     m_dragKind = DragKind::None;
     emit parametersChanged();
@@ -563,11 +732,21 @@ bool CropRotateEffect::mouseRelease(QMouseEvent* event, const ViewportTransform&
 // ============================================================================
 
 QCursor CropRotateEffect::cursorFor(QPointF screenPx, const ViewportTransform& vt) {
-    if (m_subTool == SubTool::StraightenLine)
+    if (m_subTool == SubTool::StraightenLine) {
+        m_hoverHandle = -1;
         return QCursor(Qt::CrossCursor);
+    }
+
+    // While actively rotating, override the hit-test so the cursor stays
+    // ClosedHand even if the mouse drifts off the grip during the drag.
+    if (m_dragKind == DragKind::Rotation) {
+        m_hoverHandle = 8;
+        return QCursor(Qt::ClosedHandCursor);
+    }
 
     const Handles handles = buildHandles(vt);
     int hit = hitHandle(screenPx, handles);
+    m_hoverHandle = hit;
 
     if (hit == 8) return QCursor(Qt::OpenHandCursor);  // rotation grip
 

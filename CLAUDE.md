@@ -26,8 +26,13 @@ To reconfigure: `cmake -B build -G Ninja` from the repo root. Ninja parallelises
 
 ```bash
 cmake --build build
-ctest --test-dir build --output-on-failure -j$(nproc)
+ctest --test-dir build --output-on-failure -j8
 ```
+
+Don't use `-j$(nproc)` in shell commands — Claude Code's sandbox treats
+the shell-substitution as an unapproved-command pattern and prompts for
+approval.  A fixed `-j8` (or any integer literal) avoids the gate and is
+plenty parallel for this project.
 
 ### Pre-push coverage gate
 
@@ -49,7 +54,7 @@ Or manually:
 ```bash
 cmake -B build -G Ninja -DCOVERAGE=ON   # enable --coverage flags (gcovr required)
 cmake --build build
-ctest --test-dir build -j$(nproc)                 # populate .gcda files
+ctest --test-dir build -j8                        # populate .gcda files
 cmake --build build --target coverage             # generate report from existing .gcda files
 ```
 

@@ -10,6 +10,7 @@
 #include <QPointF>
 
 class ParamSlider;
+class QPushButton;
 
 class CropRotateEffect : public PhotoEditorEffect,
                          public IGpuEffect,
@@ -68,8 +69,9 @@ private:
     SubTool m_subTool    = SubTool::Handles;
 
     // ── UI ─────────────────────────────────────────────────────────────────
-    QWidget*    m_controlsWidget = nullptr;
-    ParamSlider* m_angleSlider   = nullptr;
+    QWidget*    m_controlsWidget    = nullptr;
+    ParamSlider* m_angleSlider      = nullptr;
+    QPushButton* m_straightenButton = nullptr;
 
     // ── Drag state ─────────────────────────────────────────────────────────
     enum class DragKind {
@@ -85,6 +87,14 @@ private:
     QPointF  m_dragStart;   // screen coords where drag began
     QRectF   m_dragCropStart;
     float    m_dragAngleStart = 0.0f;
+
+    // ── Hover state (for handle highlight in paintOverlay) ─────────────────
+    int      m_hoverHandle = -1;   // same encoding as hitHandle()
+
+    // ── Straighten-by-line state ───────────────────────────────────────────
+    QPointF  m_lineP1;             // screen coords of first click
+    QPointF  m_lineP2;             // screen coords of current/second click
+    bool     m_lineDrawing = false;
 
     // ── Helpers ────────────────────────────────────────────────────────────
     // Crop rect corners/edges in SOURCE pixel coords
@@ -103,16 +113,10 @@ private:
     // Is screenPx inside the projected crop rect (not on a handle)?
     bool insideCrop(QPointF screenPx, const ViewportTransform& vt) const;
 
-    static constexpr float HIT_RADIUS    = 8.0f;    // screen pixels
-    static constexpr float MIN_CROP_SIZE = 0.05f;   // normalised units
-    static constexpr float ROT_GRIP_OFFSET = 30.0f; // screen pixels above top edge
-
-    // TODO (StraightenLine): store two line endpoints here when that feature is
-    // implemented:
-    //   QPointF m_lineP1, m_lineP2;  // screen coords, set in mousePress/mouseMove
-    //   bool    m_lineSet = false;
-    // On mouseRelease, compute atan2(p2-p1), derive the horizon angle, and update
-    // m_angleDeg accordingly.
+    static constexpr float HIT_RADIUS      = 10.0f;  // screen pixels
+    static constexpr float MIN_CROP_SIZE   = 0.05f;  // normalised units
+    static constexpr float ROT_GRIP_OFFSET = 36.0f;  // screen pixels above top edge
+    static constexpr float ROT_GRIP_RADIUS = 10.0f;  // screen pixels
 };
 
 #endif // CROPROTATEEFFECT_H
