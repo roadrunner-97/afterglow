@@ -1213,6 +1213,124 @@ private slots:
         QVERIFY(c.center().y() + c.width()  * 0.5 <= 1.0 + 1e-6);
     }
 
+    // ── Auto-fit on rotation when no manual crop applied ────────────────────
+
+    // Square image, 30° rotation, untouched crop → centred square sized
+    // 1 / (cos30 + sin30) ≈ 0.732.
+    void rotate_noManualCrop_autoFitsSquareImage() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        QWidget* w = e.createControlsWidget();
+        auto* slider = w->findChild<QSlider*>();
+        slider->setValue(300);   // 30°
+
+        const QRectF c = e.userCropRect();
+        const double expected = 1.0 / (std::cos(30.0 * M_PI / 180.0)
+                                      + std::sin(30.0 * M_PI / 180.0));
+        QVERIFY(std::abs(c.width()  - expected) < 1e-3);
+        QVERIFY(std::abs(c.height() - expected) < 1e-3);
+        QVERIFY(std::abs(c.center().x() - 0.5) < 1e-6);
+        QVERIFY(std::abs(c.center().y() - 0.5) < 1e-6);
+    }
+
+    // Non-square image (16:9): the auto-fit size differs along width vs
+    // height in source pixels — but stays equal in *normalised* coords
+    // because aspect-preserving = (wn == hn).  Verify the value matches the
+    // tighter of the two constraints.
+    void rotate_noManualCrop_autoFitsNonSquareImage() {
+        CropRotateEffect e;
+        e.setSourceImageSize({1600, 900});       // 16:9
+        QWidget* w = e.createControlsWidget();
+        auto* slider = w->findChild<QSlider*>();
+        slider->setValue(200);   // 20°
+
+        const QRectF c = e.userCropRect();
+        const double a = 20.0 * M_PI / 180.0;
+        const double r = 16.0 / 9.0;
+        const double cT = std::cos(a), sT = std::sin(a);
+        const double sizeW = 1.0 / (cT + sT / r);
+        const double sizeH = 1.0 / (sT * r + cT);
+        const double expected = std::min(sizeW, sizeH);
+        QVERIFY2(std::abs(c.width() - expected) < 1e-3,
+                 qPrintable(QString("got %1 expected %2").arg(c.width()).arg(expected)));
+        QCOMPARE(c.width(), c.height());   // square in normalised coords
+    }
+
+    // Reduce angle back to zero → full-frame crop is restored.
+    void rotate_thenReduceAngle_uncropsToFullFrame() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        QWidget* w = e.createControlsWidget();
+        auto* slider = w->findChild<QSlider*>();
+        slider->setValue(300);   // 30°
+        QVERIFY(e.userCropRect().width() < 0.9);
+
+        slider->setValue(0);
+        QCOMPARE(e.userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
+    }
+
+    // After the user touches a handle, rotation no longer auto-fits — it
+    // just clamps, preserving the user's chosen size when possible.
+    void rotate_afterManualCrop_doesNotAutoFit() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        QWidget* w = e.createControlsWidget();
+        ViewportTransform vt = makeVT();
+        // User shrinks the crop by dragging BR inward → manual flag set.
+        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove,         { 70.0,  70.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{ 70.0,  70.0});
+        e.mousePress(&p, vt); e.mouseMove(&m, vt); e.mouseRelease(&r, vt);
+        const QRectF before = e.userCropRect();
+
+        // Apply rotation; the crop should keep the same size (still fits).
+        auto* slider = w->findChild<QSlider*>();
+        slider->setValue(50);    // 5°
+        const QRectF after = e.userCropRect();
+        QCOMPARE(after.size(), before.size());
+    }
+
+    // Reset Crop clears the manual flag so auto-fit kicks back in.
+    void resetCrop_reenablesAutoFit() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        QWidget* w = e.createControlsWidget();
+        ViewportTransform vt = makeVT();
+
+        // Manual crop
+        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove,         { 70.0,  70.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{ 70.0,  70.0});
+        e.mousePress(&p, vt); e.mouseMove(&m, vt); e.mouseRelease(&r, vt);
+
+        QPushButton* resetBtn = nullptr;
+        for (auto* b : w->findChildren<QPushButton*>())
+            if (b->text().contains("Reset")) { resetBtn = b; break; }
+        resetBtn->click();
+        QCOMPARE(e.userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
+
+        // Now rotation should auto-fit again.
+        auto* slider = w->findChild<QSlider*>();
+        slider->setValue(300);   // 30°
+        QVERIFY(e.userCropRect().width() < 0.9);
+    }
+
+    // setSourceImageSize on an existing untouched crop re-evaluates the
+    // auto-fit so the default crop matches the new aspect ratio.
+    void setSourceImageSize_rerunsAutoFit() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        QWidget* w = e.createControlsWidget();
+        auto* slider = w->findChild<QSlider*>();
+        slider->setValue(300);   // 30° — square auto-fit ≈ 0.732
+        const double squareSize = e.userCropRect().width();
+
+        // Switch to a 16:9 image: auto-fit should change.
+        e.setSourceImageSize({1600, 900});
+        const double wideSize = e.userCropRect().width();
+        QVERIFY(std::abs(squareSize - wideSize) > 1e-3);
+    }
+
     // ── Destructor ────────────────────────────────────────────────────────────
 
     void destructor_heapAllocated_doesNotCrash() {

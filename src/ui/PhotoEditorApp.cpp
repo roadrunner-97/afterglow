@@ -335,8 +335,12 @@ void PhotoEditorApp::openImage() {
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
     meta.luminanceHistogram = computeLuminanceHistogram(img);
-    for (const auto& e : m_effects->entries())
+    for (const auto& e : m_effects->entries()) {
         e.effect->onImageLoaded(meta);
+        if (auto* cs = dynamic_cast<ICropSource*>(e.effect))
+            cs->setSourceImageSize(img.size());
+    }
+    syncViewportRotation();
     triggerReprocess();
 }
 

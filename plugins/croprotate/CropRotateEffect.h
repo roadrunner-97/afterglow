@@ -49,6 +49,7 @@ public:
     // ICropSource
     QRectF userCropRect()  const override;
     float  userCropAngle() const override;
+    void   setSourceImageSize(QSize sz) override;
 
     // IInteractiveEffect
     void    paintOverlay (QPainter& painter, const ViewportTransform& vt) override;
@@ -67,6 +68,17 @@ private:
     float   m_angleDeg   = 0.0f;         // fine rotation, range ±45°
     int     m_quarterTurns = 0;           // 0..3, each = 90° CCW
     SubTool m_subTool    = SubTool::Handles;
+
+    // Cached source image dims (pixels).  Used so clamp / auto-fit account
+    // for the actual aspect ratio.  Pushed in by the host on image load via
+    // ICropSource::setSourceImageSize.
+    QSize   m_imageSize;
+
+    // True once the user has dragged a crop handle (corner / edge / move).
+    // Until then, angle changes auto-fit the crop to the largest aspect-
+    // preserving rectangle that fits in the rotated image; afterwards we
+    // respect the user's choice and only clamp to keep them in-bounds.
+    bool    m_userManualCrop = false;
 
     // ── UI ─────────────────────────────────────────────────────────────────
     QWidget*    m_controlsWidget    = nullptr;
@@ -106,8 +118,18 @@ private:
     Handles buildHandles(const ViewportTransform& vt) const;
 
     // Snap (cx, cy, w, h) so the rotated source-space footprint fits in
-    // [0, 1]².  Shrinks uniformly first if needed.
+    // [0, 1]², factoring in the source image aspect ratio.  Shrinks
+    // uniformly first if it can't fit at any centre.
     QRectF clampToImageBounds(double cx, double cy, double w, double h) const;
+
+    // The largest centred rectangle of source aspect ratio that fits inside
+    // the rotated source image.  In normalised coords, an aspect-preserving
+    // crop is square (wn == hn), so this returns one centred at (0.5, 0.5).
+    QRectF largestInscribedCrop(float angleDeg) const;
+
+    // After an angle change: auto-fit if the user has not yet manually
+    // adjusted the crop, otherwise just clamp the existing crop in place.
+    void   reFitOrClamp();
 
     // Returns handle index if screen point is within hit radius, else -1.
     // Returns handle encoding: 0-3=corner(TL/TR/BR/BL), 4-7=edge(T/B/L/R),

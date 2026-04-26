@@ -58,8 +58,7 @@ QWidget* CropRotateEffect::createControlsWidget() {
     m_angleSlider = new ParamSlider("Rotation", -45.0, 45.0, 0.1, 1);
     connect(m_angleSlider, &ParamSlider::valueChanged, this, [this](double v) {
         m_angleDeg = static_cast<float>(v);
-        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
-                                    m_crop.width(), m_crop.height());
+        reFitOrClamp();
         emit liveParametersChanged();
     });
     connect(m_angleSlider, &ParamSlider::editingFinished, this, [this]() {
@@ -77,23 +76,22 @@ QWidget* CropRotateEffect::createControlsWidget() {
 
     connect(btn90ccw, &QPushButton::clicked, this, [this]() {
         m_quarterTurns = (m_quarterTurns + 1) % 4;
-        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
-                                    m_crop.width(), m_crop.height());
+        reFitOrClamp();
         emit parametersChanged();
     });
     connect(btn90cw, &QPushButton::clicked, this, [this]() {
         m_quarterTurns = (m_quarterTurns + 3) % 4;   // +3 mod 4 = -1 mod 4
-        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
-                                    m_crop.width(), m_crop.height());
+        reFitOrClamp();
         emit parametersChanged();
     });
 
     // ── Reset Crop ───────────────────────────────────────────────────────────
     auto* btnReset = new QPushButton("Reset Crop");
     connect(btnReset, &QPushButton::clicked, this, [this]() {
-        m_crop        = QRectF(0.0, 0.0, 1.0, 1.0);
-        m_angleDeg    = 0.0f;
-        m_quarterTurns = 0;
+        m_crop           = QRectF(0.0, 0.0, 1.0, 1.0);
+        m_angleDeg       = 0.0f;
+        m_quarterTurns   = 0;
+        m_userManualCrop = false;
         if (m_angleSlider) {
             m_angleSlider->blockSignals(true);
             m_angleSlider->setValue(0.0);
@@ -169,24 +167,33 @@ float  CropRotateEffect::userCropAngle() const {
 // IInteractiveEffect helpers
 // ============================================================================
 
-// Half-extents of the AABB obtained by rotating an axis-aligned rectangle
-// of size (w, h) by angleDeg around its centre.  Used to clamp the crop so
-// that its source-space footprint (the crop box, un-rotated by the image
-// rotation) fits inside the [0, 1]² source plane.
-static QPointF rotatedAabbHalfExtents(double w, double h, float angleDeg) {
+// Aspect ratio of the cached source image (W/H), or 1.0 if no image yet.
+// Bound math operates in normalised image coords; rotation is geometric in
+// source pixels, so we need this factor to convert correctly between the
+// two when the image isn't square.
+static double sourceAspect(QSize imgSize) {
+    if (imgSize.width() <= 0 || imgSize.height() <= 0) return 1.0;
+    return static_cast<double>(imgSize.width()) / imgSize.height();
+}
+
+// Half-extents (in normalised image coords) of the AABB you get by
+// rotating a rectangle of normalised size (w, h) by angleDeg around its
+// centre, accounting for image aspect ratio so that — in *source pixels* —
+// the rotated rect's bounding box maps back to [0, 1]² in normalised
+// coords once divided by W and H respectively.
+static QPointF rotatedHalfAabbNorm(double w, double h, float angleDeg,
+                                    QSize imgSize) {
     const double a = std::abs(static_cast<double>(angleDeg)) * M_PI / 180.0;
     const double c = std::abs(std::cos(a));
     const double s = std::abs(std::sin(a));
-    return { 0.5 * (w * c + h * s),
-             0.5 * (w * s + h * c) };
+    const double r = sourceAspect(imgSize);   // W/H
+    return { 0.5 * (w * c + h * s / r),
+             0.5 * (w * s * r + h * c) };
 }
 
-// Clamp (cx, cy, w, h) — all in normalised source coords — so that the
-// rotated rectangle fits in [0, 1]².  Shrinks uniformly if it can't fit at
-// any centre, then clamps the centre.  Returns the corrected QRectF.
 QRectF CropRotateEffect::clampToImageBounds(double cx, double cy,
                                              double w, double h) const {
-    const QPointF half = rotatedAabbHalfExtents(w, h, userCropAngle());
+    QPointF half = rotatedHalfAabbNorm(w, h, userCropAngle(), m_imageSize);
     double bw = half.x();
     double bh = half.y();
     if (bw > 0.5 || bh > 0.5) {
@@ -199,6 +206,40 @@ QRectF CropRotateEffect::clampToImageBounds(double cx, double cy,
     cx = std::clamp(cx, bw, 1.0 - bw);
     cy = std::clamp(cy, bh, 1.0 - bh);
     return QRectF(cx - w * 0.5, cy - h * 0.5, w, h);
+}
+
+// Largest centred aspect-preserving crop that fits inside the source image
+// rotated by angleDeg around its centre.  In normalised coords, "aspect-
+// preserving" means wn == hn (the image's aspect is "stretched out" by the
+// per-axis normalisation).
+QRectF CropRotateEffect::largestInscribedCrop(float angleDeg) const {
+    const double a = std::abs(static_cast<double>(angleDeg)) * M_PI / 180.0;
+    const double c = std::abs(std::cos(a));
+    const double s = std::abs(std::sin(a));
+    const double r = sourceAspect(m_imageSize);   // W/H
+
+    // From rotatedHalfAabbNorm with wn == hn == size, both half-extents
+    // ≤ 0.5 → size ≤ 1 / (c + s/r) and size ≤ 1 / (s*r + c).  Take min.
+    const double sizeW = 1.0 / (c + s / r);
+    const double sizeH = 1.0 / (s * r + c);
+    double size = std::clamp(std::min(sizeW, sizeH), 0.0, 1.0);
+    return QRectF(0.5 - size * 0.5, 0.5 - size * 0.5, size, size);
+}
+
+void CropRotateEffect::reFitOrClamp() {
+    if (m_userManualCrop) {
+        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
+                                    m_crop.width(), m_crop.height());
+    } else {
+        m_crop = largestInscribedCrop(userCropAngle());
+    }
+}
+
+void CropRotateEffect::setSourceImageSize(QSize sz) {
+    m_imageSize = sz;
+    // New image: re-evaluate any auto-fit so the default crop matches the
+    // (possibly new) aspect ratio.
+    reFitOrClamp();
 }
 
 CropRotateEffect::Handles
@@ -571,8 +612,7 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
         // Clamp
         float newAngle = std::max(-45.0f, std::min(45.0f, m_dragAngleStart + delta));
         m_angleDeg = newAngle;
-        m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
-                                    m_crop.width(), m_crop.height());
+        reFitOrClamp();
         // GCOVR_EXCL_START  (UI-gated — only when controls widget has been built)
         if (m_angleSlider) {
             m_angleSlider->blockSignals(true);
@@ -651,6 +691,10 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
                                     x1 - x0, y1 - y0);
     }
 
+    // Any non-rotation drag counts as the user "manually applying" a crop —
+    // future angle changes will respect this rect rather than auto-fitting.
+    m_userManualCrop = true;
+
     emit liveParametersChanged();
     return true;
 }
@@ -681,8 +725,7 @@ bool CropRotateEffect::mouseRelease(QMouseEvent* event, const ViewportTransform&
             const float clamped  = std::clamp(static_cast<float>(quarter - lineDeg),
                                               -45.0f, 45.0f);
             m_angleDeg = clamped;
-            m_crop = clampToImageBounds(m_crop.center().x(), m_crop.center().y(),
-                                        m_crop.width(), m_crop.height());
+            reFitOrClamp();
             // GCOVR_EXCL_START  (UI-gated — only when controls widget exists)
             if (m_angleSlider) {
                 m_angleSlider->blockSignals(true);
