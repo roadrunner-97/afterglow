@@ -210,11 +210,11 @@ void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
 
     const auto& devs = GpuDeviceRegistry::instance().devices();
     if (devs.empty()) {
-        m_gpuSelector->addItem("No GPU devices found");
+        m_gpuSelector->addItem("No OpenCL devices found");
         m_gpuSelector->setEnabled(false);
     } else {
         for (const auto& d : devs)
-            m_gpuSelector->addItem(d.name + " [" + d.platformName + "]");
+            m_gpuSelector->addItem(d.name + " [" + d.platformName + " · " + d.typeName + "]");
         m_gpuSelector->setCurrentIndex(GpuDeviceRegistry::instance().currentIndex());
     }
 

@@ -9,10 +9,16 @@
 struct GpuDeviceInfo {
     QString name;
     QString platformName;
+    QString typeName;   // "GPU", "CPU", "Accelerator", or "Device"
 };
 
 /**
- * @brief Singleton registry of available OpenCL GPU devices.
+ * @brief Singleton registry of available OpenCL compute devices.
+ *
+ * Enumerates every device exposed by the OpenCL ICDs on the system: discrete
+ * and integrated GPUs first, then CPU runtimes (POCL, Intel CPU, AMD CPU…),
+ * then accelerators. A box with no GPU still gets a working device list as
+ * long as a CPU ICD is installed.
  *
  * Call enumerate() once at startup. The UI reads deviceNames() to populate a
  * combo box and calls setDevice(idx) on selection. setDevice() bumps revision()

@@ -228,4 +228,4 @@ set_target_properties(myeffect_effect PROPERTIES AUTOMOC ON)
 - **clangd false positives** inside `HAVE_OPENCL` blocks: clangd doesn't see the compile definition and marks OpenCL code as unreachable. The actual compiler is fine — ignore these IDE errors.
 - **`QFutureWatcher` lambda**: the worker lambda must not capture `this` — capture only the image by value and the snapshotted effect calls by move.
 - **Effect collapse state**: uses `std::shared_ptr<bool>` captured by value in the lambda — no heap-allocated state structs needed.
-- **No CPU fallback** — all effects use GPU paths only; if GPU fails, `processImage` returns `{}`.
+- **CPU fallback via OpenCL ICDs** — there's no hand-written CPU code path. On a GPU-less box, install a CPU OpenCL ICD (POCL, Intel CPU runtime, AMD CPU runtime) and `GpuDeviceRegistry` enumerates it like any other device. The picker labels GPU/CPU/Accelerator devices distinctly.

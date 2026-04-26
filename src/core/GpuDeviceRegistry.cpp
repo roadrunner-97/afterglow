@@ -1,5 +1,6 @@
 #include "GpuDeviceRegistry.h"
 #include <QDebug>
+#include <algorithm>
 
 #ifdef HAVE_OPENCL
 #define CL_HPP_TARGET_OPENCL_VERSION 200
@@ -18,58 +19,70 @@ GpuDeviceRegistry& GpuDeviceRegistry::instance() {
     return reg;
 }
 
+#ifdef HAVE_OPENCL
+static QString deviceTypeName(cl_device_type t) {
+    if (t & CL_DEVICE_TYPE_GPU)         return "GPU";
+    if (t & CL_DEVICE_TYPE_CPU)         return "CPU";
+    if (t & CL_DEVICE_TYPE_ACCELERATOR) return "Accelerator";
+    return "Device"; // GCOVR_EXCL_LINE
+}
+
+// Sort key: GPU(0) < CPU(1) < Accelerator(2) < other(3) so GPUs stay first
+// in the picker and remain the default selection.
+static int deviceTypeRank(cl_device_type t) {
+    if (t & CL_DEVICE_TYPE_GPU)         return 0;
+    if (t & CL_DEVICE_TYPE_CPU)         return 1;
+    if (t & CL_DEVICE_TYPE_ACCELERATOR) return 2;
+    return 3; // GCOVR_EXCL_LINE
+}
+#endif
+
 void GpuDeviceRegistry::enumerate() {
 #ifdef HAVE_OPENCL
     m_devices.clear();
+
+    struct Entry { GpuDeviceInfo info; int rank; };
+    std::vector<Entry> entries;
+
     try {
         std::vector<cl::Platform> platforms;
         cl::Platform::get(&platforms);
 
-        // First pass: collect GPU devices from all platforms
         for (auto& p : platforms) {
             std::string pname;
             try { pname = p.getInfo<CL_PLATFORM_NAME>(); } catch (...) {} // GCOVR_EXCL_LINE
 
-            std::vector<cl::Device> gpuDevs;
-            try { p.getDevices(CL_DEVICE_TYPE_GPU, &gpuDevs); } catch (...) {} // GCOVR_EXCL_LINE
+            std::vector<cl::Device> devs;
+            try { p.getDevices(CL_DEVICE_TYPE_ALL, &devs); } catch (...) {} // GCOVR_EXCL_LINE
 
-            for (auto& d : gpuDevs) {
+            for (auto& d : devs) {
+                cl_device_type t = 0;
+                try { t = d.getInfo<CL_DEVICE_TYPE>(); } catch (...) {} // GCOVR_EXCL_LINE
+
                 GpuDeviceInfo info;
                 try {
                     info.name = QString::fromStdString(d.getInfo<CL_DEVICE_NAME>()).trimmed();
-                } catch (...) { info.name = "Unknown GPU"; } // GCOVR_EXCL_LINE
+                } catch (...) { info.name = "Unknown Device"; } // GCOVR_EXCL_LINE
                 info.platformName = QString::fromStdString(pname).trimmed();
-                m_devices.push_back(info);
-                qDebug() << "[GpuRegistry] Found:" << info.name << "on" << info.platformName;
+                info.typeName     = deviceTypeName(t);
+                entries.push_back({info, deviceTypeRank(t)});
             }
         }
-
-        // GCOVR_EXCL_START
-        // Fallback: if no GPU devices found, include everything.
-        // Infeasible on any machine with a GPU (test env requires one).
-        if (m_devices.empty()) {
-            for (auto& p : platforms) {
-                std::string pname;
-                try { pname = p.getInfo<CL_PLATFORM_NAME>(); } catch (...) {}
-                std::vector<cl::Device> allDevs;
-                try { p.getDevices(CL_DEVICE_TYPE_ALL, &allDevs); } catch (...) {}
-                for (auto& d : allDevs) {
-                    GpuDeviceInfo info;
-                    try {
-                        info.name = QString::fromStdString(d.getInfo<CL_DEVICE_NAME>()).trimmed();
-                    } catch (...) { info.name = "Unknown Device"; }
-                    info.platformName = QString::fromStdString(pname).trimmed();
-                    m_devices.push_back(info);
-                }
-            }
-        }
-        // GCOVR_EXCL_STOP
     }
     // GCOVR_EXCL_START
     catch (...) {
         qWarning() << "[GpuRegistry] OpenCL enumeration failed";
     }
     // GCOVR_EXCL_STOP
+
+    std::stable_sort(entries.begin(), entries.end(),
+                     [](const Entry& a, const Entry& b) { return a.rank < b.rank; });
+    m_devices.reserve(entries.size());
+    for (auto& e : entries) {
+        m_devices.push_back(e.info);
+        qDebug() << "[GpuRegistry] Found:" << e.info.name
+                 << "(" << e.info.typeName << ") on" << e.info.platformName;
+    }
 
     if (m_currentIndex >= static_cast<int>(m_devices.size()))
         m_currentIndex = 0;
@@ -92,27 +105,28 @@ void GpuDeviceRegistry::setDevice(int index) {
 
 #ifdef HAVE_OPENCL
 
-// Enumerate all GPU devices in the same order as GpuDeviceRegistry::enumerate().
+// Enumerate all OpenCL devices in the same order as GpuDeviceRegistry::enumerate():
+// GPUs first, then CPUs, then accelerators.
 static std::vector<std::pair<cl::Platform, cl::Device>> enumerateAllOCLDevices() {
     std::vector<std::pair<cl::Platform, cl::Device>> result;
     std::vector<cl::Platform> platforms;
-    try { cl::Platform::get(&platforms); } catch (...) { return result; }
+    try { cl::Platform::get(&platforms); } catch (...) { return result; } // GCOVR_EXCL_LINE
 
+    struct Entry { cl::Platform p; cl::Device d; int rank; };
+    std::vector<Entry> entries;
     for (auto& p : platforms) {
-        std::vector<cl::Device> gpuDevs;
-        try { p.getDevices(CL_DEVICE_TYPE_GPU, &gpuDevs); } catch (...) {}
-        for (auto& d : gpuDevs) result.push_back({p, d});
-    }
-
-    // GCOVR_EXCL_START
-    if (result.empty()) {
-        for (auto& p : platforms) {
-            std::vector<cl::Device> allDevs;
-            try { p.getDevices(CL_DEVICE_TYPE_ALL, &allDevs); } catch (...) {}
-            for (auto& d : allDevs) result.push_back({p, d});
+        std::vector<cl::Device> devs;
+        try { p.getDevices(CL_DEVICE_TYPE_ALL, &devs); } catch (...) {} // GCOVR_EXCL_LINE
+        for (auto& d : devs) {
+            cl_device_type t = 0;
+            try { t = d.getInfo<CL_DEVICE_TYPE>(); } catch (...) {} // GCOVR_EXCL_LINE
+            entries.push_back({p, d, deviceTypeRank(t)});
         }
     }
-    // GCOVR_EXCL_STOP
+    std::stable_sort(entries.begin(), entries.end(),
+                     [](const Entry& a, const Entry& b) { return a.rank < b.rank; });
+    result.reserve(entries.size());
+    for (auto& e : entries) result.push_back({e.p, e.d});
     return result;
 }
 
