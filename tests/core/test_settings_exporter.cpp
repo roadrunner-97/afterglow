@@ -83,6 +83,25 @@ private slots:
         QVERIFY(yaml.contains("\\\\"));
     }
 
+    void escapesNewlineCarriageTabAndControlChars() {
+        EffectManager mgr;
+        const QString path = QStringLiteral("a\nb\rc\td\x01");
+        const QString yaml = SettingsExporter::toYaml(mgr, path);
+        QVERIFY(yaml.contains("\\n"));
+        QVERIFY(yaml.contains("\\r"));
+        QVERIFY(yaml.contains("\\t"));
+        QVERIFY(yaml.contains("\\x01"));
+    }
+
+    void serialisesStringValuedParameter() {
+        // Exercises the QString fallback in formatScalar for non-numeric values.
+        EffectManager mgr;
+        QMap<QString, QVariant> params;
+        params["mode"] = QString("auto");
+        mgr.addEffect(new FakeEffect("Mode", params));
+        QVERIFY(SettingsExporter::toYaml(mgr).contains("mode: \"auto\""));
+    }
+
     void writeYaml_createsFile() {
         EffectManager mgr;
         mgr.addEffect(new FakeEffect("Brightness", {{"brightness", 5}}));

@@ -104,10 +104,13 @@ bool writeYaml(const QString& path,
         return false;
     }
     const QByteArray bytes = toYaml(mgr, sourceImagePath).toUtf8();
+    // GCOVR_EXCL_START — short-write on a freshly-opened regular file isn't
+    // reachable from a unit test; the branch exists for diagnostic safety.
     if (f.write(bytes) != bytes.size()) {
         if (error) *error = f.errorString();
         return false;
     }
+    // GCOVR_EXCL_STOP
     return true;
 }
 
