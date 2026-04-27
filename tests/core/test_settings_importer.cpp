@@ -104,6 +104,61 @@ private slots:
         QCOMPARE(s.image, expected);
     }
 
+    void unquotes_carriageReturnAndUnknownEscape() {
+        // \r decodes to CR; an unknown escape like \q falls through the
+        // switch's default branch and yields the literal escape char.
+        const QString yaml = QStringLiteral("image: \"x\\ry\\qz\"\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.image, QStringLiteral("x\ry""qz"));
+    }
+
+    void unquotes_malformedHexLeavesXThenChars() {
+        // \xZZ — hex parse fails, so the 'x' is appended and Z's continue
+        // through the loop as ordinary characters.
+        const QString yaml = QStringLiteral("image: \"\\xZZ\"\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.image, QStringLiteral("xZZ"));
+    }
+
+    void unquotes_unterminatedQuoteReturnedAsIs() {
+        // Token starts with " but doesn't end with " — unquote bails out
+        // and returns the raw token.
+        const QString yaml = QStringLiteral("image: \"unterminated\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.image, QStringLiteral("\"unterminated"));
+    }
+
+    void parses_unquotedFallbackKeepsString() {
+        // bare token that isn't bool/int/double — kept as the raw string.
+        const QString yaml = QStringLiteral(
+            "effects:\n"
+            "  - name: \"X\"\n"
+            "    enabled: true\n"
+            "    parameters:\n"
+            "      mode: hello\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.effects[0].parameters.value("mode").toString(),
+                 QString("hello"));
+    }
+
+    void parses_largeIntegerPromotesToLongLong() {
+        // Value beyond INT_MAX must round-trip without losing precision.
+        const QString yaml = QStringLiteral(
+            "effects:\n"
+            "  - name: \"X\"\n"
+            "    enabled: true\n"
+            "    parameters:\n"
+            "      big: 99999999999\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.effects[0].parameters.value("big").toLongLong(),
+                 99999999999LL);
+    }
+
     void roundTrip_exporterToImporter() {
         // Build a manager, export, parse — values should match what we wrote.
         EffectManager mgr;
