@@ -1,0 +1,12 @@
+Each subdirectory here is one golden-image test case.
+Layout per case:
+  cases/<name>/input.<ext>      — source image (RAW or anything QImage::load handles)
+  cases/<name>/settings.yaml    — YAML produced by File → Export Settings…
+  cases/<name>/expected.<ext>   — reference output produced by File → Save Image…
+
+Generate fixtures from the editor: open the input, dial settings, export both
+the YAML (Debug → Save Settings…) and the rendered PNG (File → Save Image…),
+drop them in a new <name>/ subdir.
+
+On a failing case the test writes actual.png and diff.png next to expected.*
+for inspection.

@@ -149,3 +149,8 @@ set_tests_properties(ParamSlider PROPERTIES
 # Effect integration tests — GPU (OpenCL) required; skip gracefully if absent
 # ---------------------------------------------------------------------------
 add_subdirectory(effects)
+
+# ---------------------------------------------------------------------------
+# Golden-image regression tests — fixtures in tests/golden/cases/<name>/
+# ---------------------------------------------------------------------------
+add_subdirectory(golden)
