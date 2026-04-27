@@ -29,6 +29,7 @@ private slots:
     void saveImage();
     void exportSettings();
     void importSettings();
+    void saveTestCase();
     void onParametersChanged();
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result);

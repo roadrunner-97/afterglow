@@ -206,6 +206,11 @@ void PhotoEditorApp::setupMenuBar() {
 
     QAction* exportAct = debugMenu->addAction("Save Settings…");
     connect(exportAct, &QAction::triggered, this, &PhotoEditorApp::exportSettings);
+
+    debugMenu->addSeparator();
+
+    QAction* testCaseAct = debugMenu->addAction("Save Test Case…");
+    connect(testCaseAct, &QAction::triggered, this, &PhotoEditorApp::saveTestCase);
 }
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
@@ -404,6 +409,47 @@ void PhotoEditorApp::importSettings() {
     // queue N reprocesses; the generation counter discards stale results, but
     // do one definitive reprocess at the end so the final state is in flight.
     triggerReprocess();
+}
+
+void PhotoEditorApp::saveTestCase() {
+    if (m_originalImage.isNull() || m_currentImagePath.isEmpty()) {
+        QMessageBox::warning(this, "Save Test Case",
+            "Open an image first — a test case bundles the source image, the "
+            "current settings, and the rendered output.");
+        return;
+    }
+
+    const QString dir = QFileDialog::getExistingDirectory(
+        this, "Save Test Case To Folder", m_lastDir,
+        QFileDialog::ShowDirsOnly);
+    if (dir.isEmpty()) return;
+    m_lastDir = dir;
+
+    const QFileInfo srcInfo(m_currentImagePath);
+    const QString inputDest = QDir(dir).filePath("input." + srcInfo.suffix().toLower());
+    if (QFile::exists(inputDest)) QFile::remove(inputDest);
+    if (!QFile::copy(m_currentImagePath, inputDest)) {
+        QMessageBox::warning(this, "Save Test Case",
+            QString("Could not copy source image to:\n%1").arg(inputDest));
+        return;
+    }
+
+    QString error;
+    const QString yamlPath = QDir(dir).filePath("settings.yaml");
+    if (!SettingsExporter::writeYaml(yamlPath, *m_effects, m_currentImagePath, &error)) {
+        QMessageBox::warning(this, "Save Test Case",
+            QString("Could not write settings to:\n%1\n\n%2").arg(yamlPath, error));
+        return;
+    }
+
+    // Reuse the normal export path: onExportComplete bakes crop + rotate and
+    // writes m_pendingSavePath.  PNG keeps the rendered output bit-exact for
+    // the SSIM check that test_golden does at runtime.
+    m_pendingSavePath = QDir(dir).filePath("expected.png");
+    QVector<PhotoEditorEffect*> active;
+    for (const auto& e : m_effects->entries())
+        if (e.enabled) active.append(e.effect);
+    m_processor->exportImageAsync(m_originalImage, active);
 }
 
 void PhotoEditorApp::exportSettings() {
