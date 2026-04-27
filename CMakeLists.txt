@@ -104,6 +104,8 @@ add_library(photoeditor_core STATIC
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h
+    src/core/SettingsExporter.cpp
+    src/core/SettingsExporter.h
 )
 
 target_link_libraries(photoeditor_core

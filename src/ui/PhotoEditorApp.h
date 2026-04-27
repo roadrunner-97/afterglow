@@ -27,6 +27,7 @@ protected:
 private slots:
     void openImage();
     void saveImage();
+    void exportSettings();
     void onParametersChanged();
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result);
@@ -48,6 +49,7 @@ private:
     EffectManager*  m_effects;
     ImageProcessor* m_processor;
     QImage          m_originalImage;
+    QString         m_currentImagePath;
     QString         m_lastDir;
     bool            m_liveUpdate = false;
 

@@ -5,6 +5,7 @@
 #include "ICropSource.h"
 #include "IInteractiveEffect.h"
 #include "RawLoader.h"
+#include "SettingsExporter.h"
 #include <QPainter>
 #include <QTransform>
 #include <QVBoxLayout>
@@ -172,6 +173,10 @@ void PhotoEditorApp::setupMenuBar() {
     saveAct->setShortcut(QKeySequence::Save);
     connect(saveAct, &QAction::triggered, this, &PhotoEditorApp::saveImage);
 
+    QAction* exportSettingsAct = fileMenu->addAction("Export Settings…");
+    exportSettingsAct->setShortcut(QKeySequence("Ctrl+E"));
+    connect(exportSettingsAct, &QAction::triggered, this, &PhotoEditorApp::exportSettings);
+
     fileMenu->addSeparator();
 
     QAction* exitAct = fileMenu->addAction("Exit");
@@ -332,6 +337,7 @@ void PhotoEditorApp::openImage() {
     }
 
     m_originalImage = img;
+    m_currentImagePath = fileName;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
     meta.luminanceHistogram = computeLuminanceHistogram(img);
@@ -359,6 +365,29 @@ void PhotoEditorApp::saveImage() {
     for (const auto& e : m_effects->entries())
         if (e.enabled) active.append(e.effect);
     m_processor->exportImageAsync(m_originalImage, active);
+}
+
+void PhotoEditorApp::exportSettings() {
+    // Default the dump filename to <imagebasename>.yml next to the image.
+    QString suggested;
+    if (!m_currentImagePath.isEmpty()) {
+        const QFileInfo fi(m_currentImagePath);
+        suggested = fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
+    } else {
+        suggested = QDir(m_lastDir).filePath("settings.yml");
+    }
+
+    const QString fileName = QFileDialog::getSaveFileName(
+        this, "Export Settings", suggested,
+        "YAML (*.yml *.yaml);;All Files (*)");
+    if (fileName.isEmpty()) return;
+    m_lastDir = QFileInfo(fileName).absolutePath();
+
+    QString error;
+    if (!SettingsExporter::writeYaml(fileName, *m_effects, m_currentImagePath, &error)) {
+        QMessageBox::warning(this, "Export Failed",
+            QString("Could not write settings to:\n%1\n\n%2").arg(fileName, error));
+    }
 }
 
 // Bake the user's non-destructive crop + rotation into the exported QImage.
