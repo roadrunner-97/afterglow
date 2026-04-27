@@ -377,6 +377,18 @@ QMap<QString, QVariant> VignetteEffect::getParameters() const {
     return params;
 }
 
+void VignetteEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    auto apply = [&](ParamSlider* p, const char* key) {
+        if (p && parameters.contains(key))
+            p->setValue(parameters.value(key).toDouble());
+    };
+    apply(amountParam,    "amount");
+    apply(midpointParam,  "midpoint");
+    apply(featherParam,   "feather");
+    apply(roundnessParam, "roundness");
+    emit parametersChanged();
+}
+
 // ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================

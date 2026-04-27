@@ -137,6 +137,28 @@ QMap<QString, QVariant> CropRotateEffect::getParameters() const {
     return p;
 }
 
+void CropRotateEffect::applyParameters(const QMap<QString, QVariant>& p) {
+    if (p.contains("angle"))
+        m_angleDeg = static_cast<float>(p.value("angle").toDouble());
+    if (p.contains("quarterTurns"))
+        m_quarterTurns = p.value("quarterTurns").toInt();
+    if (p.contains("cropX0") && p.contains("cropY0") &&
+        p.contains("cropX1") && p.contains("cropY1")) {
+        const double x0 = p.value("cropX0").toDouble();
+        const double y0 = p.value("cropY0").toDouble();
+        const double x1 = p.value("cropX1").toDouble();
+        const double y1 = p.value("cropY1").toDouble();
+        m_crop = QRectF(x0, y0, x1 - x0, y1 - y0);
+        // If the loaded crop isn't the full default rect, treat it as a manual
+        // user choice so subsequent angle changes won't auto-fit it away.
+        const double eps = 1e-6;
+        m_userManualCrop = !(std::abs(x0) < eps && std::abs(y0) < eps &&
+                             std::abs(x1 - 1.0) < eps && std::abs(y1 - 1.0) < eps);
+    }
+    if (m_angleSlider) m_angleSlider->setValue(m_angleDeg);
+    emit parametersChanged();
+}
+
 // ============================================================================
 // IGpuEffect — no-op (crop/rotate is pure metadata, no kernel work)
 // ============================================================================

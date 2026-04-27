@@ -359,6 +359,12 @@ QMap<QString, QVariant> HotPixelEffect::getParameters() const {
     return params;
 }
 
+void HotPixelEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (thresholdParam && parameters.contains("threshold"))
+        thresholdParam->setValue(parameters.value("threshold").toDouble());
+    emit parametersChanged();
+}
+
 QImage HotPixelEffect::processImage(const QImage& image,
                                      const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;

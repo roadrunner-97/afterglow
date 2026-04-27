@@ -422,6 +422,14 @@ QMap<QString, QVariant> ClarityEffect::getParameters() const {
     return params;
 }
 
+void ClarityEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (amountParam && parameters.contains("amount"))
+        amountParam->setValue(parameters.value("amount").toDouble());
+    if (radiusParam && parameters.contains("radius"))
+        radiusParam->setValue(parameters.value("radius").toDouble());
+    emit parametersChanged();
+}
+
 QImage ClarityEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;
 

@@ -339,6 +339,23 @@ QMap<QString, QVariant> ColorBalanceEffect::getParameters() const {
     return params;
 }
 
+void ColorBalanceEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    auto apply = [&](ParamSlider* p, const char* key) {
+        if (p && parameters.contains(key))
+            p->setValue(parameters.value(key).toDouble());
+    };
+    apply(shadowRParam,    "shadowR");
+    apply(shadowGParam,    "shadowG");
+    apply(shadowBParam,    "shadowB");
+    apply(midtoneRParam,   "midtoneR");
+    apply(midtoneGParam,   "midtoneG");
+    apply(midtoneBParam,   "midtoneB");
+    apply(highlightRParam, "highlightR");
+    apply(highlightGParam, "highlightG");
+    apply(highlightBParam, "highlightB");
+    emit parametersChanged();
+}
+
 // ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================

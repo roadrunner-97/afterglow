@@ -513,6 +513,20 @@ QMap<QString, QVariant> FilmGrainEffect::getParameters() const {
     return params;
 }
 
+void FilmGrainEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (amountParam && parameters.contains("amount"))
+        amountParam->setValue(parameters.value("amount").toDouble());
+    if (sizeParam && parameters.contains("size"))
+        sizeParam->setValue(parameters.value("size").toDouble());
+    if (seedParam && parameters.contains("seed"))
+        seedParam->setValue(parameters.value("seed").toDouble());
+    if (lumWeightBox && parameters.contains("lumWeight")) {
+        QSignalBlocker block(lumWeightBox);
+        lumWeightBox->setChecked(parameters.value("lumWeight").toBool());
+    }
+    emit parametersChanged();
+}
+
 // ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================

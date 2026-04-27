@@ -439,6 +439,16 @@ QMap<QString, QVariant> UnsharpEffect::getParameters() const {
     return params;
 }
 
+void UnsharpEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (amountParam && parameters.contains("amount"))
+        amountParam->setValue(parameters.value("amount").toDouble());
+    if (radiusParam && parameters.contains("radius"))
+        radiusParam->setValue(parameters.value("radius").toDouble());
+    if (thresholdParam && parameters.contains("threshold"))
+        thresholdParam->setValue(parameters.value("threshold").toDouble());
+    emit parametersChanged();
+}
+
 QImage UnsharpEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;
 

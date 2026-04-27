@@ -437,6 +437,14 @@ QMap<QString, QVariant> SaturationEffect::getParameters() const {
     return params;
 }
 
+void SaturationEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (saturationParam && parameters.contains("saturation"))
+        saturationParam->setValue(parameters.value("saturation").toDouble());
+    if (vibrancyParam && parameters.contains("vibrancy"))
+        vibrancyParam->setValue(parameters.value("vibrancy").toDouble());
+    emit parametersChanged();
+}
+
 QImage SaturationEffect::processImage(const QImage &image, const QMap<QString, QVariant> &parameters) {
     if (image.isNull()) return image;
 

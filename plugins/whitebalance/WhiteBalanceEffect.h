@@ -21,6 +21,7 @@ public:
 
     QWidget* createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
+    void applyParameters(const QMap<QString, QVariant>& parameters) override;
 
     // Sets the slider default to the image's as-shot color temperature.
     void onImageLoaded(const ImageMetadata& meta) override;

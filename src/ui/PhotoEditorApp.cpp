@@ -6,6 +6,7 @@
 #include "IInteractiveEffect.h"
 #include "RawLoader.h"
 #include "SettingsExporter.h"
+#include "SettingsImporter.h"
 #include <QPainter>
 #include <QTransform>
 #include <QVBoxLayout>
@@ -173,10 +174,6 @@ void PhotoEditorApp::setupMenuBar() {
     saveAct->setShortcut(QKeySequence::Save);
     connect(saveAct, &QAction::triggered, this, &PhotoEditorApp::saveImage);
 
-    QAction* exportSettingsAct = fileMenu->addAction("Export Settings…");
-    exportSettingsAct->setShortcut(QKeySequence("Ctrl+E"));
-    connect(exportSettingsAct, &QAction::triggered, this, &PhotoEditorApp::exportSettings);
-
     fileMenu->addSeparator();
 
     QAction* exitAct = fileMenu->addAction("Exit");
@@ -197,6 +194,18 @@ void PhotoEditorApp::setupMenuBar() {
             triggerReprocess();
         });
     }
+
+    // Debug menu — import/export YAML presets.  Hidden behind its own menu so
+    // it stays out of the way of the everyday File workflow but is also the
+    // foundation for end-to-end tests and the future per-image edit-history
+    // library system (sidecar YAMLs detected on image load).
+    QMenu* debugMenu = menuBar()->addMenu("Debug");
+
+    QAction* importAct = debugMenu->addAction("Load Settings…");
+    connect(importAct, &QAction::triggered, this, &PhotoEditorApp::importSettings);
+
+    QAction* exportAct = debugMenu->addAction("Save Settings…");
+    connect(exportAct, &QAction::triggered, this, &PhotoEditorApp::exportSettings);
 }
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
@@ -365,6 +374,36 @@ void PhotoEditorApp::saveImage() {
     for (const auto& e : m_effects->entries())
         if (e.enabled) active.append(e.effect);
     m_processor->exportImageAsync(m_originalImage, active);
+}
+
+void PhotoEditorApp::importSettings() {
+    QString suggested = m_lastDir;
+    if (!m_currentImagePath.isEmpty()) {
+        const QFileInfo fi(m_currentImagePath);
+        const QString sidecar = fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
+        if (QFile::exists(sidecar)) suggested = sidecar;
+    }
+
+    const QString fileName = QFileDialog::getOpenFileName(
+        this, "Load Settings", suggested,
+        "YAML (*.yml *.yaml);;All Files (*)");
+    if (fileName.isEmpty()) return;
+    m_lastDir = QFileInfo(fileName).absolutePath();
+
+    SettingsImporter::Settings parsed;
+    QString error;
+    if (!SettingsImporter::readYaml(fileName, &parsed, &error)) {
+        QMessageBox::warning(this, "Load Failed",
+            QString("Could not read settings from:\n%1\n\n%2").arg(fileName, error));
+        return;
+    }
+
+    SettingsImporter::applyToManager(parsed, *m_effects);
+
+    // Each effect's applyParameters emits parametersChanged, which would
+    // queue N reprocesses; the generation counter discards stale results, but
+    // do one definitive reprocess at the end so the final state is in flight.
+    triggerReprocess();
 }
 
 void PhotoEditorApp::exportSettings() {

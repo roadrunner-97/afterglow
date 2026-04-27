@@ -429,6 +429,19 @@ QMap<QString, QVariant> BlurEffect::getParameters() const {
     return params;
 }
 
+void BlurEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (parameters.contains("blurType")) {
+        blurType = parameters.value("blurType").toInt();
+        if (blurTypeCombo) {
+            QSignalBlocker block(blurTypeCombo);
+            blurTypeCombo->setCurrentIndex(blurType);
+        }
+    }
+    if (radiusParam && parameters.contains("radius"))
+        radiusParam->setValue(parameters.value("radius").toDouble());
+    emit parametersChanged();
+}
+
 QImage BlurEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;
 

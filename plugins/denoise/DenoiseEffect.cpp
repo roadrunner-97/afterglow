@@ -751,6 +751,23 @@ QMap<QString, QVariant> DenoiseEffect::getParameters() const {
     return params;
 }
 
+void DenoiseEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (m_strengthParam && parameters.contains("strength"))
+        m_strengthParam->setValue(parameters.value("strength").toDouble());
+    if (m_shadowPreserveParam && parameters.contains("shadowPreserve"))
+        m_shadowPreserveParam->setValue(parameters.value("shadowPreserve").toDouble());
+    if (m_colorNoiseParam && parameters.contains("colorNoise"))
+        m_colorNoiseParam->setValue(parameters.value("colorNoise").toDouble());
+    if (parameters.contains("algorithm")) {
+        m_algorithm = parameters.value("algorithm").toInt();
+        if (m_algorithmCombo) {
+            QSignalBlocker block(m_algorithmCombo);
+            m_algorithmCombo->setCurrentIndex(m_algorithm);
+        }
+    }
+    emit parametersChanged();
+}
+
 QImage DenoiseEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
     if (image.isNull()) return image;
 

@@ -28,6 +28,7 @@ private slots:
     void openImage();
     void saveImage();
     void exportSettings();
+    void importSettings();
     void onParametersChanged();
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result);

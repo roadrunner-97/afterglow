@@ -410,6 +410,16 @@ QMap<QString, QVariant> WhiteBalanceEffect::getParameters() const {
     return params;
 }
 
+void WhiteBalanceEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    // shot_temp is image-derived metadata, not a user-editable control —
+    // skip restoring it from a saved file (the loaded image's own metadata wins).
+    if (temperatureParam && parameters.contains("temperature"))
+        temperatureParam->setValue(parameters.value("temperature").toDouble());
+    if (tintParam && parameters.contains("tint"))
+        tintParam->setValue(parameters.value("tint").toDouble());
+    emit parametersChanged();
+}
+
 QImage WhiteBalanceEffect::processImage(const QImage& image,
                                         const QMap<QString, QVariant>& parameters)
 {

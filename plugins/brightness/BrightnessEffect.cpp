@@ -333,6 +333,14 @@ QMap<QString, QVariant> BrightnessEffect::getParameters() const {
     return params;
 }
 
+void BrightnessEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    if (brightnessParam && parameters.contains("brightness"))
+        brightnessParam->setValue(parameters.value("brightness").toDouble());
+    if (contrastParam && parameters.contains("contrast"))
+        contrastParam->setValue(parameters.value("contrast").toDouble());
+    emit parametersChanged();
+}
+
 // ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================

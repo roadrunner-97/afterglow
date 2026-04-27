@@ -33,6 +33,12 @@ public:
     virtual QWidget* createControlsWidget() { return nullptr; }
     virtual QMap<QString, QVariant> getParameters() const { return {}; }
 
+    // Reverse of getParameters(): pushes a previously-saved parameter map back
+    // onto the effect's controls.  Default no-op so effects without parameters
+    // (or that haven't yet implemented load support) don't have to override.
+    // Implementations should ignore unknown keys and tolerate missing ones.
+    virtual void applyParameters(const QMap<QString, QVariant>& /*parameters*/) {}
+
     // Called after a new image is loaded.  Effects that want to adapt their
     // defaults to the image's metadata (e.g. white balance) override this.
     virtual void onImageLoaded(const ImageMetadata& /*meta*/) {}

@@ -374,6 +374,19 @@ QMap<QString, QVariant> SplitToningEffect::getParameters() const {
     return params;
 }
 
+void SplitToningEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    auto apply = [&](ParamSlider* p, const char* key) {
+        if (p && parameters.contains(key))
+            p->setValue(parameters.value(key).toDouble());
+    };
+    apply(shadowHueParam,    "shadowHue");
+    apply(shadowSatParam,    "shadowSat");
+    apply(highlightHueParam, "highlightHue");
+    apply(highlightSatParam, "highlightSat");
+    apply(balanceParam,      "balance");
+    emit parametersChanged();
+}
+
 // ============================================================================
 // IGpuEffect — shared pipeline interface
 // ============================================================================

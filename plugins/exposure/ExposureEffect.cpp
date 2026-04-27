@@ -821,6 +821,19 @@ QMap<QString, QVariant> ExposureEffect::getParameters() const {
     return params;
 }
 
+void ExposureEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+    auto apply = [&](ParamSlider* p, const char* key) {
+        if (p && parameters.contains(key))
+            p->setValue(parameters.value(key).toDouble());
+    };
+    apply(exposureParam,   "exposure");
+    apply(whitesParam,     "whites");
+    apply(highlightsParam, "highlights");
+    apply(shadowsParam,    "shadows");
+    apply(blacksParam,     "blacks");
+    emit parametersChanged();
+}
+
 void ExposureEffect::onImageLoaded(const ImageMetadata& meta) {
     m_histogram = meta.luminanceHistogram;
     if (m_applyHistogram) m_applyHistogram(m_histogram);

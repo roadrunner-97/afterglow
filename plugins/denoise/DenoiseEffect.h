@@ -23,6 +23,7 @@ public:
 
     QWidget* createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
+    void applyParameters(const QMap<QString, QVariant>& parameters) override;
 
     bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
