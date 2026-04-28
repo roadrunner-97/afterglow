@@ -25,6 +25,7 @@ public:
 
     void addEffect(PhotoEditorEffect* effect, bool enabled = true);  // takes ownership
     const QVector<EffectEntry>& entries() const;
+    QVector<PhotoEditorEffect*> activeEffects() const;
     void setEnabled(int index, bool enabled);
 
 signals:

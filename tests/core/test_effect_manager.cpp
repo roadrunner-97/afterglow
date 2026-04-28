@@ -111,6 +111,40 @@ private slots:
         QCOMPARE(mgr.entries()[1].effect, b);
     }
 
+    void activeEffects_emptyWhenNoneAdded() {
+        EffectManager mgr;
+        QVERIFY(mgr.activeEffects().isEmpty());
+    }
+
+    void activeEffects_returnsOnlyEnabled() {
+        EffectManager mgr;
+        auto* a = new MockEffect();
+        auto* b = new MockEffect();
+        auto* c = new MockEffect();
+        mgr.addEffect(a, /*enabled=*/true);
+        mgr.addEffect(b, /*enabled=*/false);
+        mgr.addEffect(c, /*enabled=*/true);
+
+        const auto active = mgr.activeEffects();
+        QCOMPARE(active.size(), 2);
+        QCOMPARE(active[0], a);
+        QCOMPARE(active[1], c);
+    }
+
+    void activeEffects_reflectsRuntimeToggles() {
+        EffectManager mgr;
+        auto* a = new MockEffect();
+        auto* b = new MockEffect();
+        mgr.addEffect(a);
+        mgr.addEffect(b);
+
+        QCOMPARE(mgr.activeEffects().size(), 2);
+        mgr.setEnabled(0, false);
+        const auto active = mgr.activeEffects();
+        QCOMPARE(active.size(), 1);
+        QCOMPARE(active[0], b);
+    }
+
     void setEnabled_doesNotAffectOtherEffects() {
         EffectManager mgr;
         mgr.addEffect(new MockEffect());

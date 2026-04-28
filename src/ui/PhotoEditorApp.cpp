@@ -375,10 +375,7 @@ void PhotoEditorApp::saveImage() {
     m_lastDir = QFileInfo(fileName).absolutePath();
     m_pendingSavePath = fileName;
 
-    QVector<PhotoEditorEffect*> active;
-    for (const auto& e : m_effects->entries())
-        if (e.enabled) active.append(e.effect);
-    m_processor->exportImageAsync(m_originalImage, active);
+    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects());
 }
 
 void PhotoEditorApp::importSettings() {
@@ -405,9 +402,8 @@ void PhotoEditorApp::importSettings() {
 
     SettingsImporter::applyToManager(parsed, *m_effects);
 
-    // Each effect's applyParameters emits parametersChanged, which would
-    // queue N reprocesses; the generation counter discards stale results, but
-    // do one definitive reprocess at the end so the final state is in flight.
+    // applyToManager blocks parametersChanged on each effect; fire one
+    // definitive reprocess now that the full state is in place.
     triggerReprocess();
 }
 
@@ -446,10 +442,7 @@ void PhotoEditorApp::saveTestCase() {
     // writes m_pendingSavePath.  PNG keeps the rendered output bit-exact for
     // the SSIM check that test_golden does at runtime.
     m_pendingSavePath = QDir(dir).filePath("expected.png");
-    QVector<PhotoEditorEffect*> active;
-    for (const auto& e : m_effects->entries())
-        if (e.enabled) active.append(e.effect);
-    m_processor->exportImageAsync(m_originalImage, active);
+    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects());
 }
 
 void PhotoEditorApp::exportSettings() {
@@ -556,11 +549,7 @@ void PhotoEditorApp::syncViewportRotation() {
 void PhotoEditorApp::triggerReprocess() {
     if (m_originalImage.isNull()) return;
 
-    QVector<PhotoEditorEffect*> active;
-    for (const auto& e : m_effects->entries())
-        if (e.enabled) active.append(e.effect);
-
-    m_processor->processImageAsync(m_originalImage, active,
+    m_processor->processImageAsync(m_originalImage, m_effects->activeEffects(),
                                    m_viewport->viewportRequest(),
                                    RunMode::Commit);
 }
@@ -568,11 +557,7 @@ void PhotoEditorApp::triggerReprocess() {
 void PhotoEditorApp::triggerLiveReprocess() {
     if (m_originalImage.isNull()) return;
 
-    QVector<PhotoEditorEffect*> active;
-    for (const auto& e : m_effects->entries())
-        if (e.enabled) active.append(e.effect);
-
-    m_processor->processImageAsync(m_originalImage, active,
+    m_processor->processImageAsync(m_originalImage, m_effects->activeEffects(),
                                    m_viewport->viewportRequest(),
                                    RunMode::LiveDrag);
 }
@@ -599,11 +584,7 @@ void PhotoEditorApp::dispatchViewportUpdate() {
     if (m_originalImage.isNull()) return;
     m_lastPanDispatch.start();
 
-    QVector<PhotoEditorEffect*> active;
-    for (const auto& e : m_effects->entries())
-        if (e.enabled) active.append(e.effect);
-
-    m_processor->processImageAsync(m_originalImage, active,
+    m_processor->processImageAsync(m_originalImage, m_effects->activeEffects(),
                                    m_viewport->viewportRequest(),
                                    RunMode::PanZoom);
 }
