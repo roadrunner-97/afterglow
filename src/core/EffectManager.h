@@ -38,7 +38,6 @@ public:
 
     void addEffect(std::unique_ptr<PhotoEditorEffect> effect, bool enabled = true);
     const QVector<EffectEntry>& entries() const;
-    QVector<PhotoEditorEffect*> activeEffects() const;
     // First effect that implements ICropSource, or nullptr.  Cached on
     // addEffect() so per-frame callers don't re-scan + re-dynamic_cast.
     // cropSource() ignores enabled-state (e.g. for pushing image size on

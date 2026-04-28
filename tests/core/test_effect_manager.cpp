@@ -2,6 +2,7 @@
 #include <QSignalSpy>
 #include <memory>
 #include "EffectManager.h"
+#include "ICropSource.h"
 
 // Minimal concrete PhotoEditorEffect for testing orchestration logic.
 // Returns the input image unchanged — no GPU, no OpenCL required.
@@ -16,6 +17,20 @@ public:
     QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override {
         return img;
     }
+};
+
+// MockEffect that also implements ICropSource — exercises the
+// addEffect() interface-pointer caching and cropSource() lookups.
+class MockCropEffect : public PhotoEditorEffect, public ICropSource {
+    Q_OBJECT
+public:
+    QString getName()        const override { return "MockCrop"; }
+    QString getDescription() const override { return ""; }
+    QString getVersion()     const override { return "1.0"; }
+    bool    initialize()           override { return true; }
+    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
+    QRectF userCropRect()    const override { return {0, 0, 1, 1}; }
+    float  userCropAngle()   const override { return 0.0f; }
 };
 
 class TestEffectManager : public QObject {
@@ -114,41 +129,39 @@ private slots:
         QCOMPARE(mgr.entries()[1].effect, bRaw);
     }
 
-    void activeEffects_emptyWhenNoneAdded() {
+    // ── cropSource caching ────────────────────────────────────────────────────
+    void cropSource_isNullWhenNoCropEffectAdded() {
         EffectManager mgr;
-        QVERIFY(mgr.activeEffects().isEmpty());
+        mgr.addEffect(std::make_unique<MockEffect>());
+        QVERIFY(mgr.cropSource() == nullptr);
+        QVERIFY(mgr.activeCropSource() == nullptr);
     }
 
-    void activeEffects_returnsOnlyEnabled() {
+    void cropSource_returnsCachedPointerEvenWhenDisabled() {
         EffectManager mgr;
-        auto a = std::make_unique<MockEffect>();
-        auto b = std::make_unique<MockEffect>();
-        auto c = std::make_unique<MockEffect>();
-        auto* aRaw = a.get();
-        auto* cRaw = c.get();
-        mgr.addEffect(std::move(a), /*enabled=*/true);
-        mgr.addEffect(std::move(b), /*enabled=*/false);
-        mgr.addEffect(std::move(c), /*enabled=*/true);
-
-        const auto active = mgr.activeEffects();
-        QCOMPARE(active.size(), 2);
-        QCOMPARE(active[0], aRaw);
-        QCOMPARE(active[1], cRaw);
+        auto crop = std::make_unique<MockCropEffect>();
+        auto* cropRaw = crop.get();
+        mgr.addEffect(std::move(crop), /*enabled=*/false);
+        QCOMPARE(static_cast<ICropSource*>(cropRaw), mgr.cropSource());
+        // activeCropSource respects the enabled bit
+        QVERIFY(mgr.activeCropSource() == nullptr);
     }
 
-    void activeEffects_reflectsRuntimeToggles() {
+    void activeCropSource_returnsPointerWhenEnabled() {
         EffectManager mgr;
-        auto a = std::make_unique<MockEffect>();
-        auto b = std::make_unique<MockEffect>();
-        auto* bRaw = b.get();
-        mgr.addEffect(std::move(a));
-        mgr.addEffect(std::move(b));
+        auto crop = std::make_unique<MockCropEffect>();
+        auto* cropRaw = crop.get();
+        mgr.addEffect(std::move(crop));
+        QCOMPARE(static_cast<ICropSource*>(cropRaw), mgr.activeCropSource());
+    }
 
-        QCOMPARE(mgr.activeEffects().size(), 2);
+    void activeCropSource_clearsWhenEffectDisabledAtRuntime() {
+        EffectManager mgr;
+        mgr.addEffect(std::make_unique<MockCropEffect>());
+        QVERIFY(mgr.activeCropSource() != nullptr);
         mgr.setEnabled(0, false);
-        const auto active = mgr.activeEffects();
-        QCOMPARE(active.size(), 1);
-        QCOMPARE(active[0], bRaw);
+        QVERIFY(mgr.activeCropSource() == nullptr);
+        QVERIFY(mgr.cropSource() != nullptr);  // cache survives toggle
     }
 
     void setEnabled_doesNotAffectOtherEffects() {
