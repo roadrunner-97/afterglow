@@ -1,6 +1,7 @@
 #include <QTest>
 #include <QSignalSpy>
 #include <QTemporaryFile>
+#include <memory>
 #include "EffectManager.h"
 #include "SettingsExporter.h"
 #include "SettingsImporter.h"
@@ -171,7 +172,7 @@ private slots:
         p["i"] = 42;
         p["d"] = 1.25;
         p["b"] = true;
-        mgr.addEffect(new FakeEffect("Test", p), /*enabled=*/false);
+        mgr.addEffect(std::make_unique<FakeEffect>("Test", p), /*enabled=*/false);
 
         const QString yaml = SettingsExporter::toYaml(mgr, "/tmp/round.jpg");
         SettingsImporter::Settings parsed;
@@ -188,8 +189,9 @@ private slots:
 
     void applyToManager_pushesEnabledAndParameters() {
         EffectManager mgr;
-        auto* fake = new FakeEffect("Brightness");
-        mgr.addEffect(fake, /*enabled=*/true);
+        auto owned = std::make_unique<FakeEffect>("Brightness");
+        auto* fake = owned.get();
+        mgr.addEffect(std::move(owned), /*enabled=*/true);
 
         SettingsImporter::Settings s;
         SettingsImporter::EffectSettings entry;
@@ -209,8 +211,9 @@ private slots:
 
     void applyToManager_skipsUnknownEffects() {
         EffectManager mgr;
-        auto* fake = new FakeEffect("Brightness");
-        mgr.addEffect(fake);
+        auto owned = std::make_unique<FakeEffect>("Brightness");
+        auto* fake = owned.get();
+        mgr.addEffect(std::move(owned));
 
         SettingsImporter::Settings s;
         SettingsImporter::EffectSettings entry;
@@ -227,10 +230,12 @@ private slots:
         // queue a pipeline reprocess; the importer is expected to silence
         // those so the caller can fire one definitive reprocess at the end.
         EffectManager mgr;
-        auto* a = new FakeEffect("A");
-        auto* b = new FakeEffect("B");
-        mgr.addEffect(a);
-        mgr.addEffect(b);
+        auto ownedA = std::make_unique<FakeEffect>("A");
+        auto ownedB = std::make_unique<FakeEffect>("B");
+        auto* a = ownedA.get();
+        auto* b = ownedB.get();
+        mgr.addEffect(std::move(ownedA));
+        mgr.addEffect(std::move(ownedB));
 
         QSignalSpy spyA(a, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyB(b, &PhotoEditorEffect::parametersChanged);
@@ -251,10 +256,12 @@ private slots:
 
     void applyToManager_leavesUntouchedEffectsAlone() {
         EffectManager mgr;
-        auto* a = new FakeEffect("A");
-        auto* b = new FakeEffect("B");
-        mgr.addEffect(a);
-        mgr.addEffect(b);
+        auto ownedA = std::make_unique<FakeEffect>("A");
+        auto ownedB = std::make_unique<FakeEffect>("B");
+        auto* a = ownedA.get();
+        auto* b = ownedB.get();
+        mgr.addEffect(std::move(ownedA));
+        mgr.addEffect(std::move(ownedB));
 
         SettingsImporter::Settings s;
         SettingsImporter::EffectSettings entry;
@@ -268,7 +275,7 @@ private slots:
 
     void readYaml_loadsFile() {
         EffectManager mgr;
-        mgr.addEffect(new FakeEffect("X", {{"k", 7}}));
+        mgr.addEffect(std::make_unique<FakeEffect>("X", QMap<QString, QVariant>{{"k", 7}}));
         const QString yaml = SettingsExporter::toYaml(mgr, "/tmp/img.jpg");
 
         QTemporaryFile tmp;

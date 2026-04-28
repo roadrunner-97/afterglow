@@ -1,6 +1,7 @@
 #include <QTest>
 #include <QTemporaryFile>
 #include <QFile>
+#include <memory>
 #include "EffectManager.h"
 #include "SettingsExporter.h"
 
@@ -54,7 +55,7 @@ private slots:
         params["i"] = 42;
         params["d"] = 1.5;
         params["b"] = true;
-        mgr.addEffect(new FakeEffect("Test", params));
+        mgr.addEffect(std::make_unique<FakeEffect>("Test", params));
 
         const QString yaml = SettingsExporter::toYaml(mgr);
         QVERIFY(yaml.contains("- name: \"Test\""));
@@ -66,13 +67,13 @@ private slots:
 
     void respectsDisabledEffects() {
         EffectManager mgr;
-        mgr.addEffect(new FakeEffect("Off", {}), /*enabled=*/false);
+        mgr.addEffect(std::make_unique<FakeEffect>("Off", QMap<QString, QVariant>{}), /*enabled=*/false);
         QVERIFY(SettingsExporter::toYaml(mgr).contains("enabled: false"));
     }
 
     void emptyParametersAreFlowMap() {
         EffectManager mgr;
-        mgr.addEffect(new FakeEffect("NoParams", {}));
+        mgr.addEffect(std::make_unique<FakeEffect>("NoParams", QMap<QString, QVariant>{}));
         QVERIFY(SettingsExporter::toYaml(mgr).contains("parameters: {}"));
     }
 
@@ -98,13 +99,13 @@ private slots:
         EffectManager mgr;
         QMap<QString, QVariant> params;
         params["mode"] = QString("auto");
-        mgr.addEffect(new FakeEffect("Mode", params));
+        mgr.addEffect(std::make_unique<FakeEffect>("Mode", params));
         QVERIFY(SettingsExporter::toYaml(mgr).contains("mode: \"auto\""));
     }
 
     void writeYaml_createsFile() {
         EffectManager mgr;
-        mgr.addEffect(new FakeEffect("Brightness", {{"brightness", 5}}));
+        mgr.addEffect(std::make_unique<FakeEffect>("Brightness", QMap<QString, QVariant>{{"brightness", 5}}));
 
         QTemporaryFile tmp;
         tmp.setAutoRemove(true);

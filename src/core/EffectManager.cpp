@@ -3,13 +3,10 @@
 
 EffectManager::EffectManager(QObject* parent) : QObject(parent) {}
 
-EffectManager::~EffectManager() {
-    for (const EffectEntry& e : m_entries)
-        delete e.effect;
-}
-
-void EffectManager::addEffect(PhotoEditorEffect* effect, bool enabled) {
-    m_entries.append({effect, enabled});
+void EffectManager::addEffect(std::unique_ptr<PhotoEditorEffect> effect, bool enabled) {
+    PhotoEditorEffect* observer = effect.get();
+    m_owners.push_back(std::move(effect));
+    m_entries.append({observer, enabled});
 }
 
 const QVector<EffectEntry>& EffectManager::entries() const {

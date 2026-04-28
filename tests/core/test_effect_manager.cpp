@@ -1,5 +1,6 @@
 #include <QTest>
 #include <QSignalSpy>
+#include <memory>
 #include "EffectManager.h"
 
 // Minimal concrete PhotoEditorEffect for testing orchestration logic.
@@ -28,25 +29,25 @@ private slots:
 
     void addEffect_appendsEntry() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
         QCOMPARE(mgr.entries().size(), 1);
     }
 
     void addEffect_defaultEnabledTrue() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
         QVERIFY(mgr.entries()[0].enabled);
     }
 
     void addEffect_disabledInitially() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect(), /*enabled=*/false);
+        mgr.addEffect(std::make_unique<MockEffect>(), /*enabled=*/false);
         QVERIFY(!mgr.entries()[0].enabled);
     }
 
     void setEnabled_togglesState() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect()); // starts enabled
+        mgr.addEffect(std::make_unique<MockEffect>()); // starts enabled
         mgr.setEnabled(0, false);
         QVERIFY(!mgr.entries()[0].enabled);
         mgr.setEnabled(0, true);
@@ -55,7 +56,7 @@ private slots:
 
     void setEnabled_emitsSignal() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
         QSignalSpy spy(&mgr, &EffectManager::effectToggled);
 
         mgr.setEnabled(0, false);
@@ -67,8 +68,8 @@ private slots:
 
     void setEnabled_emitsCorrectIndexForMultipleEffects() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
+        mgr.addEffect(std::make_unique<MockEffect>());
         QSignalSpy spy(&mgr, &EffectManager::effectToggled);
 
         mgr.setEnabled(1, false);
@@ -79,7 +80,7 @@ private slots:
 
     void setEnabled_outOfRangeIsNoop() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
 
         // Must not crash or alter any entry's state
         mgr.setEnabled(-1, false);
@@ -90,7 +91,7 @@ private slots:
 
     void setEnabled_outOfRangeEmitsNoSignal() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
         QSignalSpy spy(&mgr, &EffectManager::effectToggled);
 
         mgr.setEnabled(-1, false);
@@ -101,14 +102,16 @@ private slots:
 
     void multipleEffects_orderedByInsertion() {
         EffectManager mgr;
-        auto* a = new MockEffect();
-        auto* b = new MockEffect();
-        mgr.addEffect(a);
-        mgr.addEffect(b);
+        auto a = std::make_unique<MockEffect>();
+        auto b = std::make_unique<MockEffect>();
+        auto* aRaw = a.get();
+        auto* bRaw = b.get();
+        mgr.addEffect(std::move(a));
+        mgr.addEffect(std::move(b));
 
         QCOMPARE(mgr.entries().size(), 2);
-        QCOMPARE(mgr.entries()[0].effect, a);
-        QCOMPARE(mgr.entries()[1].effect, b);
+        QCOMPARE(mgr.entries()[0].effect, aRaw);
+        QCOMPARE(mgr.entries()[1].effect, bRaw);
     }
 
     void activeEffects_emptyWhenNoneAdded() {
@@ -118,37 +121,40 @@ private slots:
 
     void activeEffects_returnsOnlyEnabled() {
         EffectManager mgr;
-        auto* a = new MockEffect();
-        auto* b = new MockEffect();
-        auto* c = new MockEffect();
-        mgr.addEffect(a, /*enabled=*/true);
-        mgr.addEffect(b, /*enabled=*/false);
-        mgr.addEffect(c, /*enabled=*/true);
+        auto a = std::make_unique<MockEffect>();
+        auto b = std::make_unique<MockEffect>();
+        auto c = std::make_unique<MockEffect>();
+        auto* aRaw = a.get();
+        auto* cRaw = c.get();
+        mgr.addEffect(std::move(a), /*enabled=*/true);
+        mgr.addEffect(std::move(b), /*enabled=*/false);
+        mgr.addEffect(std::move(c), /*enabled=*/true);
 
         const auto active = mgr.activeEffects();
         QCOMPARE(active.size(), 2);
-        QCOMPARE(active[0], a);
-        QCOMPARE(active[1], c);
+        QCOMPARE(active[0], aRaw);
+        QCOMPARE(active[1], cRaw);
     }
 
     void activeEffects_reflectsRuntimeToggles() {
         EffectManager mgr;
-        auto* a = new MockEffect();
-        auto* b = new MockEffect();
-        mgr.addEffect(a);
-        mgr.addEffect(b);
+        auto a = std::make_unique<MockEffect>();
+        auto b = std::make_unique<MockEffect>();
+        auto* bRaw = b.get();
+        mgr.addEffect(std::move(a));
+        mgr.addEffect(std::move(b));
 
         QCOMPARE(mgr.activeEffects().size(), 2);
         mgr.setEnabled(0, false);
         const auto active = mgr.activeEffects();
         QCOMPARE(active.size(), 1);
-        QCOMPARE(active[0], b);
+        QCOMPARE(active[0], bRaw);
     }
 
     void setEnabled_doesNotAffectOtherEffects() {
         EffectManager mgr;
-        mgr.addEffect(new MockEffect());
-        mgr.addEffect(new MockEffect());
+        mgr.addEffect(std::make_unique<MockEffect>());
+        mgr.addEffect(std::make_unique<MockEffect>());
 
         mgr.setEnabled(0, false);
 
@@ -183,12 +189,13 @@ private slots:
         QVERIFY(!e.supportsGpuInPlace());
     }
 
-    // Heap-allocate EffectManager with effects so the destructor loop body runs.
+    // Heap-allocate EffectManager so the unique_ptr-driven cleanup runs and
+    // ASan/leak-sanitiser would catch a missed destruction.
     void destructor_heapAllocated_deletesEffects() {
         auto* mgr = new EffectManager();
-        mgr->addEffect(new MockEffect());
-        mgr->addEffect(new MockEffect());
-        delete mgr;  // destructor iterates and deletes both effects
+        mgr->addEffect(std::make_unique<MockEffect>());
+        mgr->addEffect(std::make_unique<MockEffect>());
+        delete mgr;
     }
 };
 

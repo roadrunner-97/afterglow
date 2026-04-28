@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <memory>
 #include "ui/PhotoEditorApp.h"
 #include "core/EffectManager.h"
 #include "core/GpuDeviceRegistry.h"
@@ -24,21 +25,21 @@ int main(int argc, char *argv[]) {
     GpuDeviceRegistry::instance().enumerate();
 
     EffectManager* effects = new EffectManager();
-    effects->addEffect(new CropRotateEffect());
-    effects->addEffect(new HotPixelEffect());
-    effects->addEffect(new ExposureEffect());
-    effects->addEffect(new WhiteBalanceEffect());
-    effects->addEffect(new BrightnessEffect());
-    effects->addEffect(new SaturationEffect());
-    effects->addEffect(new BlurEffect());
-    effects->addEffect(new GrayscaleEffect());
-    effects->addEffect(new UnsharpEffect());
-    effects->addEffect(new DenoiseEffect());
-    effects->addEffect(new VignetteEffect());
-    effects->addEffect(new FilmGrainEffect());
-    effects->addEffect(new SplitToningEffect());
-    effects->addEffect(new ClarityEffect());
-    effects->addEffect(new ColorBalanceEffect());
+    effects->addEffect(std::make_unique<CropRotateEffect>());
+    effects->addEffect(std::make_unique<HotPixelEffect>());
+    effects->addEffect(std::make_unique<ExposureEffect>());
+    effects->addEffect(std::make_unique<WhiteBalanceEffect>());
+    effects->addEffect(std::make_unique<BrightnessEffect>());
+    effects->addEffect(std::make_unique<SaturationEffect>());
+    effects->addEffect(std::make_unique<BlurEffect>());
+    effects->addEffect(std::make_unique<GrayscaleEffect>());
+    effects->addEffect(std::make_unique<UnsharpEffect>());
+    effects->addEffect(std::make_unique<DenoiseEffect>());
+    effects->addEffect(std::make_unique<VignetteEffect>());
+    effects->addEffect(std::make_unique<FilmGrainEffect>());
+    effects->addEffect(std::make_unique<SplitToningEffect>());
+    effects->addEffect(std::make_unique<ClarityEffect>());
+    effects->addEffect(std::make_unique<ColorBalanceEffect>());
 
     for (const auto& e : effects->entries())
         e.effect->initialize();

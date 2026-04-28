@@ -11,6 +11,7 @@
 #include <QTransform>
 #include <QtMath>
 #include <cmath>
+#include <memory>
 
 #include "EffectManager.h"
 #include "GpuDeviceRegistry.h"
@@ -184,21 +185,21 @@ private slots:
 
         // Effect order must match src/main.cpp so the pipeline runs the same
         // sequence as the editor that produced the reference outputs.
-        m_effects.addEffect(new CropRotateEffect());
-        m_effects.addEffect(new HotPixelEffect());
-        m_effects.addEffect(new ExposureEffect());
-        m_effects.addEffect(new WhiteBalanceEffect());
-        m_effects.addEffect(new BrightnessEffect());
-        m_effects.addEffect(new SaturationEffect());
-        m_effects.addEffect(new BlurEffect());
-        m_effects.addEffect(new GrayscaleEffect());
-        m_effects.addEffect(new UnsharpEffect());
-        m_effects.addEffect(new DenoiseEffect());
-        m_effects.addEffect(new VignetteEffect());
-        m_effects.addEffect(new FilmGrainEffect());
-        m_effects.addEffect(new SplitToningEffect());
-        m_effects.addEffect(new ClarityEffect());
-        m_effects.addEffect(new ColorBalanceEffect());
+        m_effects.addEffect(std::make_unique<CropRotateEffect>());
+        m_effects.addEffect(std::make_unique<HotPixelEffect>());
+        m_effects.addEffect(std::make_unique<ExposureEffect>());
+        m_effects.addEffect(std::make_unique<WhiteBalanceEffect>());
+        m_effects.addEffect(std::make_unique<BrightnessEffect>());
+        m_effects.addEffect(std::make_unique<SaturationEffect>());
+        m_effects.addEffect(std::make_unique<BlurEffect>());
+        m_effects.addEffect(std::make_unique<GrayscaleEffect>());
+        m_effects.addEffect(std::make_unique<UnsharpEffect>());
+        m_effects.addEffect(std::make_unique<DenoiseEffect>());
+        m_effects.addEffect(std::make_unique<VignetteEffect>());
+        m_effects.addEffect(std::make_unique<FilmGrainEffect>());
+        m_effects.addEffect(std::make_unique<SplitToningEffect>());
+        m_effects.addEffect(std::make_unique<ClarityEffect>());
+        m_effects.addEffect(std::make_unique<ColorBalanceEffect>());
 
         for (const auto& e : m_effects.entries()) {
             e.effect->initialize();

@@ -4,7 +4,12 @@
 #include "PhotoEditorEffect.h"
 #include <QObject>
 #include <QVector>
+#include <memory>
+#include <vector>
 
+// Observer view over an effect.  EffectManager owns the underlying object;
+// callers receive a non-owning raw pointer that stays valid for the
+// lifetime of the manager.
 struct EffectEntry {
     PhotoEditorEffect* effect = nullptr;
     bool enabled = true;
@@ -21,9 +26,8 @@ class EffectManager : public QObject {
 
 public:
     explicit EffectManager(QObject* parent = nullptr);
-    ~EffectManager();
 
-    void addEffect(PhotoEditorEffect* effect, bool enabled = true);  // takes ownership
+    void addEffect(std::unique_ptr<PhotoEditorEffect> effect, bool enabled = true);
     const QVector<EffectEntry>& entries() const;
     QVector<PhotoEditorEffect*> activeEffects() const;
     void setEnabled(int index, bool enabled);
@@ -32,7 +36,8 @@ signals:
     void effectToggled(int index, bool enabled);
 
 private:
-    QVector<EffectEntry> m_entries;
+    std::vector<std::unique_ptr<PhotoEditorEffect>> m_owners;
+    QVector<EffectEntry>                            m_entries;
 };
 
 #endif // EFFECTMANAGER_H
