@@ -4,6 +4,8 @@
 #include "PhotoEditorEffect.h"
 
 #include <QFile>
+#include <QHash>
+#include <QSignalBlocker>
 #include <QStringList>
 
 #include <climits>
@@ -145,14 +147,24 @@ bool readYaml(const QString& path, Settings* out, QString* error) {
 
 void applyToManager(const Settings& s, EffectManager& mgr) {
     const auto& entries = mgr.entries();
+
+    QHash<QString, int> indexByName;
+    indexByName.reserve(entries.size());
+    for (int i = 0; i < entries.size(); ++i)
+        if (entries[i].effect) indexByName.insert(entries[i].effect->getName(), i);
+
+    // Block parametersChanged on each effect for the duration of the apply
+    // pass.  Without this, every applyParameters() call would queue a full
+    // pipeline reprocess; the caller is expected to fire one definitive
+    // reprocess after this returns.
     for (const auto& want : s.effects) {
-        for (int i = 0; i < entries.size(); ++i) {
-            PhotoEditorEffect* effect = entries[i].effect;
-            if (!effect || effect->getName() != want.name) continue;
-            mgr.setEnabled(i, want.enabled);
-            effect->applyParameters(want.parameters);
-            break;
-        }
+        const auto it = indexByName.constFind(want.name);
+        if (it == indexByName.constEnd()) continue;
+        const int i = it.value();
+        PhotoEditorEffect* effect = entries[i].effect;
+        mgr.setEnabled(i, want.enabled);
+        QSignalBlocker block(effect);
+        effect->applyParameters(want.parameters);
     }
 }
 

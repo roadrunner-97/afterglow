@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QSignalSpy>
 #include <QTemporaryFile>
 #include "EffectManager.h"
 #include "SettingsExporter.h"
@@ -25,6 +26,10 @@ public:
         m_lastApplied = p;
         m_params = p;
         ++m_applyCalls;
+        // Mirror real effect behaviour: applying parameters notifies
+        // listeners that they changed.  SettingsImporter is expected to
+        // silence this notification during a bulk apply.
+        emit parametersChanged();
     }
 
     QMap<QString, QVariant> lastApplied() const { return m_lastApplied; }
@@ -215,6 +220,33 @@ private slots:
 
         SettingsImporter::applyToManager(s, mgr);
         QCOMPARE(fake->applyCalls(), 0);
+    }
+
+    void applyToManager_doesNotEmitParametersChanged() {
+        // Each applyParameters() would normally emit parametersChanged() and
+        // queue a pipeline reprocess; the importer is expected to silence
+        // those so the caller can fire one definitive reprocess at the end.
+        EffectManager mgr;
+        auto* a = new FakeEffect("A");
+        auto* b = new FakeEffect("B");
+        mgr.addEffect(a);
+        mgr.addEffect(b);
+
+        QSignalSpy spyA(a, &PhotoEditorEffect::parametersChanged);
+        QSignalSpy spyB(b, &PhotoEditorEffect::parametersChanged);
+
+        SettingsImporter::Settings s;
+        SettingsImporter::EffectSettings ea; ea.name = "A"; ea.parameters["x"] = 1;
+        SettingsImporter::EffectSettings eb; eb.name = "B"; eb.parameters["y"] = 2;
+        s.effects.append(ea);
+        s.effects.append(eb);
+
+        SettingsImporter::applyToManager(s, mgr);
+
+        QCOMPARE(a->applyCalls(), 1);
+        QCOMPARE(b->applyCalls(), 1);
+        QCOMPARE(spyA.count(), 0);
+        QCOMPARE(spyB.count(), 0);
     }
 
     void applyToManager_leavesUntouchedEffectsAlone() {
