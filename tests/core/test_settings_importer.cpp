@@ -313,6 +313,24 @@ private slots:
         QCOMPARE(parsed.effects[0].parameters.value("k").toInt(), 7);
     }
 
+    void fromYaml_rejectsTabsInLeadingWhitespace() {
+        // Tabs would silently confuse the indent dispatch.  The parser now
+        // refuses up-front with a line-numbered error.
+        const QString yaml = QStringLiteral("effects:\n\t- name: \"X\"\n");
+        SettingsImporter::Settings s;
+        QString error;
+        QVERIFY(!SettingsImporter::fromYaml(yaml, &s, &error));
+        QVERIFY(error.contains("tabs"));
+        QVERIFY(error.contains("line 2"));
+    }
+
+    void fromYaml_clearsErrorOnSuccess() {
+        QString error = "stale";
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml("", &s, &error));
+        QVERIFY(error.isEmpty());
+    }
+
     void readYaml_returnsFalseOnMissingFile() {
         SettingsImporter::Settings parsed;
         QString error;

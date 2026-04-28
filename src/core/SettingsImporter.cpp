@@ -88,17 +88,33 @@ bool splitKeyValue(const QString& s, QString* k, QString* v) {
 
 namespace SettingsImporter {
 
-bool fromYaml(const QString& yaml, Settings* out, QString* /*error*/) {
+bool fromYaml(const QString& yaml, Settings* out, QString* error) {
     out->image.clear();
     out->effects.clear();
+    if (error) error->clear();
 
     EffectSettings* current = nullptr;
     const QStringList lines = yaml.split('\n');
 
+    int lineNo = 0;
     for (const QString& raw : lines) {
+        ++lineNo;
         QString line = raw;
         while (!line.isEmpty() && line.back().isSpace()) line.chop(1);
         if (line.isEmpty()) continue;
+
+        // Tabs in leading whitespace silently confused the indent-based
+        // dispatch below, producing entries with no name and no params.
+        // Reject up front with a concrete diagnostic.
+        for (QChar c : line) {
+            if (c == '\t') {
+                if (error)
+                    *error = QString("line %1: tabs are not allowed in leading "
+                                     "whitespace; use spaces").arg(lineNo);
+                return false;
+            }
+            if (c != ' ') break;
+        }
 
         const int indent = leadingSpaces(line);
         const QString rest = line.mid(indent);
