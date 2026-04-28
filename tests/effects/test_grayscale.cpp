@@ -143,11 +143,6 @@ private slots:
         }));
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        GrayscaleEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     void destructor_heapAllocated_doesNotCrash() {
         auto* e = new GrayscaleEffect();
         e->createControlsWidget();

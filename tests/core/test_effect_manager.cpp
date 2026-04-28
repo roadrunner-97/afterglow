@@ -197,11 +197,6 @@ private slots:
         e.onImageLoaded(meta);  // default impl is a no-op
     }
 
-    void baseClass_supportsGpuInPlace_returnsFalse() {
-        MockEffect e;
-        QVERIFY(!e.supportsGpuInPlace());
-    }
-
     // Heap-allocate EffectManager so the unique_ptr-driven cleanup runs and
     // ASan/leak-sanitiser would catch a missed destruction.
     void destructor_heapAllocated_deletesEffects() {

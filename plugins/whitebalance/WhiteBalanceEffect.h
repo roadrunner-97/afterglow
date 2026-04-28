@@ -26,7 +26,6 @@ public:
     // Sets the slider default to the image's as-shot color temperature.
     void onImageLoaded(const ImageMetadata& meta) override;
 
-    bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
     bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
                     int w, int h,

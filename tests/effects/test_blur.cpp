@@ -194,11 +194,6 @@ private slots:
         QVERIFY(spyLive.count() >= 1);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        BlurEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     void destructor_heapAllocated_doesNotCrash() {
         auto* e = new BlurEffect();
         e->createControlsWidget();

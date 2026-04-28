@@ -157,11 +157,6 @@ private slots:
         QVERIFY(params.contains("colorNoise"));
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        DenoiseEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Fire signal lambdas in createControlsWidget to cover those branches.
     void connectSlider_signals_coverLambdaBodies() {
         DenoiseEffect e;

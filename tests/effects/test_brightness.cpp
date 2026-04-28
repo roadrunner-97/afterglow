@@ -232,11 +232,6 @@ private slots:
         QVERIFY(spyLive.count() >= 2);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        BrightnessEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Heap-allocate so the destructor body is explicitly attributed.
     void destructor_heapAllocated_doesNotCrash() {
         auto* e = new BrightnessEffect();

@@ -38,7 +38,6 @@ public:
     QMap<QString, QVariant>  getParameters()  const override;
     void                     applyParameters(const QMap<QString, QVariant>& parameters) override;
 
-    bool supportsGpuInPlace() const override { return true; }
 
     // IGpuEffect — no-op: crop/rotate is non-destructive metadata only
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;

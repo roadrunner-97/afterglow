@@ -56,11 +56,6 @@ private slots:
         QVERIFY(e.initialize());
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        CropRotateEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // ── Defaults ─────────────────────────────────────────────────────────────
 
     void defaults_cropRect_isFullFrame() {

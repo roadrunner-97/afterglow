@@ -24,7 +24,6 @@ public:
     QMap<QString, QVariant> getParameters() const override;
     void applyParameters(const QMap<QString, QVariant>& parameters) override;
 
-    bool supportsGpuInPlace() const override { return true; }
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
     bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
                     int w, int h,

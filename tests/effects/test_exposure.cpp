@@ -332,11 +332,6 @@ private slots:
         delete e;
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        ExposureEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Zone-boundary pixel tests on the 16-bit path.  Pixels with luminance at
     // the zone boundaries exercise the PCHIP clamp conditions on the GPU kernel.
     void processImage16bit_darkPixel_blacks() {

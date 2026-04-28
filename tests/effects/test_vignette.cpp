@@ -247,11 +247,6 @@ private slots:
         QCOMPARE(params["roundness"].toInt(), 0);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        VignetteEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Fire every slider's editingFinished + valueChanged path.
     void connectSlider_signals_coverLambdaBodies() {
         VignetteEffect e;

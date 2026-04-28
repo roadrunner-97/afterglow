@@ -206,11 +206,6 @@ private slots:
         QVERIFY(e.createControlsWidget() == w);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        ColorBalanceEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Fire every slider's editingFinished + valueChanged path.
     void connectSlider_signals_coverLambdaBodies() {
         ColorBalanceEffect e;

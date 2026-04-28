@@ -191,11 +191,6 @@ private slots:
         QCOMPARE(params["radius"].toInt(), 30);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        ClarityEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Fire every slider's editingFinished + valueChanged path.
     void connectSlider_signals_coverLambdaBodies() {
         ClarityEffect e;

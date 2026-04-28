@@ -207,11 +207,6 @@ private slots:
         QVERIFY(spyLive.count() >= 2);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        SaturationEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     void destructor_heapAllocated_doesNotCrash() {
         auto* e = new SaturationEffect();
         e->createControlsWidget();

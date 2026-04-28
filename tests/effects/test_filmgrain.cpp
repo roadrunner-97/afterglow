@@ -256,11 +256,6 @@ private slots:
         QCOMPARE(params["lumWeight"].toBool(), true);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        FilmGrainEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Fire every slider's editingFinished + valueChanged path and the checkbox toggle.
     void controlSignals_coverLambdaBodies() {
         FilmGrainEffect e;

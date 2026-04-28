@@ -193,11 +193,6 @@ private slots:
         QCOMPARE(spyLive.count(), 1);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        HotPixelEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     void destructor_heapAllocated_doesNotCrash() {
         auto* e = new HotPixelEffect();
         e->createControlsWidget();

@@ -43,10 +43,6 @@ public:
     // defaults to the image's metadata (e.g. white balance) override this.
     virtual void onImageLoaded(const ImageMetadata& /*meta*/) {}
 
-    // Returns true if this effect implements IGpuEffect and can participate
-    // in the shared GPU pipeline (single upload + single readback).
-    virtual bool supportsGpuInPlace() const { return false; }
-
 signals:
     void parametersChanged();     // committed change (slider release / spinbox commit)
     void liveParametersChanged(); // real-time change (every drag tick)

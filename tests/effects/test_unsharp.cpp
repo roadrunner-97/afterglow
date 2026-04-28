@@ -218,11 +218,6 @@ private slots:
         QVERIFY(spyLive.count() >= 3);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        UnsharpEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     void destructor_heapAllocated_doesNotCrash() {
         auto* e = new UnsharpEffect();
         e->createControlsWidget();

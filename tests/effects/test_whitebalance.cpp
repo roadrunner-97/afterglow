@@ -192,11 +192,6 @@ private slots:
         QCOMPARE(params["shot_temp"].toDouble(), 5500.0);
     }
 
-    void supportsGpuInPlace_returnsTrue() {
-        WhiteBalanceEffect e;
-        QVERIFY(e.supportsGpuInPlace());
-    }
-
     // Fire signal lambdas in createControlsWidget.
     void connectSlider_signals_coverLambdaBodies() {
         WhiteBalanceEffect e;
