@@ -377,9 +377,8 @@ void PhotoEditorApp::saveImage() {
 
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
-    m_pendingSavePath = fileName;
 
-    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects());
+    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects(), fileName);
 }
 
 void PhotoEditorApp::importSettings() {
@@ -443,10 +442,10 @@ void PhotoEditorApp::saveTestCase() {
     }
 
     // Reuse the normal export path: onExportComplete bakes crop + rotate and
-    // writes m_pendingSavePath.  PNG keeps the rendered output bit-exact for
-    // the SSIM check that test_golden does at runtime.
-    m_pendingSavePath = QDir(dir).filePath("expected.png");
-    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects());
+    // writes the destination passed in here.  PNG keeps the rendered output
+    // bit-exact for the SSIM check that test_golden does at runtime.
+    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects(),
+                                  QDir(dir).filePath("expected.png"));
 }
 
 void PhotoEditorApp::exportSettings() {
@@ -503,10 +502,9 @@ static QImage applyCropAndRotate(const QImage& image, const ICropSource& cs) {
     return dst;
 }
 
-void PhotoEditorApp::onExportComplete(QImage result) {
-    if (m_pendingSavePath.isEmpty()) return;
-    const QString path = m_pendingSavePath;
-    m_pendingSavePath.clear();
+void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
+    if (destinationPath.isEmpty()) return;
+    const QString path = destinationPath;
 
     if (!result.isNull()) {
         for (const auto& e : m_effects->entries()) {

@@ -34,7 +34,7 @@ private slots:
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result);
     void onProcessingStarted();
-    void onExportComplete(QImage result);
+    void onExportComplete(QImage result, QString destinationPath);
 
 private:
     void setupUI();
@@ -61,7 +61,6 @@ private:
     QTimer*         m_resizeDebounce   = nullptr;
     QTimer*         m_panThrottle      = nullptr;  // trailing edge of pan throttle
     QElapsedTimer   m_lastPanDispatch;              // invalid until first dispatch
-    QString         m_pendingSavePath;
 };
 
 #endif // PHOTOEDITORAPP_H

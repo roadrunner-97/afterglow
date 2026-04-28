@@ -116,7 +116,8 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
 }
 
 void ImageProcessor::exportImageAsync(const QImage& originalImage,
-                                      const QVector<PhotoEditorEffect*>& effects) {
+                                      const QVector<PhotoEditorEffect*>& effects,
+                                      QString destinationPath) {
     using EffectCall = QPair<PhotoEditorEffect*, QMap<QString, QVariant>>;
     QVector<EffectCall> imageCalls;
     QVector<GpuPipelineCall> gpuCalls;
@@ -136,8 +137,8 @@ void ImageProcessor::exportImageAsync(const QImage& originalImage,
 
     auto* watcher = new QFutureWatcher<QImage>(this);
     connect(watcher, &QFutureWatcher<QImage>::finished, this,
-            [this, watcher]() {
-        emit exportComplete(watcher->result());
+            [this, watcher, destinationPath]() {
+        emit exportComplete(watcher->result(), destinationPath);
         watcher->deleteLater();
     });
 

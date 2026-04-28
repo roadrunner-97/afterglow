@@ -27,12 +27,13 @@ public:
                            RunMode mode = RunMode::Commit);
 
     void exportImageAsync(const QImage& originalImage,
-                          const QVector<PhotoEditorEffect*>& effects);
+                          const QVector<PhotoEditorEffect*>& effects,
+                          QString destinationPath);
 
 signals:
     void processingStarted();
     void processingComplete(QImage result);
-    void exportComplete(QImage result);
+    void exportComplete(QImage result, QString destinationPath);
 
 private:
     std::shared_ptr<std::atomic<uint64_t>> generationPtr =
