@@ -1,6 +1,7 @@
 #include "ImageProcessor.h"
 #include "GpuPipeline.h"
 #include "ICropSource.h"
+#include "IGpuEffect.h"
 #include "PhotoEditorEffect.h"
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
@@ -12,23 +13,18 @@ ImageProcessor::ImageProcessor(QObject *parent)
 
 // Build the injection map for non-destructive crop.  Geometry-aware effects
 // (vignette, film grain, ...) read these keys to operate on the cropped
-// frame; effects that ignore them pay only a QMap lookup miss.  No-op if no
-// crop effect is registered.
-static QMap<QString, QVariant> buildCropInjection(
-        const QVector<PhotoEditorEffect*>& effects) {
-    for (PhotoEditorEffect* e : effects) {
-        if (auto* src = dynamic_cast<ICropSource*>(e)) {
-            const QRectF r = src->userCropRect();
-            return {
-                {"_userCropX0",    r.left()},
-                {"_userCropY0",    r.top()},
-                {"_userCropX1",    r.right()},
-                {"_userCropY1",    r.bottom()},
-                {"_userCropAngle", static_cast<double>(src->userCropAngle())},
-            };
-        }
-    }
-    return {};
+// frame; effects that ignore them pay only a QMap lookup miss.  No-op when
+// the supplied source is null.
+static QMap<QString, QVariant> buildCropInjection(ICropSource* src) {
+    if (!src) return {};
+    const QRectF r = src->userCropRect();
+    return {
+        {"_userCropX0",    r.left()},
+        {"_userCropY0",    r.top()},
+        {"_userCropX1",    r.right()},
+        {"_userCropY1",    r.bottom()},
+        {"_userCropAngle", static_cast<double>(src->userCropAngle())},
+    };
 }
 
 static void mergeInto(QMap<QString, QVariant>& dst,
@@ -38,7 +34,7 @@ static void mergeInto(QMap<QString, QVariant>& dst,
 }
 
 void ImageProcessor::processImageAsync(const QImage &originalImage,
-                                       const QVector<PhotoEditorEffect*> &effects,
+                                       const EffectManager &effects,
                                        ViewportRequest viewport,
                                        RunMode mode) {
     auto genPtr = generationPtr;
@@ -48,23 +44,26 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
     // are never touched from the worker thread.
     using EffectCall = QPair<PhotoEditorEffect*, QMap<QString, QVariant>>;
     QVector<EffectCall> imageCalls;
-    imageCalls.reserve(effects.size());
-
     QVector<GpuPipelineCall> gpuCalls;
-    gpuCalls.reserve(effects.size());
+    imageCalls.reserve(effects.entries().size());
+    gpuCalls.reserve(effects.entries().size());
 
-    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects);
+    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects.activeCropSource());
 
-    bool allGpu = !effects.isEmpty();
-    for (PhotoEditorEffect *e : effects) {
-        QMap<QString, QVariant> params = e->getParameters();
+    bool any = false;
+    bool allGpu = true;
+    for (const EffectEntry& entry : effects.entries()) {
+        if (!entry.enabled) continue;
+        any = true;
+        QMap<QString, QVariant> params = entry.effect->getParameters();
         mergeInto(params, cropInjected);
-        imageCalls.append({e, params});
-        if (e->supportsGpuInPlace())
-            gpuCalls.append({e, params});
+        imageCalls.append({entry.effect, params});
+        if (entry.gpu)
+            gpuCalls.append({entry.effect, entry.gpu, params});
         else
             allGpu = false;
     }
+    if (!any) allGpu = false;
 
     emit processingStarted();
 
@@ -116,24 +115,28 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
 }
 
 void ImageProcessor::exportImageAsync(const QImage& originalImage,
-                                      const QVector<PhotoEditorEffect*>& effects,
+                                      const EffectManager& effects,
                                       QString destinationPath) {
     using EffectCall = QPair<PhotoEditorEffect*, QMap<QString, QVariant>>;
     QVector<EffectCall> imageCalls;
     QVector<GpuPipelineCall> gpuCalls;
 
-    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects);
+    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects.activeCropSource());
 
-    bool allGpu = !effects.isEmpty();
-    for (PhotoEditorEffect* e : effects) {
-        QMap<QString, QVariant> params = e->getParameters();
+    bool any = false;
+    bool allGpu = true;
+    for (const EffectEntry& entry : effects.entries()) {
+        if (!entry.enabled) continue;
+        any = true;
+        QMap<QString, QVariant> params = entry.effect->getParameters();
         mergeInto(params, cropInjected);
-        imageCalls.append({e, params});
-        if (e->supportsGpuInPlace())
-            gpuCalls.append({e, params});
+        imageCalls.append({entry.effect, params});
+        if (entry.gpu)
+            gpuCalls.append({entry.effect, entry.gpu, params});
         else
             allGpu = false;
     }
+    if (!any) allGpu = false;
 
     auto* watcher = new QFutureWatcher<QImage>(this);
     connect(watcher, &QFutureWatcher<QImage>::finished, this,

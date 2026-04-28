@@ -16,8 +16,11 @@
 #include <mutex>
 #include <unordered_set>
 
+class IGpuEffect;
+
 struct GpuPipelineCall {
     PhotoEditorEffect*      effect;
+    IGpuEffect*             gpu;     // pre-resolved interface pointer; never null
     QMap<QString, QVariant> params;
 };
 

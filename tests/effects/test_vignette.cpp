@@ -329,7 +329,8 @@ private slots:
         p["_srcW"] = W;
         p["_srcH"] = H;
 
-        QImage out = m_pipeline.run(input, {{&m_pipelineVignette, p}},
+        QImage out = m_pipeline.run(input,
+                                    {{&m_pipelineVignette, &m_pipelineVignette, p}},
                                     fullViewport(input));
         QVERIFY(!out.isNull());
 

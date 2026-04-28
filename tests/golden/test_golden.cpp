@@ -289,7 +289,7 @@ private slots:
             QMap<QString, QVariant> p = e.effect->getParameters();
             for (auto it = cropInjected.cbegin(); it != cropInjected.cend(); ++it)
                 p.insert(it.key(), it.value());
-            calls.append({e.effect, p});
+            calls.append({e.effect, e.gpu, p});
         }
 
         // Same call shape as ImageProcessor::exportImageAsync.

@@ -6,8 +6,9 @@
 #include <QVector>
 #include <atomic>
 #include <memory>
-#include "PhotoEditorEffect.h"
+#include "EffectManager.h"
 #include "GpuPipeline.h"
+#include "PhotoEditorEffect.h"
 
 /**
  * @brief Runs the effect pipeline asynchronously via QtConcurrent.
@@ -22,12 +23,12 @@ public:
     explicit ImageProcessor(QObject* parent = nullptr);
 
     void processImageAsync(const QImage& originalImage,
-                           const QVector<PhotoEditorEffect*>& effects,
+                           const EffectManager& effects,
                            ViewportRequest viewport = {},
                            RunMode mode = RunMode::Commit);
 
     void exportImageAsync(const QImage& originalImage,
-                          const QVector<PhotoEditorEffect*>& effects,
+                          const EffectManager& effects,
                           QString destinationPath);
 
 signals:

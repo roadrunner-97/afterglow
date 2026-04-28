@@ -291,7 +291,7 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
 
         // If this effect owns an on-canvas tool (crop handles, etc.), track it so
         // expanding/collapsing the panel activates/deactivates the overlay.
-        IInteractiveEffect* interactive = dynamic_cast<IInteractiveEffect*>(effect);
+        IInteractiveEffect* interactive = entries[i].interactive;
 
         // Collapse toggle — shared_ptr so the lambda stays valid after panel is reparented
         auto expanded = std::make_shared<bool>(true);
@@ -359,11 +359,10 @@ void PhotoEditorApp::openImage() {
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
     meta.luminanceHistogram = computeLuminanceHistogram(img);
-    for (const auto& e : m_effects->entries()) {
+    for (const auto& e : m_effects->entries())
         e.effect->onImageLoaded(meta);
-        if (auto* cs = dynamic_cast<ICropSource*>(e.effect))
-            cs->setSourceImageSize(img.size());
-    }
+    if (auto* cs = m_effects->cropSource())
+        cs->setSourceImageSize(img.size());
     syncViewportRotation();
     triggerReprocess();
 }
@@ -378,7 +377,7 @@ void PhotoEditorApp::saveImage() {
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
 
-    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects(), fileName);
+    m_processor->exportImageAsync(m_originalImage, *m_effects, fileName);
 }
 
 void PhotoEditorApp::importSettings() {
@@ -444,7 +443,7 @@ void PhotoEditorApp::saveTestCase() {
     // Reuse the normal export path: onExportComplete bakes crop + rotate and
     // writes the destination passed in here.  PNG keeps the rendered output
     // bit-exact for the SSIM check that test_golden does at runtime.
-    m_processor->exportImageAsync(m_originalImage, m_effects->activeEffects(),
+    m_processor->exportImageAsync(m_originalImage, *m_effects,
                                   QDir(dir).filePath("expected.png"));
 }
 
@@ -507,13 +506,8 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
     const QString path = destinationPath;
 
     if (!result.isNull()) {
-        for (const auto& e : m_effects->entries()) {
-            if (!e.enabled) continue;
-            if (auto* cs = dynamic_cast<ICropSource*>(e.effect)) {
-                result = applyCropAndRotate(result, *cs);
-                break;
-            }
-        }
+        if (auto* cs = m_effects->activeCropSource())
+            result = applyCropAndRotate(result, *cs);
     }
 
     if (result.isNull() || !result.save(path)) {
@@ -539,19 +533,16 @@ void PhotoEditorApp::syncViewportRotation() {
     // rotate the displayed image around the crop centre (Lightroom-style).
     // Updates immediately, independently of pipeline reprocessing — so live
     // dragging the rotation slider feels instant even on a slow GPU.
-    for (const auto& e : m_effects->entries()) {
-        if (auto* cs = dynamic_cast<ICropSource*>(e.effect)) {
-            const QRectF c = cs->userCropRect();
-            m_viewport->setImageRotation(cs->userCropAngle(), c.center());
-            return;
-        }
+    if (auto* cs = m_effects->cropSource()) {
+        const QRectF c = cs->userCropRect();
+        m_viewport->setImageRotation(cs->userCropAngle(), c.center());
     }
 }
 
 void PhotoEditorApp::triggerReprocess() {
     if (m_originalImage.isNull()) return;
 
-    m_processor->processImageAsync(m_originalImage, m_effects->activeEffects(),
+    m_processor->processImageAsync(m_originalImage, *m_effects,
                                    m_viewport->viewportRequest(),
                                    RunMode::Commit);
 }
@@ -559,7 +550,7 @@ void PhotoEditorApp::triggerReprocess() {
 void PhotoEditorApp::triggerLiveReprocess() {
     if (m_originalImage.isNull()) return;
 
-    m_processor->processImageAsync(m_originalImage, m_effects->activeEffects(),
+    m_processor->processImageAsync(m_originalImage, *m_effects,
                                    m_viewport->viewportRequest(),
                                    RunMode::LiveDrag);
 }
@@ -590,7 +581,7 @@ void PhotoEditorApp::dispatchViewportUpdate() {
     if (m_originalImage.isNull()) return;
     m_lastPanDispatch.start();
 
-    m_processor->processImageAsync(m_originalImage, m_effects->activeEffects(),
+    m_processor->processImageAsync(m_originalImage, *m_effects,
                                    m_viewport->viewportRequest(),
                                    RunMode::PanZoom);
 }

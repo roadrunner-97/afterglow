@@ -228,12 +228,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
 
     // Lazily compile kernels for any effect not yet seen in this context.
     for (const auto& call : calls) {
-        auto* g = dynamic_cast<IGpuEffect*>(call.effect);
-        if (!g) {
-            qWarning() << "[GpuPipeline]" << call.effect->getName()
-                       << "does not implement IGpuEffect — aborting pipeline";
-            return {};
-        }
+        IGpuEffect* g = call.gpu;
         if (m_initializedEffects.find(g) == m_initializedEffects.end()) {
             if (!g->initGpuKernels(m_context, m_device)) {
                 qWarning() << "[GpuPipeline] initGpuKernels failed for"
@@ -321,7 +316,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
 
             // Effects at full resolution: pixel radii are in source pixels.
             for (const auto& call : calls) {
-                auto* g = dynamic_cast<IGpuEffect*>(call.effect);
+                IGpuEffect* g = call.gpu;
                 QMap<QString, QVariant> params = call.params;
                 params.insert("_srcPixelsPerPreviewPixel", 1.0);
                 params.insert("_cropX0", 0.0);
@@ -401,7 +396,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
 
         const float srcPixelsPerPreviewPixel = regionW / static_cast<float>(previewW);
         for (const auto& call : calls) {
-            auto* g = dynamic_cast<IGpuEffect*>(call.effect);
+            IGpuEffect* g = call.gpu;
             QMap<QString, QVariant> scaledParams = call.params;
             scaledParams.insert("_srcPixelsPerPreviewPixel",
                                 static_cast<double>(srcPixelsPerPreviewPixel));

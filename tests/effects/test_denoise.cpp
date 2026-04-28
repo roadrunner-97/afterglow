@@ -206,7 +206,7 @@ private slots:
         QImage input = makeSolid(64, 64, 128, 100, 80);
         ViewportRequest vp;
         vp.displaySize = input.size();
-        QImage out = pipeline.run(input, {{&e, params}}, vp);
+        QImage out = pipeline.run(input, {{&e, &e, params}}, vp);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3;

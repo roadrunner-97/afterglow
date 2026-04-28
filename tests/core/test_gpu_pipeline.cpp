@@ -17,17 +17,14 @@
 #include "ClarityEffect.h"
 #include "ColorBalanceEffect.h"
 
-// A concrete PhotoEditorEffect that does NOT inherit IGpuEffect.
-// Used to exercise the "missing IGpuEffect" warning path in GpuPipeline::run().
-class NonGpuEffect : public PhotoEditorEffect {
-    Q_OBJECT
-public:
-    QString getName()        const override { return "NonGpu"; }
-    QString getDescription() const override { return ""; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
-};
+// Build a GpuPipelineCall from any effect that derives from both
+// PhotoEditorEffect and IGpuEffect.  Saves repeating the effect pointer
+// twice on every call site; a non-GPU effect would simply fail to
+// compile, since GpuPipelineCall::gpu cannot be null.
+template<class T>
+static GpuPipelineCall call(T* e, const QMap<QString, QVariant>& p = {}) {
+    return {e, e, p};
+}
 
 // An IGpuEffect whose initGpuKernels() always returns false.
 // Exercises the "initGpuKernels failed" warning path (GpuPipeline.cpp lines 101-103).
@@ -126,7 +123,7 @@ private slots:
         p["brightness"] = 20;
         p["contrast"]   = 0;
         QImage input = makeSolid(64, 64, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {{&m_brightness, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_brightness, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -136,7 +133,7 @@ private slots:
         p["saturation"] = 10.0;
         p["vibrancy"]   = 0.0;
         QImage input = makeSolid(64, 64, 200, 100, 100);
-        QImage out = m_pipeline.run(input, {{&m_saturation, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_saturation, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -146,7 +143,7 @@ private slots:
         p["radius"]   = 4;
         p["blurType"] = 0;  // Gaussian
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_blur, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_blur, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -159,7 +156,7 @@ private slots:
         p["shadows"]    = 0.0;
         p["blacks"]     = 0.0;
         QImage input = makeSolid(64, 64, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {{&m_exposure, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_exposure, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -174,7 +171,7 @@ private slots:
         p["shadows"]    = 0.0;
         p["blacks"]     = 0.0;
         QImage input = makeSolid(64, 64, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {{&m_exposure, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_exposure, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -183,7 +180,7 @@ private slots:
         QMap<QString, QVariant> p;
         p["threshold"] = 30;
         QImage input = makeSolid(64, 64, 80, 80, 80);
-        QImage out = m_pipeline.run(input, {{&m_hotpixel, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_hotpixel, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -194,7 +191,7 @@ private slots:
         p["radius"]    = 2;
         p["threshold"] = 3;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_unsharp, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_unsharp, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -202,7 +199,7 @@ private slots:
     void pipeline_grayscale_inactive() {
         if (!m_hasGpu) QSKIP("No GPU");
         QImage input = makeSolid(64, 64, 200, 100, 50);
-        QImage out = m_pipeline.run(input, {{&m_grayscale, {}}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_grayscale)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -215,7 +212,7 @@ private slots:
         cb->setChecked(true);
 
         QImage input = makeSolid(64, 64, 200, 100, 50);
-        QImage out = m_pipeline.run(input, {{&m_grayscale, {}}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_grayscale)}, fullViewport(input));
         QVERIFY(!out.isNull());
 
         cb->setChecked(false);  // reset for subsequent tests
@@ -228,7 +225,7 @@ private slots:
         p["shadowPreserve"] = 30;
         p["colorNoise"]     = 50;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_denoise, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_denoise, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -239,7 +236,7 @@ private slots:
         p["temperature"] = 6500.0;
         p["tint"]        = 0.0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_whitebalance, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_whitebalance, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -252,7 +249,7 @@ private slots:
         p["feather"]   = 50;
         p["roundness"] = 0;
         QImage input = makeSolid(64, 64, 180, 180, 180);
-        QImage out = m_pipeline.run(input, {{&m_vignette, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_vignette, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -265,7 +262,7 @@ private slots:
         p["feather"]   = 40;
         p["roundness"] = 0;
         QImage input = makeSolid(64, 64, 180, 180, 180);
-        QImage out = m_pipeline.run(input, {{&m_vignette, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_vignette, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -277,7 +274,7 @@ private slots:
         p["size"]      = 1;
         p["lumWeight"] = true;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_filmgrain, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_filmgrain, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -289,7 +286,7 @@ private slots:
         p["size"]      = 2;
         p["lumWeight"] = false;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_filmgrain, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_filmgrain, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -303,7 +300,7 @@ private slots:
         p["highlightSat"] = 0;
         p["balance"]      = 0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_splittoning, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_splittoning, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -317,7 +314,7 @@ private slots:
         p["highlightSat"] = 50;
         p["balance"]      = 0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_splittoning, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_splittoning, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -328,7 +325,7 @@ private slots:
         p["amount"] = 0;
         p["radius"] = 30;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_clarity, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_clarity, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -339,7 +336,7 @@ private slots:
         p["amount"] = 50;
         p["radius"] = 20;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_clarity, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_clarity, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -351,7 +348,7 @@ private slots:
         p["midtoneR"]   = 0; p["midtoneG"]   = 0; p["midtoneB"]   = 0;
         p["highlightR"] = 0; p["highlightG"] = 0; p["highlightB"] = 0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_colorbalance, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_colorbalance, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -363,7 +360,7 @@ private slots:
         p["midtoneR"]   = 0;  p["midtoneG"]   = 30; p["midtoneB"]   = 0;
         p["highlightR"] = 0;  p["highlightG"] = 0;  p["highlightB"] = 40;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_colorbalance, p}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&m_colorbalance, p)}, fullViewport(input));
         QVERIFY(!out.isNull());
     }
 
@@ -393,23 +390,13 @@ private slots:
         QVERIFY(!out.isNull());
     }
 
-    // Pass an effect that does NOT implement IGpuEffect.
-    // GpuPipeline::run() should log a warning and return a null image.
-    void nonGpuEffect_warnsAndReturnsNull() {
-        if (!m_hasGpu) QSKIP("No GPU");
-        NonGpuEffect nge;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {{&nge, {}}}, fullViewport(input));
-        QVERIFY(out.isNull());
-    }
-
     // Pass an IGpuEffect whose initGpuKernels() always returns false.
     // GpuPipeline::run() should log a warning and return a null image.
     void failInitEffect_warnsAndReturnsNull() {
         if (!m_hasGpu) QSKIP("No GPU");
         FailInitEffect fie;
         QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {{&fie, {}}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&fie)}, fullViewport(input));
         QVERIFY(out.isNull());
     }
 
@@ -419,7 +406,7 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         FailEnqueueEffect fee;
         QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {{&fee, {}}}, fullViewport(input));
+        QImage out = m_pipeline.run(input, {call(&fee)}, fullViewport(input));
         QVERIFY(out.isNull());
     }
 
@@ -433,11 +420,11 @@ private slots:
         ViewportRequest vp = fullViewport(input);
 
         // Commit run populates the full-res post-effect cache.
-        QImage out1 = m_pipeline.run(input, {{&m_brightness, p}}, vp, RunMode::Commit);
+        QImage out1 = m_pipeline.run(input, {call(&m_brightness, p)}, vp, RunMode::Commit);
         QVERIFY(!out1.isNull());
 
         // PanZoom run: reuses the cache, skips effect kernels.
-        QImage out2 = m_pipeline.run(input, {{&m_brightness, p}}, vp, RunMode::PanZoom);
+        QImage out2 = m_pipeline.run(input, {call(&m_brightness, p)}, vp, RunMode::PanZoom);
         QVERIFY(!out2.isNull());
     }
 
@@ -450,7 +437,7 @@ private slots:
         p["brightness"] = 10;
         p["contrast"]   = 0;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {{&m_brightness, p}}, fullViewport(input),
+        QImage out = m_pipeline.run(input, {call(&m_brightness, p)}, fullViewport(input),
                                     RunMode::LiveDrag);
         QVERIFY(!out.isNull());
     }
