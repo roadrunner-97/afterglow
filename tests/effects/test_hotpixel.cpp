@@ -32,7 +32,7 @@ private slots:
 
     void nullImage_passThrough() {
         HotPixelEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // threshold=0 → early return, image unchanged (code: if(threshold==0) return image).
@@ -41,7 +41,7 @@ private slots:
         QImage input = makeWithSpike(32, 32, 64, 16, 16);
         QMap<QString, QVariant> params;
         params["threshold"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Spike must be untouched.
         QCOMPARE(pixelR(out, 16, 16), 255);
@@ -54,7 +54,7 @@ private slots:
         QImage input = makeSolid(32, 32, 80, 80, 80);
         QMap<QString, QVariant> params;
         params["threshold"] = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 80; }));
     }
@@ -72,7 +72,7 @@ private slots:
         QImage input = makeWithSpike(32, 32, bgVal, 16, 16);
         QMap<QString, QVariant> params;
         params["threshold"] = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Corrected pixel should be close to the background value.
         int corrected = pixelR(out, 16, 16);
@@ -95,7 +95,7 @@ private slots:
         QImage input = makeWithSpike(32, 32, bgVal, 16, 16);
         QMap<QString, QVariant> params;
         params["threshold"] = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Pixel to the left of the spike must stay at bgVal.
         QCOMPARE(pixelR(out, 15, 16), bgVal);
@@ -108,7 +108,7 @@ private slots:
         QImage input = makeWithSpike(32, 32, 200, 16, 16);
         QMap<QString, QVariant> params;
         params["threshold"] = 100;   // channel threshold = 255
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Spike deviation = |255-200|=55 < 255 → NOT replaced → still 255.
         QCOMPARE(pixelR(out, 16, 16), 255);
@@ -126,7 +126,7 @@ private slots:
         QImage input = makeWithSpike(128, 64, bgVal, 96, 32);
         QMap<QString, QVariant> params;
         params["threshold"] = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -159,7 +159,7 @@ private slots:
         QImage input = makeSolid16bit(32, 32, 80, 80, 80);
         QMap<QString, QVariant> params;
         params["threshold"] = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

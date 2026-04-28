@@ -14,9 +14,6 @@ public:
     QString getVersion()     const override { return "1.0"; }
     bool    initialize()           override { return true; }
 
-    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override {
-        return img;
-    }
 };
 
 // MockEffect that also implements ICropSource — exercises the
@@ -28,7 +25,6 @@ public:
     QString getDescription() const override { return ""; }
     QString getVersion()     const override { return "1.0"; }
     bool    initialize()           override { return true; }
-    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
     QRectF userCropRect()    const override { return {0, 0, 1, 1}; }
     float  userCropAngle()   const override { return 0.0f; }
 };
@@ -176,9 +172,9 @@ private slots:
     }
 
     // ── PhotoEditorEffect base class default methods ──────────────────────────
-    // MockEffect does NOT override createControlsWidget, getParameters,
-    // onImageLoaded, or supportsGpuInPlace — so these calls exercise the
-    // default implementations in PhotoEditorEffect.h.
+    // MockEffect does NOT override createControlsWidget, getParameters, or
+    // onImageLoaded — so these calls exercise the default implementations in
+    // PhotoEditorEffect.h.
 
     void baseClass_createControlsWidget_returnsNull() {
         MockEffect e;
@@ -196,7 +192,6 @@ private slots:
             QString getDescription() const override { return ""; }
             QString getVersion()     const override { return "1.0"; }
             bool    initialize()           override { return true; }
-            QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
         };
         E e;
         QCOMPARE(e.getId(), QString("crop_rotate"));

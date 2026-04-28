@@ -24,7 +24,7 @@ private slots:
 
     void nullImage_passThrough() {
         ColorBalanceEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // All sliders at 0 → identity.
@@ -35,7 +35,7 @@ private slots:
         params["shadowR"] = 0;  params["shadowG"] = 0;  params["shadowB"] = 0;
         params["midtoneR"] = 0; params["midtoneG"] = 0; params["midtoneB"] = 0;
         params["highlightR"] = 0; params["highlightG"] = 0; params["highlightB"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
@@ -50,7 +50,7 @@ private slots:
         QImage input = makeSolid(64, 64, 20, 20, 20);  // very dark grey
         QMap<QString, QVariant> p;
         p["shadowR"] = 100;  // full +R on shadows
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -72,7 +72,7 @@ private slots:
         QImage input = makeSolid(64, 64, 180, 180, 180);
         QMap<QString, QVariant> p;
         p["highlightB"] = 100;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -90,7 +90,7 @@ private slots:
         QImage input = makeSolid(64, 64, 250, 250, 250);
         QMap<QString, QVariant> p;
         p["shadowR"] = 100;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -108,7 +108,7 @@ private slots:
         QImage input = makeSolid(64, 64, 0, 0, 0);
         QMap<QString, QVariant> p;
         p["midtoneG"] = 100;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
         QCOMPARE(pixelR(out, 32, 32), 0);
         QCOMPARE(pixelG(out, 32, 32), 0);
@@ -123,7 +123,7 @@ private slots:
         QImage input = makeSolid(64, 64, 128, 128, 128);
         QMap<QString, QVariant> p;
         p["midtoneG"] = 100;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -140,7 +140,7 @@ private slots:
         QImage input = makeSolid(64, 64, 128, 128, 128);
         QMap<QString, QVariant> p;
         p["midtoneR"] = -100;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -157,7 +157,7 @@ private slots:
         QImage input = makeSolid(64, 128, 20, 20, 20);
         QMap<QString, QVariant> p;
         p["shadowR"] = 100;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  64);
         QCOMPARE(out.height(), 128);
@@ -176,7 +176,7 @@ private slots:
         QMap<QString, QVariant> p;
         p["midtoneR"] = 50;
         p["midtoneB"] = -50;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
     }
 
@@ -234,7 +234,7 @@ private slots:
     void enqueueGpu_allZero_shortCircuits() {
         ColorBalanceEffect e;
         QImage input = makeSolid(32, 32, 42, 99, 200);
-        QImage out = e.processImage(input, {});
+        QImage out = runEffect(e, input, {});
         QVERIFY(!out.isNull());
         QCOMPARE(pixelR(out, 0, 0), 42);
         QCOMPARE(pixelG(out, 0, 0), 99);

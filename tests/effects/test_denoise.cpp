@@ -26,7 +26,7 @@ private slots:
 
     void nullImage_passThrough() {
         DenoiseEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // All params=0 → early return, image unchanged.
@@ -37,7 +37,7 @@ private slots:
         params["strength"]      = 0;
         params["shadowPreserve"] = 0;
         params["colorNoise"]    = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
@@ -54,7 +54,7 @@ private slots:
         params["strength"]       = 50;
         params["shadowPreserve"] = 0;
         params["colorNoise"]     = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 100) <= 2;
@@ -70,7 +70,7 @@ private slots:
         params["strength"]       = 0;
         params["shadowPreserve"] = 0;
         params["colorNoise"]     = 50;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 100) <= 2;
@@ -86,7 +86,7 @@ private slots:
         params["strength"]       = 50;
         params["shadowPreserve"] = 30;
         params["colorNoise"]     = 50;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qAbs(qRed(px) - 200) <= 3 && qAbs(qGreen(px) - 150) <= 3;
@@ -103,7 +103,7 @@ private slots:
         params["strength"]       = 50;
         params["shadowPreserve"] = 30;
         params["colorNoise"]     = 50;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -121,7 +121,7 @@ private slots:
         params["strength"]       = 50;
         params["shadowPreserve"] = 0;
         params["colorNoise"]     = 50;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

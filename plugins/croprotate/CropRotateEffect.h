@@ -31,9 +31,6 @@ public:
     QString getVersion()     const override;
     bool    initialize()           override;
 
-    QImage processImage(const QImage& image,
-                        const QMap<QString, QVariant>& parameters = {}) override;
-
     QWidget*                 createControlsWidget() override;
     QMap<QString, QVariant>  getParameters()  const override;
     void                     applyParameters(const QMap<QString, QVariant>& parameters) override;

@@ -55,7 +55,7 @@ private slots:
 
     void nullImage_passThrough() {
         ExposureEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // All zones=0 → ev=0 → evFactor=1.0 → pixel passes through sRGB→linear→sRGB
@@ -64,7 +64,7 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
         QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out   = e.processImage(input, zeroParams());
+        QImage out   = runEffect(e, input, zeroParams());
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qAbs(qRed(px)   - 100) <= 2
@@ -82,7 +82,7 @@ private slots:
         for (double ev : { -3.0, -1.0, 1.0, 3.0 }) {
             auto params = zeroParams();
             params["exposure"] = ev;
-            QImage out = e.processImage(input, params);
+            QImage out = runEffect(e, input, params);
             QVERIFY(!out.isNull());
             QVERIFY(allPixels(out, [](QRgb px) {
                 return qRed(px) == 0 && qGreen(px) == 0 && qBlue(px) == 0;
@@ -98,7 +98,7 @@ private slots:
         QImage input = makeSolid(32, 32, 100, 100, 100);
         auto params  = zeroParams();
         params["exposure"] = 2.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 100; }));
     }
@@ -110,7 +110,7 @@ private slots:
         QImage input = makeSolid(32, 32, 150, 150, 150);
         auto params  = zeroParams();
         params["exposure"] = -2.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) < 150; }));
     }
@@ -122,7 +122,7 @@ private slots:
         QImage input = makeSolid(32, 32, 255, 255, 255);
         auto params  = zeroParams();
         params["exposure"] = 3.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 255 && qGreen(px) == 255 && qBlue(px) == 255;
         }));
@@ -137,7 +137,7 @@ private slots:
         QImage input = makeSolid(32, 32, 160, 160, 160);
         auto params  = zeroParams();
         params["highlights"] = 2.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 160; }));
     }
@@ -161,13 +161,13 @@ private slots:
 
         auto paramsA = zeroParams();
         paramsA["exposure"] = 3.0;
-        QImage outA = e.processImage(input, paramsA);
+        QImage outA = runEffect(e, input, paramsA);
         QVERIFY(!outA.isNull());
 
         auto paramsB = zeroParams();
         paramsB["exposure"] = 3.0;
         paramsB["whites"]   = -3.0;
-        QImage outB = e.processImage(input, paramsB);
+        QImage outB = runEffect(e, input, paramsB);
         QVERIFY(!outB.isNull());
 
         // outA should clip at ~255; outB should be much darker (Whites cancels).
@@ -182,7 +182,7 @@ private slots:
         QImage input = makeSolid(32, 32, 20, 20, 20);
         auto params  = zeroParams();
         params["blacks"] = 3.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 20; }));
     }
@@ -196,7 +196,7 @@ private slots:
         QImage input = makeSolid(128, 64, 100, 100, 100);
         auto params  = zeroParams();
         params["exposure"] = 2.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -222,7 +222,7 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
         QImage input = makeSolid16bit(32, 32, 100, 100, 100);
-        QImage out = e.processImage(input, zeroParams());
+        QImage out = runEffect(e, input, zeroParams());
         QVERIFY(!out.isNull());
     }
 
@@ -341,7 +341,7 @@ private slots:
         QImage input = makeSolid16bit(32, 32, 5, 5, 5);
         auto params = zeroParams();
         params["blacks"] = 2.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -352,7 +352,7 @@ private slots:
         QImage input = makeSolid16bit(32, 32, 245, 245, 245);
         auto params = zeroParams();
         params["whites"] = -1.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -511,7 +511,7 @@ private slots:
         // test. Here we explicitly verify the effect returns unchanged.
         ExposureEffect e;
         QImage input = makeSolid(16, 16, 120, 120, 120);
-        QImage out = e.processImage(input, zeroParams());
+        QImage out = runEffect(e, input, zeroParams());
         QVERIFY(!out.isNull());
     }
 };

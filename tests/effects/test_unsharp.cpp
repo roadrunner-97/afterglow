@@ -24,7 +24,7 @@ private slots:
 
     void nullImage_passThrough() {
         UnsharpEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // radius=0 → early return (code: if(amount==0||radius==0) return image).
@@ -35,7 +35,7 @@ private slots:
         params["amount"]    = 2.0;
         params["radius"]    = 0;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 100 && qBlue(px) == 80;
@@ -50,7 +50,7 @@ private slots:
         params["amount"]    = 0.0;
         params["radius"]    = 5;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 100 && qBlue(px) == 80;
@@ -67,7 +67,7 @@ private slots:
         params["amount"]    = 3.0;
         params["radius"]    = 10;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 128; }));
     }
@@ -90,7 +90,7 @@ private slots:
         params["amount"]    = 2.0;
         params["radius"]    = 8;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Check a pixel 2 columns left of the boundary (x=62, y=32).
         // It lies on the dark side and should be darkened.
@@ -105,7 +105,7 @@ private slots:
         params["amount"]    = 2.0;
         params["radius"]    = 8;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // 2 columns right of the boundary (x=66, y=32) → bright side, gets brighter.
         QVERIFY(pixelR(out, 66, 32) > 200);
@@ -120,7 +120,7 @@ private slots:
         params["amount"]    = 2.0;
         params["radius"]    = 8;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Deep in the dark half (x=10) and deep in the bright half (x=118) are
         // far enough from the edge that blur ≈ original and diff < threshold.
@@ -146,7 +146,7 @@ private slots:
         params["amount"]    = 2.0;
         params["radius"]    = 8;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  64);
         QCOMPARE(out.height(), 128);
@@ -184,7 +184,7 @@ private slots:
         params["amount"]    = 1.0;
         params["radius"]    = 2;
         params["threshold"] = 3;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

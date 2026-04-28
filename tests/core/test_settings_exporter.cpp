@@ -17,7 +17,6 @@ public:
     QString getDescription() const override { return ""; }
     QString getVersion()     const override { return "1.0"; }
     bool    initialize()           override { return true; }
-    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
     QMap<QString, QVariant> getParameters() const override { return m_params; }
 private:
     QString                 m_name;

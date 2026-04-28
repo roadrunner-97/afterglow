@@ -24,7 +24,7 @@ private slots:
 
     void nullImage_passThrough() {
         SplitToningEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // Both saturations at 0 → identity, regardless of the other sliders.
@@ -37,7 +37,7 @@ private slots:
         params["highlightHue"] = 60;   // yellow
         params["highlightSat"] = 0;
         params["balance"]      = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
@@ -56,7 +56,7 @@ private slots:
         params["highlightHue"] = 0;
         params["highlightSat"] = 0;
         params["balance"]      = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -78,7 +78,7 @@ private slots:
         params["highlightHue"] = 0;    // red
         params["highlightSat"] = 100;
         params["balance"]      = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -100,7 +100,7 @@ private slots:
         params["highlightHue"] = 0;
         params["highlightSat"] = 0;
         params["balance"]      = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int r = pixelR(out, 32, 32);
@@ -124,9 +124,9 @@ private slots:
         p["highlightSat"] = 0;
 
         p["balance"] = -100;
-        QImage shadowHeavy = e.processImage(input, p);
+        QImage shadowHeavy = runEffect(e, input, p);
         p["balance"] =  100;
-        QImage highlightHeavy = e.processImage(input, p);
+        QImage highlightHeavy = runEffect(e, input, p);
         QVERIFY(!shadowHeavy.isNull() && !highlightHeavy.isNull());
 
         // Shadow tint is pure blue: a shadow-heavy balance pulls R/G toward zero;
@@ -151,7 +151,7 @@ private slots:
         params["highlightHue"] = 0;
         params["highlightSat"] = 0;
         params["balance"]      = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  64);
         QCOMPARE(out.height(), 128);
@@ -173,7 +173,7 @@ private slots:
         p["highlightHue"] = 60;
         p["highlightSat"] = 50;
         p["balance"]      = 0;
-        QImage out = e.processImage(input, p);
+        QImage out = runEffect(e, input, p);
         QVERIFY(!out.isNull());
     }
 

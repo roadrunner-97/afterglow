@@ -4,18 +4,7 @@
 #include <QDebug>
 #include <QVBoxLayout>
 #include <cmath>
-#include <mutex>
 
-// ============================================================================
-// GPU path (OpenCL)
-// ============================================================================
-
-#define CL_HPP_TARGET_OPENCL_VERSION 200
-#define CL_HPP_MINIMUM_OPENCL_VERSION 110
-#define CL_HPP_ENABLE_EXCEPTIONS
-#include <CL/opencl.hpp>
-#include "GpuDeviceRegistryOCL.h"
-#include "GpuContextBase.h"
 
 namespace {
 
@@ -37,111 +26,6 @@ namespace {
 // smoothstep from (midpoint-feather/2) to (midpoint+feather/2) on that
 // normalised distance gives the transition weight t; factor=1+amount*t
 // multiplies RGB (amount<0 darkens corners, amount>0 lightens).
-static const char* GPU_KERNEL_SOURCE = R"CL(
-__kernel void applyVignette(__global uint* pixels,
-                             int   stride,
-                             int   width,
-                             int   height,
-                             float cx,
-                             float cy,
-                             float halfW,
-                             float halfH,
-                             float amount,
-                             float midpoint,
-                             float feather,
-                             float p,
-                             float cornerD)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float nx = fabs(((float)x - cx) / halfW);
-    float ny = fabs(((float)y - cy) / halfH);
-    float d  = native_powr(native_powr(nx, p) + native_powr(ny, p), 1.0f / p);
-    float dn = d / cornerD;
-
-    float edge0 = midpoint - feather * 0.5f;
-    float edge1 = midpoint + feather * 0.5f + 1e-5f;
-    float t = smoothstep(edge0, edge1, dn);
-    float factor = clamp(1.0f + amount * t, 0.0f, 2.0f);
-
-    uint pixel = pixels[y * stride + x];
-    float r = ((pixel >> 16) & 0xFFu) / 255.0f * factor;
-    float g = ((pixel >>  8) & 0xFFu) / 255.0f * factor;
-    float b = ( pixel        & 0xFFu) / 255.0f * factor;
-
-    uint ri = (uint)(clamp(r, 0.0f, 1.0f) * 255.0f + 0.5f);
-    uint gi = (uint)(clamp(g, 0.0f, 1.0f) * 255.0f + 0.5f);
-    uint bi = (uint)(clamp(b, 0.0f, 1.0f) * 255.0f + 0.5f);
-    pixels[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
-
-__kernel void applyVignette16(__global ushort4* pixels,
-                               int   stride,
-                               int   width,
-                               int   height,
-                               float cx,
-                               float cy,
-                               float halfW,
-                               float halfH,
-                               float amount,
-                               float midpoint,
-                               float feather,
-                               float p,
-                               float cornerD)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    float nx = fabs(((float)x - cx) / halfW);
-    float ny = fabs(((float)y - cy) / halfH);
-    float d  = native_powr(native_powr(nx, p) + native_powr(ny, p), 1.0f / p);
-    float dn = d / cornerD;
-
-    float edge0 = midpoint - feather * 0.5f;
-    float edge1 = midpoint + feather * 0.5f + 1e-5f;
-    float t = smoothstep(edge0, edge1, dn);
-    float factor = clamp(1.0f + amount * t, 0.0f, 2.0f);
-
-    ushort4 px = pixels[y * stride + x];
-    float r = px.s0 / 65535.0f * factor;
-    float g = px.s1 / 65535.0f * factor;
-    float b = px.s2 / 65535.0f * factor;
-
-    px.s0 = (ushort)(clamp(r, 0.0f, 1.0f) * 65535.0f + 0.5f);
-    px.s1 = (ushort)(clamp(g, 0.0f, 1.0f) * 65535.0f + 0.5f);
-    px.s2 = (ushort)(clamp(b, 0.0f, 1.0f) * 65535.0f + 0.5f);
-    pixels[y * stride + x] = px;
-}
-)CL";
-
-struct GpuContext : GpuContextBase<GpuContext> {
-    cl::Kernel kernel;
-    cl::Kernel kernel16;
-
-    void init() {
-        cl::Device device;
-        if (!acquireDevice(device, "Vignette")) return;
-        try {
-            cl::Program prog(context, GPU_KERNEL_SOURCE);
-            prog.build({device});
-            kernel   = cl::Kernel(prog, "applyVignette");
-            kernel16 = cl::Kernel(prog, "applyVignette16");
-            available = true;
-            qDebug() << "[GPU] Vignette ready on:"
-                     << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        }
-        // GCOVR_EXCL_START
-        catch (const cl::Error& e) {
-            qWarning() << "[GPU] Vignette init failed:" << e.what() << "(err" << e.err() << ")";
-        }
-        // GCOVR_EXCL_STOP
-    }
-};
-
-static std::mutex gpuMutex;
 
 struct VignetteArgs {
     float amount;    // -1..1
@@ -158,96 +42,6 @@ static VignetteArgs makeArgs(int amount, int midpoint, int feather, int roundnes
     float rn   = roundness / 100.0f;                 // [-1, 1]
     a.p        = std::exp2(1.0f - rn * 3.0f);        // roundness=0 → p=2
     return a;
-}
-
-static void setKernelArgs(cl::Kernel& k, cl::Buffer& buf,
-                           int stride, int w, int h, const VignetteArgs& a) {
-    const float halfW = w * 0.5f;
-    const float halfH = h * 0.5f;
-    const float halfD = std::sqrt(halfW * halfW + halfH * halfH);
-    // Isotropic normalisation: feed halfD as the scale on BOTH axes so level
-    // curves are circles at p=2.  cornerD is the d value at the image corner
-    // (halfW/halfD, halfH/halfD), so dn=1 at the corner for any aspect & p.
-    const float nxCorner = halfW / halfD;
-    const float nyCorner = halfH / halfD;
-    const float cornerD  = std::pow(std::pow(nxCorner, a.p) +
-                                    std::pow(nyCorner, a.p), 1.0f / a.p);
-
-    k.setArg(0, buf);
-    k.setArg(1, stride);
-    k.setArg(2, w);
-    k.setArg(3, h);
-    k.setArg(4, halfW);
-    k.setArg(5, halfH);
-    k.setArg(6, halfD);
-    k.setArg(7, halfD);
-    k.setArg(8, a.amount);
-    k.setArg(9, a.midpoint);
-    k.setArg(10, a.feather);
-    k.setArg(11, a.p);
-    k.setArg(12, cornerD);
-}
-
-static QImage processImageGPU(const QImage& image, const VignetteArgs& a) {
-    QImage result = image.convertToFormat(QImage::Format_RGB32);
-    const int    width    = result.width();
-    const int    height   = result.height();
-    const int    stride   = result.bytesPerLine() / 4;
-    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
-
-    try {
-        std::lock_guard<std::mutex> lock(gpuMutex);
-        GpuContext& gpu = GpuContext::instance();
-        if (!gpu.available) return {};
-
-        cl::Buffer buf(gpu.context,
-                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                       bufBytes, result.bits());
-
-        setKernelArgs(gpu.kernel, buf, stride, width, height, a);
-        gpu.queue.enqueueNDRangeKernel(gpu.kernel, cl::NullRange,
-                                       cl::NDRange(width, height), cl::NullRange);
-        gpu.queue.finish();
-        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    }
-    // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GPU] Vignette kernel failed:" << e.what() << "(err" << e.err() << ")";
-        return {};
-    }
-    // GCOVR_EXCL_STOP
-    return result;
-}
-
-static QImage processImageGPU16(const QImage& image, const VignetteArgs& a) {
-    QImage result = image;
-    const int    width    = result.width();
-    const int    height   = result.height();
-    const int    stride   = result.bytesPerLine() / 8;
-    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
-
-    try {
-        std::lock_guard<std::mutex> lock(gpuMutex);
-        GpuContext& gpu = GpuContext::instance();
-        if (!gpu.available) return {};
-
-        cl::Buffer buf(gpu.context,
-                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                       bufBytes, result.bits());
-
-        setKernelArgs(gpu.kernel16, buf, stride, width, height, a);
-        gpu.queue.enqueueNDRangeKernel(gpu.kernel16, cl::NullRange,
-                                       cl::NDRange(width, height), cl::NullRange);
-        gpu.queue.finish();
-        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    }
-    // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GPU] Vignette16 kernel failed:" << e.what() << "(err" << e.err() << ")";
-        return {};
-    }
-    // GCOVR_EXCL_STOP
-    return result;
 }
 
 } // namespace
@@ -489,19 +283,3 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     return true;
 }
 
-QImage VignetteEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
-    if (image.isNull()) return image;
-
-    const int amount = parameters.value("amount", 0).toInt();
-    if (amount == 0) return image;
-
-    const VignetteArgs a = makeArgs(
-        amount,
-        parameters.value("midpoint",  50).toInt(),
-        parameters.value("feather",   50).toInt(),
-        parameters.value("roundness",  0).toInt());
-
-    if (image.format() == QImage::Format_RGBX64)
-        return processImageGPU16(image, a);
-    return processImageGPU(image, a);
-}

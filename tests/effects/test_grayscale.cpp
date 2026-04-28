@@ -22,14 +22,14 @@ private slots:
 
     void nullImage_passThrough() {
         GrayscaleEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // m_active=false (default): processImage returns the input image unchanged.
     void inactive_isIdentity() {
         GrayscaleEffect e;  // m_active defaults to false
         QImage input = makeSolid(32, 32, 200, 100, 50);
-        QImage out   = e.processImage(input, {});
+        QImage out   = runEffect(e, input, {});
         // When inactive, the code does: if (!m_active) return image;
         // The returned copy shares pixel data, so pixel values are identical.
         QVERIFY(!out.isNull());
@@ -50,7 +50,7 @@ private slots:
         cb->setChecked(true);  // triggers the lambda: m_active = true
 
         QImage input = makeSolid(32, 32, 200, 100, 50);
-        QImage out   = e.processImage(input, {});
+        QImage out   = runEffect(e, input, {});
         QVERIFY(!out.isNull());
 
         // Every pixel must be grey: R=G=B (kernel uses luminosity formula).
@@ -59,9 +59,10 @@ private slots:
         }));
     }
 
-    // For the specific input (200, 100, 50), the GPU luminosity formula:
-    //   gray = (uint)(0.299*200 + 0.587*100 + 0.114*50 + 0.5) = 124
-    // Verify the computed grey value is in the expected range (±2 for GPU fp).
+    // The pipeline does grayscale in linear light using Rec.709 weights
+    // (0.2126 R + 0.7152 G + 0.0722 B), then re-encodes to sRGB.  For input
+    // sRGB (200, 100, 50) → linear (0.578, 0.127, 0.032) → L ≈ 0.216 →
+    // sRGB ≈ 128.
     void active_greyValueMatchesLuminosity() {
         if (!m_hasGpu) QSKIP("No GPU");
         GrayscaleEffect e;
@@ -71,11 +72,11 @@ private slots:
         cb->setChecked(true);
 
         QImage input = makeSolid(32, 32, 200, 100, 50);
-        QImage out   = e.processImage(input, {});
+        QImage out   = runEffect(e, input, {});
 
-        // Expected: 0.299*200 + 0.587*100 + 0.114*50 + 0.5 = 124.7 → 124
         int grey = pixelR(out, 0, 0);
-        QVERIFY(qAbs(grey - 124) <= 2);
+        QVERIFY2(qAbs(grey - 128) <= 2,
+                 qPrintable(QString("expected ~128, got %1").arg(grey)));
     }
 
     void meta_nonEmpty() {
@@ -96,7 +97,7 @@ private slots:
         cb->setChecked(true);
 
         QImage input = makeSolid16bit(32, 32, 200, 100, 50);
-        QImage out   = e.processImage(input, {});
+        QImage out   = runEffect(e, input, {});
         QVERIFY(!out.isNull());
         QImage out32 = out.convertToFormat(QImage::Format_RGB32);
         QVERIFY(allPixels(out32, [](QRgb px) {
@@ -117,7 +118,7 @@ private slots:
         cb->setChecked(false);  // back to m_active = false
 
         QImage input = makeSolid(32, 32, 200, 100, 50);
-        QImage out   = e.processImage(input, {});
+        QImage out   = runEffect(e, input, {});
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 200 && qGreen(px) == 100 && qBlue(px) == 50;
         }));
@@ -134,7 +135,7 @@ private slots:
         cb->setChecked(true);
 
         QImage input = makeSolid(128, 64, 200, 100, 50);
-        QImage out   = e.processImage(input, {});
+        QImage out   = runEffect(e, input, {});
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);

@@ -24,7 +24,7 @@ private slots:
 
     void nullImage_passThrough() {
         SaturationEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // Solid grey with sat=0, vib=0: the kernel does RGB→HSV→RGB but with
@@ -36,7 +36,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 128 && qBlue(px) == 128;
@@ -52,7 +52,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = -20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         int gapIn  = 200 - 100;
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
@@ -67,7 +67,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         int gapIn  = 200 - 100;
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
@@ -84,7 +84,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = -20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         // After desaturation, R−G gap should be smaller than before (52 → ~12).
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
         QVERIFY(gapOut < 52);
@@ -100,7 +100,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 20.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         int gapIn  = 200 - 180;
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
         QVERIFY(gapOut > gapIn);
@@ -116,7 +116,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -149,7 +149,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -160,7 +160,7 @@ private slots:
         QVERIFY(e.createControlsWidget() == w);
     }
 
-    // 16-bit with non-zero saturation — exercises processImageGPU16.
+    // 16-bit with non-zero saturation — exercises the 16-bit decode path.
     void saturation_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
         SaturationEffect e;
@@ -168,11 +168,11 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 10.0;
         params["vibrancy"]   = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
-    // 16-bit with non-zero vibrancy — also exercises processImageGPU16.
+    // 16-bit with non-zero vibrancy — also exercises the 16-bit decode path.
     void vibrancy_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
         SaturationEffect e;
@@ -180,7 +180,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 10.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

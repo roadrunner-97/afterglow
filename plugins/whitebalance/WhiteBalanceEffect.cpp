@@ -5,18 +5,7 @@
 #include <QVBoxLayout>
 #include <cmath>
 #include <algorithm>
-#include <mutex>
 
-// ============================================================================
-// GPU path (OpenCL)
-// ============================================================================
-
-#define CL_HPP_TARGET_OPENCL_VERSION 200
-#define CL_HPP_MINIMUM_OPENCL_VERSION 110
-#define CL_HPP_ENABLE_EXCEPTIONS
-#include <CL/opencl.hpp>
-#include "GpuDeviceRegistryOCL.h"
-#include "GpuContextBase.h"
 
 namespace {
 
@@ -29,64 +18,6 @@ namespace {
 // 8-bit format:  QImage::Format_RGB32  (uint = 0xFFRRGGBB)
 // 16-bit format: QImage::Format_RGBX64 (ushort4, LE: s0=R s1=G s2=B s3=X)
 // ---------------------------------------------------------------------------
-static const char* GPU_KERNEL_SOURCE = R"CL(
-
-__kernel void applyWB(__global uint* pixels,
-                      int   stride,
-                      int   width,
-                      int   height,
-                      float rMul,
-                      float gMul,
-                      float bMul)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    uint pixel = pixels[y * stride + x];
-    float r = ((pixel >> 16) & 0xFFu) / 255.0f;
-    float g = ((pixel >>  8) & 0xFFu) / 255.0f;
-    float b = ( pixel        & 0xFFu) / 255.0f;
-
-    r = clamp(r * rMul, 0.0f, 1.0f);
-    g = clamp(g * gMul, 0.0f, 1.0f);
-    b = clamp(b * bMul, 0.0f, 1.0f);
-
-    uint ri = (uint)(r * 255.0f + 0.5f);
-    uint gi = (uint)(g * 255.0f + 0.5f);
-    uint bi = (uint)(b * 255.0f + 0.5f);
-    pixels[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
-
-__kernel void applyWB16(__global ushort4* pixels,
-                        int   stride,
-                        int   width,
-                        int   height,
-                        float rMul,
-                        float gMul,
-                        float bMul)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    ushort4 px = pixels[y * stride + x];
-    float r = px.s0 / 65535.0f;
-    float g = px.s1 / 65535.0f;
-    float b = px.s2 / 65535.0f;
-
-    r = clamp(r * rMul, 0.0f, 1.0f);
-    g = clamp(g * gMul, 0.0f, 1.0f);
-    b = clamp(b * bMul, 0.0f, 1.0f);
-
-    px.s0 = (ushort)(r * 65535.0f + 0.5f);
-    px.s1 = (ushort)(g * 65535.0f + 0.5f);
-    px.s2 = (ushort)(b * 65535.0f + 0.5f);
-    // px.s3 (padding) unchanged
-    pixels[y * stride + x] = px;
-}
-
-)CL";
 
 // ---------------------------------------------------------------------------
 // Kang et al. (2002) Planckian locus → linear sRGB (D65 reference white).
@@ -147,120 +78,6 @@ static void computeWBMuls(float shotK, float targetK, float tint,
     bMul = std::max(0.05f, std::min(20.0f, bMul));
 }
 
-// ---------------------------------------------------------------------------
-// GpuContext (per-effect OpenCL objects)
-// ---------------------------------------------------------------------------
-struct GpuContext : GpuContextBase<GpuContext> {
-    cl::Kernel kernel;
-    cl::Kernel kernel16;
-
-    void init() {
-        cl::Device device;
-        if (!acquireDevice(device, "WhiteBalance")) return;
-        try {
-            cl::Program prog(context, GPU_KERNEL_SOURCE);
-            prog.build({device});
-            kernel   = cl::Kernel(prog, "applyWB");
-            kernel16 = cl::Kernel(prog, "applyWB16");
-            available = true;
-            qDebug() << "[GPU] WhiteBalance ready on:"
-                     << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        }
-        // GCOVR_EXCL_START
-        catch (const cl::Error& e) {
-            qWarning() << "[GPU] WhiteBalance init failed:" << e.what() << "(err" << e.err() << ")";
-        }
-        // GCOVR_EXCL_STOP
-    }
-};
-
-static std::mutex gpuMutex;
-
-static QImage processImageGPU(const QImage& image,
-                               float shotK, float targetK, float tint)
-{
-    QImage result = image.convertToFormat(QImage::Format_RGB32);
-    const int    width    = result.width();
-    const int    height   = result.height();
-    const int    stride   = result.bytesPerLine() / 4;
-    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
-
-    float rMul, gMul, bMul;
-    computeWBMuls(shotK, targetK, tint, rMul, gMul, bMul);
-
-    try {
-        std::lock_guard<std::mutex> lock(gpuMutex);
-        GpuContext& gpu = GpuContext::instance();
-        if (!gpu.available) return {};
-
-        cl::Buffer buf(gpu.context,
-                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                       bufBytes, result.bits());
-
-        gpu.kernel.setArg(0, buf);
-        gpu.kernel.setArg(1, stride);
-        gpu.kernel.setArg(2, width);
-        gpu.kernel.setArg(3, height);
-        gpu.kernel.setArg(4, rMul);
-        gpu.kernel.setArg(5, gMul);
-        gpu.kernel.setArg(6, bMul);
-
-        gpu.queue.enqueueNDRangeKernel(gpu.kernel, cl::NullRange,
-                                       cl::NDRange(width, height), cl::NullRange);
-        gpu.queue.finish();
-        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    }
-    // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GPU] WB kernel failed:" << e.what() << "(err" << e.err() << ")";
-        return {};
-    }
-    // GCOVR_EXCL_STOP
-    return result;
-}
-
-static QImage processImageGPU16(const QImage& image,
-                                 float shotK, float targetK, float tint)
-{
-    QImage result = image; // already RGBX64
-    const int    width    = result.width();
-    const int    height   = result.height();
-    const int    stride   = result.bytesPerLine() / 8;
-    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
-
-    float rMul, gMul, bMul;
-    computeWBMuls(shotK, targetK, tint, rMul, gMul, bMul);
-
-    try {
-        std::lock_guard<std::mutex> lock(gpuMutex);
-        GpuContext& gpu = GpuContext::instance();
-        if (!gpu.available) return {};
-
-        cl::Buffer buf(gpu.context,
-                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                       bufBytes, result.bits());
-
-        gpu.kernel16.setArg(0, buf);
-        gpu.kernel16.setArg(1, stride);
-        gpu.kernel16.setArg(2, width);
-        gpu.kernel16.setArg(3, height);
-        gpu.kernel16.setArg(4, rMul);
-        gpu.kernel16.setArg(5, gMul);
-        gpu.kernel16.setArg(6, bMul);
-
-        gpu.queue.enqueueNDRangeKernel(gpu.kernel16, cl::NullRange,
-                                       cl::NDRange(width, height), cl::NullRange);
-        gpu.queue.finish();
-        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    }
-    // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GPU] WB16 kernel failed:" << e.what() << "(err" << e.err() << ")";
-        return {};
-    }
-    // GCOVR_EXCL_STOP
-    return result;
-}
 
 } // namespace
 
@@ -420,16 +237,3 @@ void WhiteBalanceEffect::applyParameters(const QMap<QString, QVariant>& paramete
     emit parametersChanged();
 }
 
-QImage WhiteBalanceEffect::processImage(const QImage& image,
-                                        const QMap<QString, QVariant>& parameters)
-{
-    if (image.isNull()) return image;
-
-    const float shotK   = static_cast<float>(parameters.value("shot_temp",   5500.0).toDouble());
-    const float targetK = static_cast<float>(parameters.value("temperature", 5500.0).toDouble());
-    const float tint    = static_cast<float>(parameters.value("tint",        0.0).toDouble());
-
-    if (image.format() == QImage::Format_RGBX64)
-        return processImageGPU16(image, shotK, targetK, tint);
-    return processImageGPU(image, shotK, targetK, tint);
-}

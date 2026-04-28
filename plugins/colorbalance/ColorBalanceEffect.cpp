@@ -4,18 +4,7 @@
 #include <QDebug>
 #include <QVBoxLayout>
 #include <QLabel>
-#include <mutex>
 
-// ============================================================================
-// GPU path (OpenCL)
-// ============================================================================
-
-#define CL_HPP_TARGET_OPENCL_VERSION 200
-#define CL_HPP_MINIMUM_OPENCL_VERSION 110
-#define CL_HPP_ENABLE_EXCEPTIONS
-#include <CL/opencl.hpp>
-#include "GpuDeviceRegistryOCL.h"
-#include "GpuContextBase.h"
 
 namespace {
 
@@ -30,104 +19,6 @@ namespace {
 //   midtoneW   = 1 - shadowW - highlightW
 //
 // Each slider delivers up to ±0.25 on its channel at full weight.
-static const char* GPU_KERNEL_SOURCE = R"CL(
-inline float3 applyBalance(float3 rgb,
-                            float3 shadowOff,
-                            float3 midtoneOff,
-                            float3 highlightOff)
-{
-    float L = 0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z;
-    float shadowW    = fmax(0.0f, 1.0f - 2.0f * L);
-    float highlightW = fmax(0.0f, 2.0f * L - 1.0f);
-    float midtoneW   = 1.0f - shadowW - highlightW;
-
-    float3 off = shadowOff    * shadowW
-               + midtoneOff   * midtoneW
-               + highlightOff * highlightW;
-
-    return clamp(rgb + off, 0.0f, 1.0f);
-}
-
-__kernel void applyColorBalance(__global uint* pixels,
-                                 int   stride,
-                                 int   width,
-                                 int   height,
-                                 float sR, float sG, float sB,
-                                 float mR, float mG, float mB,
-                                 float hR, float hG, float hB)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    uint pixel = pixels[y * stride + x];
-    float3 rgb = (float3)(((pixel >> 16) & 0xFFu) / 255.0f,
-                           ((pixel >>  8) & 0xFFu) / 255.0f,
-                           ( pixel        & 0xFFu) / 255.0f);
-
-    rgb = applyBalance(rgb,
-                        (float3)(sR, sG, sB),
-                        (float3)(mR, mG, mB),
-                        (float3)(hR, hG, hB));
-
-    uint ri = (uint)(rgb.x * 255.0f + 0.5f);
-    uint gi = (uint)(rgb.y * 255.0f + 0.5f);
-    uint bi = (uint)(rgb.z * 255.0f + 0.5f);
-    pixels[y * stride + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
-}
-
-__kernel void applyColorBalance16(__global ushort4* pixels,
-                                   int   stride,
-                                   int   width,
-                                   int   height,
-                                   float sR, float sG, float sB,
-                                   float mR, float mG, float mB,
-                                   float hR, float hG, float hB)
-{
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    if (x >= width || y >= height) return;
-
-    ushort4 px = pixels[y * stride + x];
-    float3 rgb = (float3)(px.s0 / 65535.0f, px.s1 / 65535.0f, px.s2 / 65535.0f);
-
-    rgb = applyBalance(rgb,
-                        (float3)(sR, sG, sB),
-                        (float3)(mR, mG, mB),
-                        (float3)(hR, hG, hB));
-
-    px.s0 = (ushort)(clamp(rgb.x * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    px.s1 = (ushort)(clamp(rgb.y * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    px.s2 = (ushort)(clamp(rgb.z * 65535.0f + 0.5f, 0.0f, 65535.0f));
-    pixels[y * stride + x] = px;
-}
-)CL";
-
-struct GpuContext : GpuContextBase<GpuContext> {
-    cl::Kernel kernel;
-    cl::Kernel kernel16;
-
-    void init() {
-        cl::Device device;
-        if (!acquireDevice(device, "ColorBalance")) return;
-        try {
-            cl::Program prog(context, GPU_KERNEL_SOURCE);
-            prog.build({device});
-            kernel   = cl::Kernel(prog, "applyColorBalance");
-            kernel16 = cl::Kernel(prog, "applyColorBalance16");
-            available = true;
-            qDebug() << "[GPU] ColorBalance ready on:"
-                     << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
-        }
-        // GCOVR_EXCL_START
-        catch (const cl::Error& e) {
-            qWarning() << "[GPU] ColorBalance init failed:" << e.what() << "(err" << e.err() << ")";
-        }
-        // GCOVR_EXCL_STOP
-    }
-};
-
-static std::mutex gpuMutex;
 
 struct BalanceArgs {
     float sR, sG, sB;
@@ -146,79 +37,6 @@ static BalanceArgs makeArgs(int sR, int sG, int sB,
     a.mR = mR * SLIDER_TO_OFFSET; a.mG = mG * SLIDER_TO_OFFSET; a.mB = mB * SLIDER_TO_OFFSET;
     a.hR = hR * SLIDER_TO_OFFSET; a.hG = hG * SLIDER_TO_OFFSET; a.hB = hB * SLIDER_TO_OFFSET;
     return a;
-}
-
-static void setKernelArgs(cl::Kernel& k, cl::Buffer& buf,
-                           int stride, int w, int h, const BalanceArgs& a) {
-    k.setArg(0,  buf);
-    k.setArg(1,  stride);
-    k.setArg(2,  w);
-    k.setArg(3,  h);
-    k.setArg(4,  a.sR); k.setArg(5,  a.sG); k.setArg(6,  a.sB);
-    k.setArg(7,  a.mR); k.setArg(8,  a.mG); k.setArg(9,  a.mB);
-    k.setArg(10, a.hR); k.setArg(11, a.hG); k.setArg(12, a.hB);
-}
-
-static QImage processImageGPU(const QImage& image, const BalanceArgs& a) {
-    QImage result = image.convertToFormat(QImage::Format_RGB32);
-    const int    width    = result.width();
-    const int    height   = result.height();
-    const int    stride   = result.bytesPerLine() / 4;
-    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
-
-    try {
-        std::lock_guard<std::mutex> lock(gpuMutex);
-        GpuContext& gpu = GpuContext::instance();
-        if (!gpu.available) return {};
-
-        cl::Buffer buf(gpu.context,
-                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                       bufBytes, result.bits());
-
-        setKernelArgs(gpu.kernel, buf, stride, width, height, a);
-        gpu.queue.enqueueNDRangeKernel(gpu.kernel, cl::NullRange,
-                                       cl::NDRange(width, height), cl::NullRange);
-        gpu.queue.finish();
-        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    }
-    // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GPU] ColorBalance kernel failed:" << e.what() << "(err" << e.err() << ")";
-        return {};
-    }
-    // GCOVR_EXCL_STOP
-    return result;
-}
-
-static QImage processImageGPU16(const QImage& image, const BalanceArgs& a) {
-    QImage result = image;
-    const int    width    = result.width();
-    const int    height   = result.height();
-    const int    stride   = result.bytesPerLine() / 8;
-    const size_t bufBytes = static_cast<size_t>(result.bytesPerLine()) * height;
-
-    try {
-        std::lock_guard<std::mutex> lock(gpuMutex);
-        GpuContext& gpu = GpuContext::instance();
-        if (!gpu.available) return {};
-
-        cl::Buffer buf(gpu.context,
-                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                       bufBytes, result.bits());
-
-        setKernelArgs(gpu.kernel16, buf, stride, width, height, a);
-        gpu.queue.enqueueNDRangeKernel(gpu.kernel16, cl::NullRange,
-                                       cl::NDRange(width, height), cl::NullRange);
-        gpu.queue.finish();
-        gpu.queue.enqueueReadBuffer(buf, CL_TRUE, 0, bufBytes, result.bits());
-    }
-    // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GPU] ColorBalance16 kernel failed:" << e.what() << "(err" << e.err() << ")";
-        return {};
-    }
-    // GCOVR_EXCL_STOP
-    return result;
 }
 
 } // namespace
@@ -415,22 +233,3 @@ bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue& queue,
     return true;
 }
 
-QImage ColorBalanceEffect::processImage(const QImage& image, const QMap<QString, QVariant>& parameters) {
-    if (image.isNull()) return image;
-    if (allZero(parameters)) return image;
-
-    const BalanceArgs a = makeArgs(
-        parameters.value("shadowR",    0).toInt(),
-        parameters.value("shadowG",    0).toInt(),
-        parameters.value("shadowB",    0).toInt(),
-        parameters.value("midtoneR",   0).toInt(),
-        parameters.value("midtoneG",   0).toInt(),
-        parameters.value("midtoneB",   0).toInt(),
-        parameters.value("highlightR", 0).toInt(),
-        parameters.value("highlightG", 0).toInt(),
-        parameters.value("highlightB", 0).toInt());
-
-    if (image.format() == QImage::Format_RGBX64)
-        return processImageGPU16(image, a);
-    return processImageGPU(image, a);
-}

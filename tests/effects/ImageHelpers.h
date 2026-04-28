@@ -1,7 +1,38 @@
 #pragma once
 
 #include <QImage>
+#include <QMap>
+#include <QVariant>
+#include <QVector>
 #include <functional>
+
+#include "GpuPipeline.h"
+#include "IGpuEffect.h"
+#include "PhotoEditorEffect.h"
+
+// ============================================================================
+// Effect runner — drives a single effect through the shared GpuPipeline.
+// Replaces the per-plugin processImage()/processImageGPU/processImageGPU16
+// helpers; tests only need to know about IGpuEffect + the pipeline.
+//
+// The pipeline always emits Format_RGB32 (sRGB), regardless of input depth.
+// 16-bit RGBX64 inputs are decoded internally and the test sees an RGB32
+// preview-sized result.
+// ============================================================================
+inline QImage runEffect(PhotoEditorEffect& effect,
+                        const QImage& input,
+                        const QMap<QString, QVariant>& params = {}) {
+    if (input.isNull()) return {};
+    auto* gpu = dynamic_cast<IGpuEffect*>(&effect);
+    Q_ASSERT(gpu);
+    // Fresh pipeline per call: tests construct stack-local effect instances
+    // whose addresses get reused across test methods.  Sharing a pipeline
+    // would make m_initializedEffects mis-cache the new (uninitialised)
+    // effect under an old pointer.
+    GpuPipeline pipeline;
+    QVector<GpuPipelineCall> calls{{&effect, gpu, params}};
+    return pipeline.run(input, calls, ViewportRequest{}, RunMode::Commit);
+}
 
 // ============================================================================
 // Synthetic QImage factories for effect unit tests

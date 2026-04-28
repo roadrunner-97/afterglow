@@ -25,7 +25,7 @@ private slots:
 
     void nullImage_passThrough() {
         BlurEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // radius=0 → processImage returns the image unchanged (early return in code).
@@ -35,7 +35,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 0;
         params["blurType"] = 0;  // Gaussian
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 100 && qGreen(px) == 150 && qBlue(px) == 200;
@@ -51,7 +51,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 15;
         params["blurType"] = 0;  // Gaussian
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 90 && qBlue(px) == 60;
@@ -66,7 +66,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 10;
         params["blurType"] = 1;  // Box
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 200; }));
     }
@@ -82,7 +82,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 12;
         params["blurType"] = 0;  // Gaussian
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         int r = pixelR(out, 32, 32);
         QVERIFY(r > 10 && r < 245);
@@ -96,7 +96,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 12;
         params["blurType"] = 1;  // Box
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         int r = pixelR(out, 32, 32);
         QVERIFY(r > 10 && r < 245);
@@ -129,7 +129,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 8;
         params["blurType"] = 0;  // Gaussian
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -146,7 +146,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["radius"]   = 4;
         params["blurType"] = 0;  // Gaussian
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

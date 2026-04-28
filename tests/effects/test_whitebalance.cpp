@@ -34,7 +34,7 @@ private slots:
 
     void nullImage_passThrough() {
         WhiteBalanceEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // target == shot, tint == 0 → all multipliers are 1.0 → pixel values unchanged (±1 for float rounding).
@@ -42,7 +42,7 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         WhiteBalanceEffect e;
         QImage input = makeSolid(32, 32, 128, 128, 128);
-        QImage out   = e.processImage(input, neutralParams(5500.0));
+        QImage out   = runEffect(e, input, neutralParams(5500.0));
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qAbs(qRed(px)   - 128) <= 2
@@ -61,7 +61,7 @@ private slots:
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 8000.0;   // warmer
         params["tint"]        = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Warming shifts R up and B down relative to G.
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) >= qBlue(px); }));
@@ -76,7 +76,7 @@ private slots:
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 3000.0;   // cooler
         params["tint"]        = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qBlue(px) >= qRed(px); }));
     }
@@ -90,7 +90,7 @@ private slots:
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 5500.0;
         params["tint"]        = 80.0;   // strong magenta
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qGreen(px) < qRed(px); }));
     }
@@ -100,7 +100,7 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         WhiteBalanceEffect e;
         QImage input = makeSolid16bit(32, 32, 128, 128, 128);
-        QImage out   = e.processImage(input, neutralParams(5500.0));
+        QImage out   = runEffect(e, input, neutralParams(5500.0));
         QVERIFY(!out.isNull());
     }
 
@@ -113,7 +113,7 @@ private slots:
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 8000.0;
         params["tint"]        = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -128,7 +128,7 @@ private slots:
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 8000.0;
         params["tint"]        = 0.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);

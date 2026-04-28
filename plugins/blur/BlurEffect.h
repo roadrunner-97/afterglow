@@ -19,7 +19,6 @@ public:
     QString getDescription() const override;
     QString getVersion() const override;
     bool initialize() override;
-    QImage processImage(const QImage &image, const QMap<QString, QVariant> &parameters = QMap<QString, QVariant>()) override;
 
     QWidget* createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
@@ -37,8 +36,6 @@ private:
 
     int blurType;  // 0 = Gaussian, 1 = Box
 
-    // Pipeline (float4 linear) kernels.  The sRGB kernels used by processImage
-    // live in the per-effect GpuContext (tests path) and aren't duplicated here.
     cl::Kernel m_kernelBlurHLinear;
     cl::Kernel m_kernelBlurVLinear;
 };

@@ -11,10 +11,6 @@
 #include <QVBoxLayout>
 
 // OpenCL headers are required by IGpuEffect.h; the actual GPU functions are no-ops.
-#define CL_HPP_TARGET_OPENCL_VERSION 200
-#define CL_HPP_MINIMUM_OPENCL_VERSION 110
-#define CL_HPP_ENABLE_EXCEPTIONS
-#include <CL/opencl.hpp>
 
 #include <cmath>
 #include <algorithm>
@@ -32,15 +28,6 @@ QString CropRotateEffect::getDescription() const {
 }
 QString CropRotateEffect::getVersion()     const { return "1.0"; }
 bool    CropRotateEffect::initialize()           { return true; }
-
-// ============================================================================
-// processImage — passthrough (crop/rotate is metadata only)
-// ============================================================================
-
-QImage CropRotateEffect::processImage(const QImage& image,
-                                       const QMap<QString, QVariant>& /*parameters*/) {
-    return image;
-}
 
 // ============================================================================
 // createControlsWidget

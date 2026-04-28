@@ -82,13 +82,13 @@ private slots:
 
     void processImage_null_returnsNull() {
         CropRotateEffect e;
-        QVERIFY(e.processImage(QImage()).isNull());
+        QVERIFY(runEffect(e, QImage()).isNull());
     }
 
     void processImage_nonNull_returnsUnchanged() {
         CropRotateEffect e;
         QImage input = makeSolid(64, 64, 128, 64, 32);
-        QImage out   = e.processImage(input);
+        QImage out   = runEffect(e, input);
         // Same dimensions and pixel data
         QCOMPARE(out.size(), input.size());
         QCOMPARE(out.format(), input.format());
@@ -102,7 +102,7 @@ private slots:
         QImage input = makeSolid(32, 32, 100, 100, 100);
         QMap<QString, QVariant> params;
         params["angle"] = 15.0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.size(), input.size());
     }

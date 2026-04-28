@@ -15,7 +15,6 @@ public:
     QString getDescription() const override;
     QString getVersion() const override;
     bool initialize() override;
-    QImage processImage(const QImage &image, const QMap<QString, QVariant> &parameters = QMap<QString, QVariant>()) override;
     QWidget* createControlsWidget() override;
 
     bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
@@ -25,8 +24,6 @@ public:
 
 private:
     // GPU pipeline kernel (float4 linear, compiled into the shared pipeline context).
-    // The 8-bit and 16-bit sRGB kernels live only in the per-effect processImage
-    // path (tests); the pipeline uses only m_kernelLinear.
     cl::Kernel m_kernelLinear;
     bool m_active = false;
 };

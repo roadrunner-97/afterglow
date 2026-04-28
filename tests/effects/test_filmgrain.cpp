@@ -36,7 +36,7 @@ private slots:
 
     void nullImage_passThrough() {
         FilmGrainEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // amount=0 → identity: every pixel unchanged regardless of other params.
@@ -47,7 +47,7 @@ private slots:
         params["amount"]    = 0;
         params["size"]      = 3;
         params["lumWeight"] = true;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
@@ -64,7 +64,7 @@ private slots:
         params["amount"]    = 50;
         params["size"]      = 1;
         params["lumWeight"] = false;  // full strength everywhere
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int changed = differingPixels(out, qRgb(128, 128, 128));
@@ -85,8 +85,8 @@ private slots:
 
         QImage black = makeSolid(32, 32, 0, 0, 0);
         QImage white = makeSolid(32, 32, 255, 255, 255);
-        QImage bOut  = e.processImage(black, params);
-        QImage wOut  = e.processImage(white, params);
+        QImage bOut  = runEffect(e, black, params);
+        QImage wOut  = runEffect(e, white, params);
         QVERIFY(!bOut.isNull() && !wOut.isNull());
 
         QCOMPARE(differingPixels(bOut, qRgb(0, 0, 0)),         0);
@@ -104,7 +104,7 @@ private slots:
         params["lumWeight"] = false;
 
         QImage black = makeSolid(32, 32, 0, 0, 0);
-        QImage bOut  = e.processImage(black, params);
+        QImage bOut  = runEffect(e, black, params);
         QVERIFY(!bOut.isNull());
 
         int changed = differingPixels(bOut, qRgb(0, 0, 0));
@@ -127,7 +127,7 @@ private slots:
         params["size"]      = 8;
         params["seed"]      = 42;
         params["lumWeight"] = false;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int distinct = 0, maxDelta = 0;
@@ -162,8 +162,8 @@ private slots:
 
         QMap<QString, QVariant> p0 = base; p0["seed"] = 0;
         QMap<QString, QVariant> p1 = base; p1["seed"] = 1;
-        QImage a = e.processImage(input, p0);
-        QImage b = e.processImage(input, p1);
+        QImage a = runEffect(e, input, p0);
+        QImage b = runEffect(e, input, p1);
         QVERIFY(!a.isNull() && !b.isNull());
         QVERIFY(a != b);
     }
@@ -178,8 +178,8 @@ private slots:
         params["amount"]    = 50;
         params["size"]      = 2;
         params["lumWeight"] = false;
-        QImage a = e.processImage(input, params);
-        QImage b = e.processImage(input, params);
+        QImage a = runEffect(e, input, params);
+        QImage b = runEffect(e, input, params);
         QVERIFY(!a.isNull() && !b.isNull());
         QCOMPARE(a, b);
     }
@@ -195,7 +195,7 @@ private slots:
         params["amount"]    = 50;
         params["size"]      = 1;
         params["lumWeight"] = false;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -213,7 +213,7 @@ private slots:
         params["amount"]    = 50;
         params["size"]      = 2;
         params["lumWeight"] = true;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

@@ -36,8 +36,8 @@ static void crop_range(int dx, int dy, int srcW, int srcH, int dstW, int dstH,
     float sy1f = cropY0 + (float)(dy + 1) * rgnH / dstH;
     *sx0 = max(0, (int)sx0f);
     *sy0 = max(0, (int)sy0f);
-    *sx1 = min(srcW, (int)sx1f + 1);
-    *sy1 = min(srcH, (int)sy1f + 1);
+    *sx1 = min(srcW, (int)ceil(sx1f));
+    *sy1 = min(srcH, (int)ceil(sy1f));
 }
 
 __kernel void preview_downsample_8bit_srgb_to_linear(

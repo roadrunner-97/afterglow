@@ -97,7 +97,6 @@ add_library(photoeditor_core STATIC
     src/core/IGpuEffect.h
     src/core/IInteractiveEffect.h
     src/core/ICropSource.h
-    src/core/GpuContextBase.h
     src/core/blur_kernels.h
     src/core/Histogram.cpp
     src/core/Histogram.h

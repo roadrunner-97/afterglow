@@ -35,7 +35,7 @@ private slots:
 
     void nullImage_passThrough() {
         VignetteEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // amount=0 → identity: every pixel unchanged regardless of other params.
@@ -47,7 +47,7 @@ private slots:
         params["midpoint"]  = 50;
         params["feather"]   = 50;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
@@ -64,7 +64,7 @@ private slots:
         params["midpoint"]  = 30;
         params["feather"]   = 40;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int center = pixelR(out, 32, 32);
@@ -83,7 +83,7 @@ private slots:
         params["midpoint"]  = 30;
         params["feather"]   = 40;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int center = pixelR(out, 32, 32);
@@ -102,7 +102,7 @@ private slots:
         params["midpoint"]  = 50;
         params["feather"]   = 0;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         // centre untouched
@@ -124,9 +124,9 @@ private slots:
 
         QImage input = makeSolid(64, 64, 200, 200, 200);
         params["roundness"] = -100;
-        QImage rect = e.processImage(input, params);
+        QImage rect = runEffect(e, input, params);
         params["roundness"] =  100;
-        QImage round = e.processImage(input, params);
+        QImage round = runEffect(e, input, params);
         QVERIFY(!rect.isNull() && !round.isNull());
 
         // (0, 32) is the middle of the left edge — on a 64x64 image its
@@ -157,7 +157,7 @@ private slots:
         params["midpoint"]  = 80;
         params["feather"]   = 20;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int longEdgeMid  = pixelR(out,  0, 32);   // middle of left edge
@@ -182,7 +182,7 @@ private slots:
         params["midpoint"]  = 30;
         params["feather"]   = 30;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int alongLong  = pixelR(out, 34, 32);  // 30 px left of centre (64,32)
@@ -203,7 +203,7 @@ private slots:
         params["midpoint"]  = 40;
         params["feather"]   = 40;
         params["roundness"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

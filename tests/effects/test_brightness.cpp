@@ -22,10 +22,10 @@ private slots:
         m_hasGpu = true;
     }
 
-    // processImage(null, {}) must return a null image, not crash.
+    // runEffect(null, {}) must return a null image, not crash.
     void nullImage_passThrough() {
         BrightnessEffect e;
-        QImage result = e.processImage(QImage(), {});
+        QImage result = runEffect(e, QImage(), {});
         QVERIFY(result.isNull());
     }
 
@@ -37,7 +37,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 90 && qBlue(px) == 60;
@@ -52,7 +52,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 50;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 128; }));
     }
@@ -65,7 +65,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = -50;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) < 128; }));
     }
@@ -78,7 +78,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 100;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 255 && qGreen(px) == 255 && qBlue(px) == 255;
         }));
@@ -92,7 +92,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = -100;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 0 && qGreen(px) == 0 && qBlue(px) == 0;
         }));
@@ -108,11 +108,11 @@ private slots:
         params["contrast"]   = 50;
 
         QImage dark = makeSolid(32, 32, 50, 50, 50);
-        QImage darkOut = e.processImage(dark, params);
+        QImage darkOut = runEffect(e, dark, params);
         QVERIFY(pixelR(darkOut, 0, 0) < 50);
 
         QImage bright = makeSolid(32, 32, 200, 200, 200);
-        QImage brightOut = e.processImage(bright, params);
+        QImage brightOut = runEffect(e, bright, params);
         QVERIFY(pixelR(brightOut, 0, 0) > 200);
     }
 
@@ -126,11 +126,11 @@ private slots:
         params["contrast"]   = -50;
 
         QImage dark = makeSolid(32, 32, 50, 50, 50);
-        QImage darkOut = e.processImage(dark, params);
+        QImage darkOut = runEffect(e, dark, params);
         QVERIFY(pixelR(darkOut, 0, 0) > 50);
 
         QImage bright = makeSolid(32, 32, 200, 200, 200);
-        QImage brightOut = e.processImage(bright, params);
+        QImage brightOut = runEffect(e, bright, params);
         QVERIFY(pixelR(brightOut, 0, 0) < 200);
     }
 
@@ -143,7 +143,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 50;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  128);
         QCOMPARE(out.height(), 64);
@@ -174,7 +174,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -185,7 +185,7 @@ private slots:
         QVERIFY(e.createControlsWidget() == w);
     }
 
-    // 16-bit image with non-zero brightness — exercises processImageGPU16.
+    // 16-bit image with non-zero brightness — exercises the 16-bit decode path.
     void brightness_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
         BrightnessEffect e;
@@ -193,11 +193,11 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 50;
         params["contrast"]   = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
-    // 16-bit with non-zero contrast — also exercises processImageGPU16.
+    // 16-bit with non-zero contrast — also exercises the 16-bit decode path.
     void contrast_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
         BrightnessEffect e;
@@ -205,7 +205,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

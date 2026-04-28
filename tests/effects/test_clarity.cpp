@@ -24,7 +24,7 @@ private slots:
 
     void nullImage_passThrough() {
         ClarityEffect e;
-        QVERIFY(e.processImage(QImage(), {}).isNull());
+        QVERIFY(runEffect(e, QImage(), {}).isNull());
     }
 
     // amount=0 → early return (identity).
@@ -34,7 +34,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 0;
         params["radius"] = 30;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 100 && qBlue(px) == 80;
@@ -48,7 +48,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 50;
         params["radius"] = 0;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 100 && qBlue(px) == 80;
@@ -63,7 +63,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 100;
         params["radius"] = 20;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
             return qRed(px) == 128 && qGreen(px) == 128 && qBlue(px) == 128;
@@ -81,7 +81,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 100;
         params["radius"] = 10;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(pixelR(out,  10, 32), 0);
         QCOMPARE(pixelR(out, 118, 32), 255);
@@ -96,7 +96,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 100;
         params["radius"] = 10;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // 2 px left of the boundary (x=62) — on the dark side, expect darker.
         QVERIFY(pixelR(out, 62, 32) < 100);
@@ -112,7 +112,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = -100;
         params["radius"] = 10;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Near-edge dark-side pixel should move toward the bright side (brighter).
         QVERIFY(pixelR(out, 62, 32) > 100);
@@ -136,7 +136,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 100;
         params["radius"] = 10;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.width(),  64);
         QCOMPARE(out.height(), 128);
@@ -153,7 +153,7 @@ private slots:
         QMap<QString, QVariant> params;
         params["amount"] = 80;
         params["radius"] = 15;
-        QImage out = e.processImage(input, params);
+        QImage out = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 

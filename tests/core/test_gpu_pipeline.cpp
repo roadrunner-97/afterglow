@@ -35,7 +35,6 @@ public:
     QString getDescription() const override { return ""; }
     QString getVersion()     const override { return "1.0"; }
     bool    initialize()           override { return true; }
-    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
     bool initGpuKernels(cl::Context&, cl::Device&) override { return false; }
     bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
                     int, int, const QMap<QString,QVariant>&) override { return true; }
@@ -50,7 +49,6 @@ public:
     QString getDescription() const override { return ""; }
     QString getVersion()     const override { return "1.0"; }
     bool    initialize()           override { return true; }
-    QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
     bool initGpuKernels(cl::Context&, cl::Device&) override { return true; }
     bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
                     int, int, const QMap<QString,QVariant>&) override { return false; }

@@ -22,7 +22,7 @@ struct GpuDeviceInfo {
  *
  * Call enumerate() once at startup. The UI reads deviceNames() to populate a
  * combo box and calls setDevice(idx) on selection. setDevice() bumps revision()
- * so every effect's GpuContext knows to reinitialise on the next GPU call.
+ * so GpuPipeline reinitialises its OpenCL context on the next call.
  */
 class GpuDeviceRegistry {
 public:

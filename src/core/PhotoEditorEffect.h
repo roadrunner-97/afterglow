@@ -46,9 +46,6 @@ public:
         return id;
     }
 
-    virtual QImage processImage(const QImage &image,
-                                const QMap<QString, QVariant> &parameters = QMap<QString, QVariant>()) = 0;
-
     virtual QWidget* createControlsWidget() { return nullptr; }
     virtual QMap<QString, QVariant> getParameters() const { return {}; }
 
