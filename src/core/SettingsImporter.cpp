@@ -115,7 +115,9 @@ bool fromYaml(const QString& yaml, Settings* out, QString* /*error*/) {
             const QString afterDash = rest.mid(2).trimmed();
             if (!splitKeyValue(afterDash, &k, &v)) continue;
             EffectSettings entry;
-            if (k == QStringLiteral("name"))
+            if (k == QStringLiteral("id"))
+                entry.id = parseScalar(v).toString();
+            else if (k == QStringLiteral("name"))
                 entry.name = parseScalar(v).toString();
             out->effects.append(entry);
             current = &out->effects.last();
@@ -124,6 +126,10 @@ bool fromYaml(const QString& yaml, Settings* out, QString* /*error*/) {
             if (!splitKeyValue(rest, &k, &v)) continue;
             if (k == QStringLiteral("enabled"))
                 current->enabled = parseScalar(v).toBool();
+            else if (k == QStringLiteral("id"))
+                current->id = parseScalar(v).toString();
+            else if (k == QStringLiteral("name"))
+                current->name = parseScalar(v).toString();
             // "parameters:" is implicit — child entries follow at indent 6
         } else if (indent == 6) {
             if (!current) continue;
@@ -148,19 +154,33 @@ bool readYaml(const QString& path, Settings* out, QString* error) {
 void applyToManager(const Settings& s, EffectManager& mgr) {
     const auto& entries = mgr.entries();
 
+    // Two parallel hashes: prefer matching by stable id, fall back to
+    // display name for older sidecars saved before the id migration.
+    QHash<QString, int> indexById;
     QHash<QString, int> indexByName;
+    indexById.reserve(entries.size());
     indexByName.reserve(entries.size());
-    for (int i = 0; i < entries.size(); ++i)
-        if (entries[i].effect) indexByName.insert(entries[i].effect->getName(), i);
+    for (int i = 0; i < entries.size(); ++i) {
+        if (!entries[i].effect) continue;
+        indexById.insert(entries[i].effect->getId(), i);
+        indexByName.insert(entries[i].effect->getName(), i);
+    }
 
     // Block parametersChanged on each effect for the duration of the apply
     // pass.  Without this, every applyParameters() call would queue a full
     // pipeline reprocess; the caller is expected to fire one definitive
     // reprocess after this returns.
     for (const auto& want : s.effects) {
-        const auto it = indexByName.constFind(want.name);
-        if (it == indexByName.constEnd()) continue;
-        const int i = it.value();
+        int i = -1;
+        if (!want.id.isEmpty()) {
+            const auto it = indexById.constFind(want.id);
+            if (it != indexById.constEnd()) i = it.value();
+        }
+        if (i < 0 && !want.name.isEmpty()) {
+            const auto it = indexByName.constFind(want.name);
+            if (it != indexByName.constEnd()) i = it.value();
+        }
+        if (i < 0) continue;
         PhotoEditorEffect* effect = entries[i].effect;
         mgr.setEnabled(i, want.enabled);
         QSignalBlocker block(effect);

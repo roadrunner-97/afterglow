@@ -27,6 +27,25 @@ public:
     virtual QString getVersion() const = 0;
     virtual bool initialize() = 0;
 
+    // Stable identifier used to key sidecar YAML entries.  Default
+    // implementation snake-cases getName() (lowercase, spaces→_, drops
+    // ampersands).  Override only when the auto-derived id is awkward
+    // (e.g. names containing punctuation).
+    virtual QString getId() const {
+        QString id;
+        id.reserve(getName().size());
+        for (QChar c : getName()) {
+            if (c.isLetterOrNumber()) id.append(c.toLower());
+            else if (c.isSpace())     id.append('_');
+            // any other character (punctuation, &) is dropped
+        }
+        // Collapse runs of underscores left behind by dropped punctuation.
+        while (id.contains(QStringLiteral("__")))
+            id.replace(QStringLiteral("__"), QStringLiteral("_"));
+        if (id.endsWith('_')) id.chop(1);
+        return id;
+    }
+
     virtual QImage processImage(const QImage &image,
                                 const QMap<QString, QVariant> &parameters = QMap<QString, QVariant>()) = 0;
 

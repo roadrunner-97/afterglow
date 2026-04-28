@@ -180,7 +180,10 @@ private slots:
 
         QCOMPARE(parsed.image, QString("/tmp/round.jpg"));
         QCOMPARE(parsed.effects.size(), 1);
-        QCOMPARE(parsed.effects[0].name, QString("Test"));
+        // Exporter now writes id (snake-cased getName); name is left
+        // empty unless an older sidecar provided it.
+        QCOMPARE(parsed.effects[0].id, QString("test"));
+        QVERIFY(parsed.effects[0].name.isEmpty());
         QVERIFY(!parsed.effects[0].enabled);
         QCOMPARE(parsed.effects[0].parameters.value("i").toInt(), 42);
         QCOMPARE(parsed.effects[0].parameters.value("d").toDouble(), 1.25);
@@ -252,6 +255,25 @@ private slots:
         QCOMPARE(b->applyCalls(), 1);
         QCOMPARE(spyA.count(), 0);
         QCOMPARE(spyB.count(), 0);
+    }
+
+    void applyToManager_fallsBackToNameForLegacySidecars() {
+        // Sidecars written before the id migration use `- name:` keyed
+        // entries; applyToManager must still match them by display name.
+        EffectManager mgr;
+        auto owned = std::make_unique<FakeEffect>("Brightness");
+        auto* fake = owned.get();
+        mgr.addEffect(std::move(owned));
+
+        SettingsImporter::Settings s;
+        SettingsImporter::EffectSettings entry;
+        entry.name = "Brightness";  // legacy: id is empty
+        entry.parameters["x"] = 7;
+        s.effects.append(entry);
+
+        SettingsImporter::applyToManager(s, mgr);
+        QCOMPARE(fake->applyCalls(), 1);
+        QCOMPARE(fake->lastApplied().value("x").toInt(), 7);
     }
 
     void applyToManager_leavesUntouchedEffectsAlone() {

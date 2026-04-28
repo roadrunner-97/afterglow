@@ -58,7 +58,7 @@ private slots:
         mgr.addEffect(std::make_unique<FakeEffect>("Test", params));
 
         const QString yaml = SettingsExporter::toYaml(mgr);
-        QVERIFY(yaml.contains("- name: \"Test\""));
+        QVERIFY(yaml.contains("- id: \"test\""));
         QVERIFY(yaml.contains("enabled: true"));
         QVERIFY(yaml.contains("i: 42"));
         QVERIFY(yaml.contains("d: 1.5"));
@@ -120,7 +120,7 @@ private slots:
         QFile f(path);
         QVERIFY(f.open(QIODevice::ReadOnly));
         const QString content = QString::fromUtf8(f.readAll());
-        QVERIFY(content.contains("- name: \"Brightness\""));
+        QVERIFY(content.contains("- id: \"brightness\""));
         QVERIFY(content.contains("brightness: 5"));
         QVERIFY(content.contains("image: \"/tmp/x.jpg\""));
     }

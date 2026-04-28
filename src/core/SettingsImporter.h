@@ -11,6 +11,12 @@ class EffectManager;
 namespace SettingsImporter {
 
 struct EffectSettings {
+    // `id` is the preferred key for matching against effects (stable,
+    // snake-cased) — written by SettingsExporter as of the getId()
+    // migration.  `name` is read from older sidecars where the entry
+    // was keyed on the user-facing display name; applyToManager falls
+    // back to it when no id match is found.
+    QString                 id;
     QString                 name;
     bool                    enabled = true;
     QMap<QString, QVariant> parameters;

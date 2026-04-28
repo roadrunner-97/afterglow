@@ -76,7 +76,7 @@ QString toYaml(const EffectManager& mgr, const QString& sourceImagePath) {
     const auto& entries = mgr.entries();
     for (const auto& entry : entries) {
         if (!entry.effect) continue;
-        out.append("  - name: ").append(quoteString(entry.effect->getName())).append('\n');
+        out.append("  - id: ").append(quoteString(entry.effect->getId())).append('\n');
         out.append("    enabled: ").append(entry.enabled ? "true" : "false").append('\n');
 
         const auto params = entry.effect->getParameters();

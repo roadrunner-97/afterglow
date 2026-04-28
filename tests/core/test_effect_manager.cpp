@@ -190,6 +190,23 @@ private slots:
         QVERIFY(e.getParameters().isEmpty());
     }
 
+    void baseClass_getId_snakeCasesGetName() {
+        struct E : public PhotoEditorEffect {
+            QString getName()        const override { return "Crop & Rotate"; }
+            QString getDescription() const override { return ""; }
+            QString getVersion()     const override { return "1.0"; }
+            bool    initialize()           override { return true; }
+            QImage processImage(const QImage& img, const QMap<QString,QVariant>&) override { return img; }
+        };
+        E e;
+        QCOMPARE(e.getId(), QString("crop_rotate"));
+    }
+
+    void baseClass_getId_simpleNameLowercased() {
+        MockEffect e;
+        QCOMPARE(e.getId(), QString("mock"));
+    }
+
     void baseClass_onImageLoaded_doesNotCrash() {
         MockEffect e;
         ImageMetadata meta;
