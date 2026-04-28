@@ -25,6 +25,7 @@
 #include <QCloseEvent>
 #include <QToolBar>
 #include <QSettings>
+#include <QScreen>
 #include <QDir>
 #include <QDebug>
 #include <memory>
@@ -565,17 +566,21 @@ void PhotoEditorApp::triggerLiveReprocess() {
 void PhotoEditorApp::triggerViewportUpdate() {
     if (m_originalImage.isNull()) return;
 
-    // Leading/trailing throttle — dispatch at most once per ~16ms so rapid
-    // mouseMove events (1000Hz gaming mice, trackpads) don't saturate the
-    // pipeline.  Zoom events go through the same path but are naturally rare
-    // (one wheel tick = one event), so they aren't affected.
-    constexpr int kIntervalMs = 16;
-    if (!m_lastPanDispatch.isValid() || m_lastPanDispatch.elapsed() >= kIntervalMs) {
+    // Leading/trailing throttle — dispatch at most once per display frame so
+    // rapid mouseMove events (1000Hz gaming mice, trackpads) don't saturate
+    // the pipeline.  Use the active screen's refresh rate so 144Hz/240Hz
+    // panels get smoother feedback than the old hard-coded 16ms (60Hz).
+    // Zoom events go through the same path but are naturally rare (one wheel
+    // tick = one event), so they aren't affected.
+    const QScreen* s = screen();
+    const double hz = (s && s->refreshRate() > 0.0) ? s->refreshRate() : 60.0;
+    const int intervalMs = std::max(1, static_cast<int>(1000.0 / hz));
+    if (!m_lastPanDispatch.isValid() || m_lastPanDispatch.elapsed() >= intervalMs) {
         dispatchViewportUpdate();
         return;
     }
     if (!m_panThrottle->isActive()) {
-        const int remaining = kIntervalMs - static_cast<int>(m_lastPanDispatch.elapsed());
+        const int remaining = intervalMs - static_cast<int>(m_lastPanDispatch.elapsed());
         m_panThrottle->start(remaining > 0 ? remaining : 1);
     }
 }
