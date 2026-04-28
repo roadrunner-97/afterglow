@@ -2,6 +2,8 @@
 #include "Theme.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
 #include "ICropSource.h"
 #include "IInteractiveEffect.h"
 #include "RawLoader.h"
@@ -358,13 +360,35 @@ void PhotoEditorApp::openImage() {
     m_currentImagePath = fileName;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
-    meta.luminanceHistogram = computeLuminanceHistogram(img);
+    // Notify effects with whatever metadata is already cheap to provide
+    // (RAW colorTempK from LibRaw); the luminance histogram follows from
+    // a worker thread because computing it on a 60MP RAW would otherwise
+    // freeze the UI for hundreds of milliseconds.
     for (const auto& e : m_effects->entries())
         e.effect->onImageLoaded(meta);
     if (auto* cs = m_effects->cropSource())
         cs->setSourceImageSize(img.size());
     syncViewportRotation();
     triggerReprocess();
+
+    auto* watcher = new QFutureWatcher<std::vector<uint32_t>>(this);
+    connect(watcher, &QFutureWatcher<std::vector<uint32_t>>::finished, this,
+            [this, watcher, expectedBits = img.constBits(), tempK = meta.colorTempK]() {
+        // Drop the result if the user opened a different image while we
+        // were computing.  constBits() identity is stable for the
+        // lifetime of m_originalImage's underlying data buffer.
+        if (m_originalImage.constBits() == expectedBits) {
+            ImageMetadata fullMeta;
+            fullMeta.colorTempK         = tempK;
+            fullMeta.luminanceHistogram = watcher->result();
+            for (const auto& e : m_effects->entries())
+                e.effect->onImageLoaded(fullMeta);
+        }
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run(
+        [image = img]() { return computeLuminanceHistogram(image); }
+    ));
 }
 
 void PhotoEditorApp::saveImage() {
