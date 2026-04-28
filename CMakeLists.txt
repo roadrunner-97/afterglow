@@ -143,6 +143,8 @@ set_target_properties(photoeditor_core PROPERTIES AUTOMOC ON)
 add_library(photoeditor_ui STATIC
     src/ui/PhotoEditorApp.cpp
     src/ui/PhotoEditorApp.h
+    src/ui/Stylesheets.cpp
+    src/ui/Stylesheets.h
     src/ui/ViewportWidget.cpp
     src/ui/ViewportWidget.h
 )

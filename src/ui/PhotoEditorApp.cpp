@@ -1,4 +1,5 @@
 #include "PhotoEditorApp.h"
+#include "Stylesheets.h"
 #include "Theme.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
@@ -74,15 +75,7 @@ PhotoEditorApp::~PhotoEditorApp() = default;
 void PhotoEditorApp::setupToolBar() {
     QToolBar* toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
-    toolbar->setStyleSheet(
-        QString("QToolBar { background: %1; border-bottom: 1px solid %2; spacing: 6px; padding: 2px 6px; }"
-                "QToolButton { color: %3; background: transparent; border: 1px solid %2;"
-                "  border-radius: 3px; padding: 3px 10px; }"
-                "QToolButton:checked { color: %4; background: %5; border-color: %5; }"
-                "QToolButton:hover { background: %6; }")
-        .arg(Theme::BG_MAIN, Theme::BORDER,
-             Theme::TEXT_PRIMARY, Theme::CHECKED_TEXT,
-             Theme::CHECKED_BG, Theme::COLLAPSE_HOVER));
+    toolbar->setStyleSheet(Stylesheets::toolbar());
 
     QAction* liveAct = new QAction("Live Preview", this);
     liveAct->setCheckable(true);
@@ -99,7 +92,7 @@ void PhotoEditorApp::setupToolBar() {
     toolbar->addWidget(spacer);
 
     m_processingLabel = new QLabel("Processing…");
-    m_processingLabel->setStyleSheet("color: #6E5E46; font-style: italic; padding: 0 6px;");
+    m_processingLabel->setStyleSheet(Stylesheets::processingLabel());
     m_processingLabel->setVisible(false);
     toolbar->addWidget(m_processingLabel);
 }
@@ -135,7 +128,7 @@ void PhotoEditorApp::setupUI() {
 
     QFrame* sep = new QFrame();
     sep->setFrameShape(QFrame::HLine);
-    sep->setStyleSheet("color: #CBBFAE;");
+    sep->setStyleSheet(Stylesheets::panelSeparator());
     rightLayout->addWidget(sep);
 
     QScrollArea* effectsScroll = new QScrollArea();
@@ -158,17 +151,7 @@ void PhotoEditorApp::setupUI() {
 }
 
 void PhotoEditorApp::setupMenuBar() {
-    menuBar()->setStyleSheet(
-        QString("QMenuBar { background: %1; color: %2; border-bottom: 1px solid %3; }"
-                "QMenuBar::item { padding: 4px 8px; }"
-                "QMenuBar::item:selected { background: %4; border-radius: 3px; }"
-                "QMenu { background: %5; color: %2; border: 1px solid %3; }"
-                "QMenu::item { padding: 4px 20px; }"
-                "QMenu::item:selected { background: %6; color: %7; }"
-                "QMenu::separator { height: 1px; background: %3; margin: 2px 0; }")
-        .arg(Theme::BG_MAIN, Theme::TEXT_PRIMARY, Theme::BORDER,
-             Theme::COLLAPSE_HOVER, Theme::BG_EFFECT_PANEL,
-             Theme::CHECKED_BG, Theme::CHECKED_TEXT));
+    menuBar()->setStyleSheet(Stylesheets::menuBar());
 
     QMenu* fileMenu = menuBar()->addMenu("File");
 
@@ -221,17 +204,12 @@ void PhotoEditorApp::setupMenuBar() {
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
     QLabel* label = new QLabel("GPU Device");
-    label->setStyleSheet(QString("color: %1; font-size: 10px; text-transform: uppercase;").arg(Theme::TEXT_SECONDARY));
+    label->setStyleSheet(Stylesheets::gpuSelectorLabel());
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
     m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
-    m_gpuSelector->setStyleSheet(
-        QString("QComboBox { color: %1; background-color: %2;"
-                "  border: 1px solid %3; border-radius: 3px; padding: 4px; }"
-                "QComboBox::drop-down { border: none; }"
-                "QComboBox QAbstractItemView { color: %1; background-color: %2; }")
-        .arg(Theme::TEXT_PRIMARY, Theme::BG_EFFECT_PANEL, Theme::BORDER));
+    m_gpuSelector->setStyleSheet(Stylesheets::gpuSelector());
 
     const auto& devs = GpuDeviceRegistry::instance().devices();
     if (devs.empty()) {
@@ -258,8 +236,7 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
 
         // Container
         QWidget* panel = new QWidget();
-        panel->setStyleSheet(
-            QString("QWidget { background-color: %1; border-radius: 4px; }").arg(Theme::BG_EFFECT_PANEL));
+        panel->setStyleSheet(Stylesheets::effectPanel());
         QVBoxLayout* panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
@@ -271,15 +248,11 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
         titleLayout->setContentsMargins(0, 0, 0, 0);
 
         QLabel* title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
-        title->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::TEXT_PRIMARY));
+        title->setStyleSheet(Stylesheets::effectTitle());
         titleLayout->addWidget(title, 1);
 
         QPushButton* collapseBtn = new QPushButton("−");
-        collapseBtn->setStyleSheet(
-            QString("QPushButton { background: %1; color: %2; border: none;"
-                    "  border-radius: 3px; padding: 1px 5px; font-weight: bold; }"
-                    "QPushButton:hover { background: %3; }")
-            .arg(Theme::COLLAPSE_BG, Theme::TEXT_PRIMARY, Theme::COLLAPSE_HOVER));
+        collapseBtn->setStyleSheet(Stylesheets::collapseButton());
         collapseBtn->setToolTip("Collapse or expand this effect's controls.");
         collapseBtn->setMaximumWidth(28);
         titleLayout->addWidget(collapseBtn);
