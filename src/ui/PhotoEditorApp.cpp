@@ -121,7 +121,10 @@ void PhotoEditorApp::setupUI() {
     // ── Right panel ──────────────────────────────────────────────────────────
     QWidget* rightPanel = new QWidget();
     rightPanel->setStyleSheet(QString("background-color: %1;").arg(Theme::BG_RIGHT_PANEL));
-    rightPanel->setFixedWidth(300);
+    // Width scales with the user's font / DPI: ParamSlider rows need room for
+    // a label, slider track, and spinbox without wrapping.  Empirically ~36
+    // characters of the body font fits the widest control we ship.
+    rightPanel->setFixedWidth(fontMetrics().averageCharWidth() * 36);
     QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(8, 8, 8, 8);
     rightLayout->setSpacing(6);
