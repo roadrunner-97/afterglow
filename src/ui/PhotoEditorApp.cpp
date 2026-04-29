@@ -1,4 +1,6 @@
 #include "PhotoEditorApp.h"
+#include "ExportDialog.h"
+#include "ExportPath.h"
 #include "Stylesheets.h"
 #include "Theme.h"
 #include "GpuDeviceRegistry.h"
@@ -367,14 +369,33 @@ void PhotoEditorApp::openImage() {
 void PhotoEditorApp::saveImage() {
     if (m_originalImage.isNull()) return;
 
-    QString fileName = QFileDialog::getSaveFileName(
-        this, "Save Image", m_lastDir,
-        "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp);;All Files (*)");
+    ExportDialog dlg(this);
+    dlg.setDefaultDestinationDir(m_lastDir);
+    if (dlg.exec() != QDialog::Accepted) return;
 
-    if (fileName.isEmpty()) return;
-    m_lastDir = QFileInfo(fileName).absolutePath();
+    const ExportOptions::Options opts = dlg.options();
+    if (opts.destinationDir.isEmpty()) {
+        QMessageBox::warning(this, "Export",
+            "Please choose a destination folder.");
+        return;
+    }
 
-    m_processor->exportImageAsync(m_originalImage, *m_effects, fileName);
+    // batchIndex = 1 today; when batch export lands, the caller iterates and
+    // bumps the index for the {n} token.  chooseDestination() handles the
+    // overwrite policy (skip / suffix / overwrite) consistently here and there.
+    const QString destPath = ExportPath::chooseDestination(
+        opts, m_currentImagePath, /*batchIndex=*/1);
+    if (destPath.isEmpty()) {
+        // Skip-on-conflict — surface it so the user knows nothing was written.
+        QMessageBox::information(this, "Export Skipped",
+            "A file with that name already exists. "
+            "Change the pattern or pick a different policy.");
+        return;
+    }
+
+    m_lastDir = opts.destinationDir;
+    m_pendingExportOpts = opts;
+    m_processor->exportImageAsync(m_originalImage, *m_effects, destPath);
 }
 
 void PhotoEditorApp::importSettings() {
@@ -499,6 +520,9 @@ static QImage applyCropAndRotate(const QImage& image, const ICropSource& cs) {
 }
 
 void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
+    // Take the pending options unconditionally so a failed/early-returning
+    // export doesn't leak state into the next one.
+    const auto opts = std::exchange(m_pendingExportOpts, std::nullopt);
     if (destinationPath.isEmpty()) return;
     const QString path = destinationPath;
 
@@ -507,7 +531,14 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
             result = applyCropAndRotate(result, *cs);
     }
 
-    if (result.isNull() || !result.save(path)) {
+    // With opts: explicit format hint + quality (saveImage path).
+    // Without: legacy QImage::save behaviour, used by saveTestCase().
+    const bool ok = !result.isNull() && (opts
+        ? result.save(path, ExportOptions::qImageFormatHint(opts->format),
+                            ExportOptions::qualityFor(*opts))
+        : result.save(path));
+
+    if (!ok) {
         QMessageBox::warning(this, "Save Failed",
             QString("Could not save image to:\n%1\n\n"
                     "Check that the directory is writable and you have sufficient disk space.")

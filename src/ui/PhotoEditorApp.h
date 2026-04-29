@@ -5,7 +5,9 @@
 #include <QImage>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <optional>
 #include "EffectManager.h"
+#include "ExportOptions.h"
 #include "ImageProcessor.h"
 #include "ViewportWidget.h"
 
@@ -61,6 +63,12 @@ private:
     QTimer*         m_resizeDebounce   = nullptr;
     QTimer*         m_panThrottle      = nullptr;  // trailing edge of pan throttle
     QElapsedTimer   m_lastPanDispatch;              // invalid until first dispatch
+
+    // Set by saveImage() before kicking off the async export, consumed (and
+    // cleared) by onExportComplete().  std::nullopt means "no options" — that
+    // path is reserved for saveTestCase(), which writes a fixed PNG and wants
+    // the default QImage::save() behaviour.
+    std::optional<ExportOptions::Options> m_pendingExportOpts;
 };
 
 #endif // PHOTOEDITORAPP_H

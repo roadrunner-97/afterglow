@@ -79,6 +79,24 @@ set_target_properties(test_settings_importer PROPERTIES
 add_test(NAME SettingsImporter COMMAND test_settings_importer)
 
 # ---------------------------------------------------------------------------
+# ExportPath tests — pure CPU path-resolution logic (GUILESS)
+# ---------------------------------------------------------------------------
+add_executable(test_export_path
+    core/test_export_path.cpp
+)
+target_link_libraries(test_export_path
+    PRIVATE
+        photoeditor_core
+        Qt6::Test
+        Qt6::Core
+)
+set_target_properties(test_export_path PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME ExportPath COMMAND test_export_path)
+
+# ---------------------------------------------------------------------------
 # Effect applyParameters() round-trip tests — widget tests, offscreen
 # ---------------------------------------------------------------------------
 add_executable(test_effect_apply_parameters

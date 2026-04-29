@@ -107,6 +107,9 @@ add_library(photoeditor_core STATIC
     src/core/SettingsExporter.h
     src/core/SettingsImporter.cpp
     src/core/SettingsImporter.h
+    src/core/ExportOptions.h
+    src/core/ExportPath.cpp
+    src/core/ExportPath.h
 )
 
 target_link_libraries(photoeditor_core
@@ -142,6 +145,8 @@ set_target_properties(photoeditor_core PROPERTIES AUTOMOC ON)
 add_library(photoeditor_ui STATIC
     src/ui/PhotoEditorApp.cpp
     src/ui/PhotoEditorApp.h
+    src/ui/ExportDialog.cpp
+    src/ui/ExportDialog.h
     src/ui/Stylesheets.cpp
     src/ui/Stylesheets.h
     src/ui/ViewportWidget.cpp
