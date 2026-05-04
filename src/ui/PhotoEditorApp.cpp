@@ -118,17 +118,6 @@ void PhotoEditorApp::setupToolBar() {
     addModeAction("Loupe",   Mode::Loupe);
     addModeAction("Develop", Mode::Develop);
 
-    toolbar->addSeparator();
-
-    QAction* liveAct = new QAction("Live Preview", this);
-    liveAct->setCheckable(true);
-    liveAct->setChecked(false);
-    liveAct->setToolTip("Update preview in real-time while dragging sliders");
-    connect(liveAct, &QAction::toggled, this, [this](bool on) {
-        m_liveUpdate = on;
-    });
-    toolbar->addAction(liveAct);
-
     // Spacer + processing indicator label on the right side of the toolbar
     QWidget* spacer = new QWidget();
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -386,8 +375,9 @@ void PhotoEditorApp::openImage() {
         "All Files (*)");
 
     if (fileName.isEmpty()) return;
-    loadFullImage(fileName);
+    // See onDevelopRequested() for why the load is deferred behind setMode.
     setMode(Mode::Develop);
+    QTimer::singleShot(0, this, [this, fileName]() { loadFullImage(fileName); });
 }
 
 void PhotoEditorApp::loadFullImage(const QString& path) {
@@ -630,7 +620,7 @@ void PhotoEditorApp::onParametersChanged() {
 
 void PhotoEditorApp::onLiveParametersChanged() {
     syncViewportRotation();
-    if (m_liveUpdate) triggerLiveReprocess();
+    triggerLiveReprocess();
 }
 
 void PhotoEditorApp::syncViewportRotation() {
@@ -837,8 +827,13 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
 
 void PhotoEditorApp::onDevelopRequested() {
     if (m_currentImagePath.isEmpty()) return;
-    loadFullImage(m_currentImagePath);
+    // Switch first, then defer the load: the develop page's QOpenGLWidget
+    // doesn't initialise its GL context until it receives a show event, so
+    // an immediate loadFullImage would dispatch async processing whose
+    // result tries to upload to an uninitialised texture.
+    const QString path = m_currentImagePath;
     setMode(Mode::Develop);
+    QTimer::singleShot(0, this, [this, path]() { loadFullImage(path); });
 }
 
 void PhotoEditorApp::onLoupeNavigate(int direction) {

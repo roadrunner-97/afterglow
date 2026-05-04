@@ -73,7 +73,6 @@ private:
     QImage          m_originalImage;
     QString         m_currentImagePath;
     QString         m_lastDir;
-    bool            m_liveUpdate = false;
 
     QStackedWidget* m_stack            = nullptr;
     GridView*       m_gridView         = nullptr;
