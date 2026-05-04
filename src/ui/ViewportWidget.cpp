@@ -102,6 +102,14 @@ void ViewportWidget::initializeGL() {
     }
 
     createOrResizeTexture(width(), height());
+
+    // Apply any image that arrived while we were still hidden (e.g. async
+    // processor result delivered before the develop page was first shown).
+    if (!m_pendingImage.isNull()) {
+        QImage pending = std::move(m_pendingImage);
+        m_pendingImage = QImage();
+        setImage(pending);
+    }
 }
 
 void ViewportWidget::resizeGL(int w, int h) {
@@ -171,6 +179,14 @@ void ViewportWidget::setImageSize(QSize size) {
 
 void ViewportWidget::setImage(QImage image) {
     if (image.isNull()) return;
+
+    // GL context may not exist yet if the widget has never been shown
+    // (Loupe → Develop with the develop page hidden inside QStackedWidget).
+    // Defer the upload to initializeGL().
+    if (m_glTexture == 0) {
+        m_pendingImage = std::move(image);
+        return;
+    }
 
     // Upload CPU image to GL texture on the GL thread (we're on the main thread here).
     makeCurrent();

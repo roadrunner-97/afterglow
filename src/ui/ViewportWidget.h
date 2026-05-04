@@ -75,6 +75,12 @@ private:
     QOpenGLShaderProgram*     m_shader    = nullptr;
     bool                  m_hasContent = false;
 
+    // setImage() can be called before the widget has ever been shown — for
+    // example when the user goes Loupe → Develop and the develop page's GL
+    // context hasn't been created yet.  Stash the image here and apply it
+    // from initializeGL() once the context is up.
+    QImage                m_pendingImage;
+
     // Pan/zoom state
     QSize   m_imageSize;
     float   m_zoom   = 1.0f;

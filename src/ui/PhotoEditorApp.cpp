@@ -44,6 +44,7 @@
 #include <QApplication>
 #include <QThreadPool>
 #include <QImageReader>
+#include <QSet>
 #include <QDebug>
 #include <memory>
 
@@ -375,9 +376,8 @@ void PhotoEditorApp::openImage() {
         "All Files (*)");
 
     if (fileName.isEmpty()) return;
-    // See onDevelopRequested() for why the load is deferred behind setMode.
     setMode(Mode::Develop);
-    QTimer::singleShot(0, this, [this, fileName]() { loadFullImage(fileName); });
+    loadFullImage(fileName);
 }
 
 void PhotoEditorApp::loadFullImage(const QString& path) {
@@ -767,12 +767,28 @@ static const QStringList& imageExtensions() {
 }
 
 void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
-    QStringList paths;
+    QStringList allPaths;
     QDirIterator it(folder, QDir::Files | QDir::Readable, QDirIterator::NoIteratorFlags);
     while (it.hasNext()) {
         const QString p = it.next();
         if (imageExtensions().contains(QFileInfo(p).suffix().toLower()))
-            paths.append(p);
+            allPaths.append(p);
+    }
+
+    // Cameras shoot RAW + JPEG side-by-side; the JPEG is just the in-camera
+    // preview of the RAW so we'd be triaging two views of the same photo.
+    // Drop the JPEG sibling whenever a RAW with the same basename exists.
+    QSet<QString> rawBases;
+    for (const QString& p : allPaths) {
+        if (RawLoader::isRawFile(p))
+            rawBases.insert(QFileInfo(p).completeBaseName());
+    }
+    QStringList paths;
+    for (const QString& p : allPaths) {
+        const QFileInfo fi(p);
+        if (!RawLoader::isRawFile(p) && rawBases.contains(fi.completeBaseName()))
+            continue;
+        paths.append(p);
     }
     paths.sort(Qt::CaseInsensitive);
 
@@ -827,13 +843,8 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
 
 void PhotoEditorApp::onDevelopRequested() {
     if (m_currentImagePath.isEmpty()) return;
-    // Switch first, then defer the load: the develop page's QOpenGLWidget
-    // doesn't initialise its GL context until it receives a show event, so
-    // an immediate loadFullImage would dispatch async processing whose
-    // result tries to upload to an uninitialised texture.
-    const QString path = m_currentImagePath;
     setMode(Mode::Develop);
-    QTimer::singleShot(0, this, [this, path]() { loadFullImage(path); });
+    loadFullImage(m_currentImagePath);
 }
 
 void PhotoEditorApp::onLoupeNavigate(int direction) {
