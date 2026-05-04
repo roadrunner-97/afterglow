@@ -726,6 +726,30 @@ void PhotoEditorApp::openFolder() {
     setMode(Mode::Library);
 }
 
+// Per-folder JPEG cache for grid thumbnails. The first folder-open decodes
+// each RAW's embedded preview (or full QImage for non-RAW) and writes a
+// quality-85 JPEG here; subsequent opens read straight from disk if the
+// source file's mtime hasn't moved past the cache file's mtime.
+static QString thumbCachePath(const QString& sourcePath) {
+    const QFileInfo fi(sourcePath);
+    return fi.absoluteDir().filePath(".afterglow-thumbs/" + fi.fileName() + ".jpg");
+}
+
+static QImage tryLoadCachedThumb(const QString& sourcePath) {
+    const QFileInfo cacheFi(thumbCachePath(sourcePath));
+    if (!cacheFi.exists()) return {};
+    const QFileInfo srcFi(sourcePath);
+    // Stale cache: source has been re-saved since we last decoded.
+    if (srcFi.lastModified() > cacheFi.lastModified()) return {};
+    return QImage(cacheFi.absoluteFilePath());
+}
+
+static void writeCachedThumb(const QString& sourcePath, const QImage& thumb) {
+    const QString out = thumbCachePath(sourcePath);
+    QDir().mkpath(QFileInfo(out).absolutePath());
+    thumb.save(out, "JPEG", 85);
+}
+
 // Recognised image extensions: same set the single-file dialog accepts. Kept
 // here as a static QStringList so the lookup is amortised across all photos.
 static const QStringList& imageExtensions() {
@@ -759,18 +783,18 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
     const QString tag = folder;
     for (const QString& path : paths) {
         QThreadPool::globalInstance()->start([self, path, tag]() {
-            QImage thumb;
-            if (RawLoader::isRawFile(path)) {
-                thumb = RawLoader::loadThumbnail(path);
-            } else {
-                thumb = QImage(path);
+            QImage thumb = tryLoadCachedThumb(path);
+            if (thumb.isNull()) {
+                if (RawLoader::isRawFile(path)) thumb = RawLoader::loadThumbnail(path);
+                else                            thumb = QImage(path);
+                if (thumb.isNull()) return;
+                // Cap the side at 512px — saves memory when the grid is showing
+                // hundreds of thumbnails and avoids holding full-res JPEGs alive.
+                if (thumb.width() > 512 || thumb.height() > 512)
+                    thumb = thumb.scaled(512, 512, Qt::KeepAspectRatio,
+                                         Qt::SmoothTransformation);
+                writeCachedThumb(path, thumb);
             }
-            if (thumb.isNull()) return;
-            // Cap the side at 512px — saves memory when the grid is showing
-            // hundreds of thumbnails and avoids holding full-res JPEGs alive.
-            if (thumb.width() > 512 || thumb.height() > 512)
-                thumb = thumb.scaled(512, 512, Qt::KeepAspectRatio,
-                                     Qt::SmoothTransformation);
             QMetaObject::invokeMethod(qApp, [self, path, thumb, tag]() {
                 if (!self) return;
                 if (self->m_currentFolder != tag) return;
