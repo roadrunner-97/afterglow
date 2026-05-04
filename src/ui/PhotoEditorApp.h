@@ -44,10 +44,11 @@ private slots:
     void onExportComplete(QImage result, QString destinationPath);
     void onPhotoActivated(const QString& path);
     void onDevelopRequested();
+    void onLoupeNavigate(int direction);
     void onMarkChanged(const QString& path, GridView::Mark mark);
 
 private:
-    enum class Mode { Library = 0, Loupe = 1, Develop = 2 };
+    enum class Mode { Gallery = 0, Loupe = 1, Develop = 2 };
 
     void setupUI();
     void setupToolBar();
@@ -86,6 +87,7 @@ private:
     QElapsedTimer   m_lastPanDispatch;              // invalid until first dispatch
 
     QString         m_currentFolder;
+    QStringList     m_currentPaths;   // photos shown in the gallery, in display order
 
     // Set by saveImage() before kicking off the async export, consumed (and
     // cleared) by onExportComplete().  std::nullopt means "no options" — that

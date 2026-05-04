@@ -43,8 +43,18 @@
 #include <QPointer>
 #include <QApplication>
 #include <QThreadPool>
+#include <QImageReader>
 #include <QDebug>
 #include <memory>
+
+// Decode a non-RAW image with EXIF auto-orientation applied. QImage(path)
+// honours no orientation tag, so portrait-shot JPEGs come out sideways
+// without this. RAW files go through RawLoader, which handles flip itself.
+static QImage decodeOriented(const QString& path) {
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    return reader.read();
+}
 
 PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     : QMainWindow(parent)
@@ -90,7 +100,7 @@ void PhotoEditorApp::setupToolBar() {
     toolbar->setMovable(false);
     toolbar->setStyleSheet(Stylesheets::toolbar());
 
-    // Mode switcher: Library (grid) / Loupe (preview) / Develop (editor).
+    // Mode switcher: Gallery (grid) / Loupe (preview) / Develop (editor).
     // Mirrors Lightroom's module picker — user double-clicks a thumbnail to
     // step through to Loupe, then Enter (or another double-click) to Develop.
     m_modeGroup = new QActionGroup(this);
@@ -104,7 +114,7 @@ void PhotoEditorApp::setupToolBar() {
         connect(act, &QAction::triggered, this, [this, m]() { setMode(m); });
         return act;
     };
-    addModeAction("Library", Mode::Library)->setChecked(true);
+    addModeAction("Gallery", Mode::Gallery)->setChecked(true);
     addModeAction("Loupe",   Mode::Loupe);
     addModeAction("Develop", Mode::Develop);
 
@@ -134,14 +144,14 @@ void PhotoEditorApp::setupUI() {
     setupMenuBar();
 
     // The central widget is a stacked widget with three pages:
-    //   0 = Library (grid of thumbnails for browsing/triage)
+    //   0 = Gallery (grid of thumbnails for browsing/triage)
     //   1 = Loupe   (full-size single-image preview, no GPU pipeline)
     //   2 = Develop (existing viewport + right panel — the editor)
     m_stack = new QStackedWidget();
     m_stack->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
     setCentralWidget(m_stack);
 
-    // ── Library page ────────────────────────────────────────────────────────
+    // ── Gallery page ────────────────────────────────────────────────────────
     m_gridView = new GridView();
     connect(m_gridView, &GridView::photoActivated,
             this, &PhotoEditorApp::onPhotoActivated);
@@ -153,6 +163,10 @@ void PhotoEditorApp::setupUI() {
     m_loupeView = new LoupeView();
     connect(m_loupeView, &LoupeView::developRequested,
             this, &PhotoEditorApp::onDevelopRequested);
+    connect(m_loupeView, &LoupeView::previousRequested,
+            this, [this]() { onLoupeNavigate(-1); });
+    connect(m_loupeView, &LoupeView::nextRequested,
+            this, [this]() { onLoupeNavigate(+1); });
     m_stack->addWidget(m_loupeView);
 
     // ── Develop page (existing editor: viewport + right panel) ─────────────
@@ -203,7 +217,7 @@ void PhotoEditorApp::setupUI() {
     mainLayout->addWidget(rightPanel);
     m_stack->addWidget(develop);
 
-    setMode(Mode::Library);
+    setMode(Mode::Gallery);
 }
 
 void PhotoEditorApp::setupMenuBar() {
@@ -387,7 +401,7 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
             qWarning() << "RawLoader failed for" << path << "— trying QImage::load";
     }
     if (img.isNull())
-        img = QImage(path);
+        img = decodeOriented(path);
 
     if (img.isNull()) {
         qWarning() << "Failed to load image:" << path;
@@ -703,7 +717,7 @@ void PhotoEditorApp::closeEvent(QCloseEvent* event) {
     QMainWindow::closeEvent(event);
 }
 
-// ─── Library / Loupe / Develop mode switching ───────────────────────────────
+// ─── Gallery / Loupe / Develop mode switching ───────────────────────────────
 
 void PhotoEditorApp::setMode(Mode m) {
     m_stack->setCurrentIndex(static_cast<int>(m));
@@ -723,7 +737,7 @@ void PhotoEditorApp::openFolder() {
     if (folder.isEmpty()) return;
     m_lastDir = folder;
     loadFolderIntoGrid(folder);
-    setMode(Mode::Library);
+    setMode(Mode::Gallery);
 }
 
 // Per-folder JPEG cache for grid thumbnails. The first folder-open decodes
@@ -773,6 +787,7 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
     paths.sort(Qt::CaseInsensitive);
 
     m_currentFolder = folder;
+    m_currentPaths = paths;
     m_gridView->setPhotos(paths);
     readCatalog(folder);
 
@@ -786,7 +801,7 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
             QImage thumb = tryLoadCachedThumb(path);
             if (thumb.isNull()) {
                 if (RawLoader::isRawFile(path)) thumb = RawLoader::loadThumbnail(path);
-                else                            thumb = QImage(path);
+                else                            thumb = decodeOriented(path);
                 if (thumb.isNull()) return;
                 // Cap the side at 512px — saves memory when the grid is showing
                 // hundreds of thumbnails and avoids holding full-res JPEGs alive.
@@ -810,7 +825,7 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
     // JPEG is a few MB at most — measured later if it shows up as jank.
     QImage preview;
     if (RawLoader::isRawFile(path)) preview = RawLoader::loadThumbnail(path);
-    if (preview.isNull())            preview = QImage(path);
+    if (preview.isNull())            preview = decodeOriented(path);
     if (preview.isNull()) {
         qWarning() << "No preview available for" << path;
         return;
@@ -824,6 +839,14 @@ void PhotoEditorApp::onDevelopRequested() {
     if (m_currentImagePath.isEmpty()) return;
     loadFullImage(m_currentImagePath);
     setMode(Mode::Develop);
+}
+
+void PhotoEditorApp::onLoupeNavigate(int direction) {
+    if (m_currentPaths.isEmpty() || m_currentImagePath.isEmpty()) return;
+    const int idx = m_currentPaths.indexOf(m_currentImagePath);
+    const int next = idx + direction;
+    if (idx < 0 || next < 0 || next >= m_currentPaths.size()) return;
+    onPhotoActivated(m_currentPaths[next]);
 }
 
 void PhotoEditorApp::onMarkChanged(const QString& path, GridView::Mark mark) {

@@ -163,6 +163,12 @@ void LoupeView::keyPressEvent(QKeyEvent* event)
     } else if (event->key() == Qt::Key_R || event->key() == Qt::Key_F) {
         resetView();
         event->accept();
+    } else if (event->key() == Qt::Key_Left) {
+        emit previousRequested();
+        event->accept();
+    } else if (event->key() == Qt::Key_Right) {
+        emit nextRequested();
+        event->accept();
     } else {
         QWidget::keyPressEvent(event);
     }

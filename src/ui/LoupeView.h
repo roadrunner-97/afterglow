@@ -21,6 +21,11 @@ signals:
     // the host typically transitions to the full Develop mode in response.
     void developRequested();
 
+    // Emitted on Left / Right arrow keys; host advances to the prev / next
+    // photo in the current folder and pushes its preview back via setImage().
+    void previousRequested();
+    void nextRequested();
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;

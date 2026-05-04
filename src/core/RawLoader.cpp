@@ -1,9 +1,22 @@
 #include "RawLoader.h"
 #include <QFileInfo>
 #include <QStringList>
+#include <QBuffer>
+#include <QImageReader>
 #include <libraw/libraw.h>
 #include <cmath>
 #include <algorithm>
+
+// Convert LibRaw's `imgdata.sizes.flip` (the rotation it applies to the
+// demosaiced sensor data) into a standard EXIF orientation tag (1..8).
+static int librawFlipToExifOrientation(int flip) {
+    switch (flip) {
+        case 3: return 3;  // 180°
+        case 5: return 8;  // 90° CCW
+        case 6: return 6;  // 90° CW
+        default: return 1; // 0 or anything else → no rotation
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Color temperature estimation from LibRaw cam_mul[]
@@ -117,6 +130,7 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
     if (meta) {
         float tempK = camMulToTemp(rawProcessor.imgdata.color.cam_mul);
         meta->colorTempK = (tempK >= 1500.0f && tempK <= 15000.0f) ? tempK : 0.0f;
+        meta->orientation = librawFlipToExifOrientation(rawProcessor.imgdata.sizes.flip);
     }
     if (rawProcessor.dcraw_process() != LIBRAW_SUCCESS)
         return {};
@@ -176,7 +190,16 @@ QImage RawLoader::loadThumbnail(const QString& filePath) {
 
     QImage result;
     if (thumb->type == LIBRAW_IMAGE_JPEG) {
-        result = QImage::fromData(thumb->data, static_cast<int>(thumb->data_size), "JPEG");
+        // Route through QImageReader so the embedded JPEG's own EXIF
+        // orientation tag is honoured — most cameras embed the preview in
+        // sensor orientation and rely on the tag to display upright.
+        QByteArray bytes(reinterpret_cast<const char*>(thumb->data),
+                         static_cast<int>(thumb->data_size));
+        QBuffer buf(&bytes);
+        buf.open(QIODevice::ReadOnly);
+        QImageReader reader(&buf, "JPEG");
+        reader.setAutoTransform(true);
+        result = reader.read();
     } else if (thumb->type == LIBRAW_IMAGE_BITMAP && thumb->colors == 3 && thumb->bits == 8) {
         // Interleaved RGB888 → QImage (copied so the buffer can be freed).
         QImage tmp(thumb->data, thumb->width, thumb->height,
