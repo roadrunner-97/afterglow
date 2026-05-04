@@ -1,8 +1,6 @@
 #include "RawLoader.h"
 #include <QFileInfo>
 #include <QStringList>
-
-#ifdef HAVE_LIBRAW
 #include <libraw/libraw.h>
 #include <cmath>
 #include <algorithm>
@@ -73,7 +71,6 @@ static float camMulToTemp(const float cam_mul[4]) {
     float targetRB = bl / r;   // = R(K)/B(K) on the Planckian locus
     return findTempFromRBRatio(targetRB);
 }
-#endif // HAVE_LIBRAW
 
 bool RawLoader::isRawFile(const QString& filePath) {
     static const QStringList rawExts = {
@@ -97,7 +94,6 @@ bool RawLoader::isRawFile(const QString& filePath) {
 }
 
 QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
-#ifdef HAVE_LIBRAW
     LibRaw rawProcessor;
 
     // 16-bit linear sRGB output (sRGB primaries, NO gamma curve).
@@ -161,9 +157,33 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
     // on upload. QImage/JPEG/PNG loads have no tag → treated as sRGB-encoded.
     result.setText("color_space", "linear");
     return result;
-#else
-    Q_UNUSED(filePath)
-    Q_UNUSED(meta)
-    return {};
-#endif
+}
+
+// Decode the camera-embedded preview JPEG. Most modern bodies bundle a
+// full-resolution JPEG; we hand the bytes straight to QImage::fromData().
+// Some older cameras embed bitmaps instead — those are handled too.
+QImage RawLoader::loadThumbnail(const QString& filePath) {
+    LibRaw rawProcessor;
+    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS)
+        return {};
+    if (rawProcessor.unpack_thumb() != LIBRAW_SUCCESS)
+        return {};
+
+    int errorCode = 0;
+    libraw_processed_image_t* thumb = rawProcessor.dcraw_make_mem_thumb(&errorCode);
+    if (!thumb || errorCode != LIBRAW_SUCCESS)
+        return {};
+
+    QImage result;
+    if (thumb->type == LIBRAW_IMAGE_JPEG) {
+        result = QImage::fromData(thumb->data, static_cast<int>(thumb->data_size), "JPEG");
+    } else if (thumb->type == LIBRAW_IMAGE_BITMAP && thumb->colors == 3 && thumb->bits == 8) {
+        // Interleaved RGB888 → QImage (copied so the buffer can be freed).
+        QImage tmp(thumb->data, thumb->width, thumb->height,
+                   thumb->width * 3, QImage::Format_RGB888);
+        result = tmp.copy();
+    }
+
+    LibRaw::dcraw_clear_mem(thumb);
+    return result;
 }

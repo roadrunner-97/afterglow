@@ -55,11 +55,9 @@ find_package(Qt6 COMPONENTS Core Gui Widgets Concurrent OpenGLWidgets REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(OpenCL REQUIRED)
 
-# Optional: LibRaw for RAW file support
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(LIBRAW QUIET libraw)
-endif()
+# LibRaw for RAW file support — required.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBRAW REQUIRED libraw)
 
 # ============================================================================
 # Widgets Library
@@ -123,14 +121,8 @@ target_link_libraries(photoeditor_core
 
 target_compile_definitions(photoeditor_core PUBLIC HAVE_OPENCL)
 
-if(LIBRAW_FOUND)
-    target_link_libraries(photoeditor_core PRIVATE ${LIBRAW_LIBRARIES})
-    target_compile_definitions(photoeditor_core PRIVATE HAVE_LIBRAW)
-    target_include_directories(photoeditor_core PRIVATE ${LIBRAW_INCLUDE_DIRS})
-    message(STATUS "LibRaw found — RAW file support enabled")
-else()
-    message(STATUS "LibRaw not found — RAW file support disabled")
-endif()
+target_link_libraries(photoeditor_core PRIVATE ${LIBRAW_LIBRARIES})
+target_include_directories(photoeditor_core PRIVATE ${LIBRAW_INCLUDE_DIRS})
 
 target_include_directories(photoeditor_core
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/core>
@@ -147,6 +139,10 @@ add_library(photoeditor_ui STATIC
     src/ui/PhotoEditorApp.h
     src/ui/ExportDialog.cpp
     src/ui/ExportDialog.h
+    src/ui/GridView.cpp
+    src/ui/GridView.h
+    src/ui/LoupeView.cpp
+    src/ui/LoupeView.h
     src/ui/Stylesheets.cpp
     src/ui/Stylesheets.h
     src/ui/ViewportWidget.cpp

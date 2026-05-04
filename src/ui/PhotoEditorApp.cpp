@@ -1,6 +1,7 @@
 #include "PhotoEditorApp.h"
 #include "ExportDialog.h"
 #include "ExportPath.h"
+#include "LoupeView.h"
 #include "Stylesheets.h"
 #include "Theme.h"
 #include "GpuDeviceRegistry.h"
@@ -18,6 +19,8 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStackedWidget>
+#include <QActionGroup>
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -32,6 +35,14 @@
 #include <QSettings>
 #include <QScreen>
 #include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QPointer>
+#include <QApplication>
+#include <QThreadPool>
 #include <QDebug>
 #include <memory>
 
@@ -79,6 +90,26 @@ void PhotoEditorApp::setupToolBar() {
     toolbar->setMovable(false);
     toolbar->setStyleSheet(Stylesheets::toolbar());
 
+    // Mode switcher: Library (grid) / Loupe (preview) / Develop (editor).
+    // Mirrors Lightroom's module picker — user double-clicks a thumbnail to
+    // step through to Loupe, then Enter (or another double-click) to Develop.
+    m_modeGroup = new QActionGroup(this);
+    m_modeGroup->setExclusive(true);
+    auto addModeAction = [&](const QString& label, Mode m) {
+        QAction* act = new QAction(label, this);
+        act->setCheckable(true);
+        act->setData(static_cast<int>(m));
+        m_modeGroup->addAction(act);
+        toolbar->addAction(act);
+        connect(act, &QAction::triggered, this, [this, m]() { setMode(m); });
+        return act;
+    };
+    addModeAction("Library", Mode::Library)->setChecked(true);
+    addModeAction("Loupe",   Mode::Loupe);
+    addModeAction("Develop", Mode::Develop);
+
+    toolbar->addSeparator();
+
     QAction* liveAct = new QAction("Live Preview", this);
     liveAct->setCheckable(true);
     liveAct->setChecked(false);
@@ -102,20 +133,40 @@ void PhotoEditorApp::setupToolBar() {
 void PhotoEditorApp::setupUI() {
     setupMenuBar();
 
-    QWidget* central = new QWidget();
-    central->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
-    setCentralWidget(central);
-    QHBoxLayout* mainLayout = new QHBoxLayout(central);
+    // The central widget is a stacked widget with three pages:
+    //   0 = Library (grid of thumbnails for browsing/triage)
+    //   1 = Loupe   (full-size single-image preview, no GPU pipeline)
+    //   2 = Develop (existing viewport + right panel — the editor)
+    m_stack = new QStackedWidget();
+    m_stack->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
+    setCentralWidget(m_stack);
+
+    // ── Library page ────────────────────────────────────────────────────────
+    m_gridView = new GridView();
+    connect(m_gridView, &GridView::photoActivated,
+            this, &PhotoEditorApp::onPhotoActivated);
+    connect(m_gridView, &GridView::markChanged,
+            this, &PhotoEditorApp::onMarkChanged);
+    m_stack->addWidget(m_gridView);
+
+    // ── Loupe page ──────────────────────────────────────────────────────────
+    m_loupeView = new LoupeView();
+    connect(m_loupeView, &LoupeView::developRequested,
+            this, &PhotoEditorApp::onDevelopRequested);
+    m_stack->addWidget(m_loupeView);
+
+    // ── Develop page (existing editor: viewport + right panel) ─────────────
+    QWidget* develop = new QWidget();
+    develop->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
+    QHBoxLayout* mainLayout = new QHBoxLayout(develop);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // ── Image view ──────────────────────────────────────────────────────────
     m_viewport = new ViewportWidget();
     connect(m_viewport, &ViewportWidget::viewportChanged,
             this, &PhotoEditorApp::triggerViewportUpdate);
     mainLayout->addWidget(m_viewport, 3);
 
-    // ── Right panel ──────────────────────────────────────────────────────────
     QWidget* rightPanel = new QWidget();
     rightPanel->setStyleSheet(QString("background-color: %1;").arg(Theme::BG_RIGHT_PANEL));
     // Width scales with the user's font / DPI: ParamSlider rows need room for
@@ -150,6 +201,9 @@ void PhotoEditorApp::setupUI() {
     rightLayout->addWidget(effectsScroll, 1);
 
     mainLayout->addWidget(rightPanel);
+    m_stack->addWidget(develop);
+
+    setMode(Mode::Library);
 }
 
 void PhotoEditorApp::setupMenuBar() {
@@ -160,6 +214,10 @@ void PhotoEditorApp::setupMenuBar() {
     QAction* openAct = fileMenu->addAction("Open Image…");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &PhotoEditorApp::openImage);
+
+    QAction* openFolderAct = fileMenu->addAction("Open Folder…");
+    openFolderAct->setShortcut(QKeySequence("Ctrl+Shift+O"));
+    connect(openFolderAct, &QAction::triggered, this, &PhotoEditorApp::openFolder);
 
     QAction* saveAct = fileMenu->addAction("Save Image…");
     saveAct->setShortcut(QKeySequence::Save);
@@ -314,25 +372,30 @@ void PhotoEditorApp::openImage() {
         "All Files (*)");
 
     if (fileName.isEmpty()) return;
-    m_lastDir = QFileInfo(fileName).absolutePath();
+    loadFullImage(fileName);
+    setMode(Mode::Develop);
+}
+
+void PhotoEditorApp::loadFullImage(const QString& path) {
+    m_lastDir = QFileInfo(path).absolutePath();
 
     QImage img;
     ImageMetadata meta;
-    if (RawLoader::isRawFile(fileName)) {
-        img = RawLoader::load(fileName, &meta);
+    if (RawLoader::isRawFile(path)) {
+        img = RawLoader::load(path, &meta);
         if (img.isNull())
-            qWarning() << "RawLoader failed for" << fileName << "— trying QImage::load";
+            qWarning() << "RawLoader failed for" << path << "— trying QImage::load";
     }
     if (img.isNull())
-        img = QImage(fileName);
+        img = QImage(path);
 
     if (img.isNull()) {
-        qWarning() << "Failed to load image:" << fileName;
+        qWarning() << "Failed to load image:" << path;
         return;
     }
 
     m_originalImage = img;
-    m_currentImagePath = fileName;
+    m_currentImagePath = path;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
     // Notify effects with whatever metadata is already cheap to provide
@@ -638,4 +701,148 @@ void PhotoEditorApp::closeEvent(QCloseEvent* event) {
     settings.setValue("geometry", saveGeometry());
     settings.setValue("lastDir",  m_lastDir);
     QMainWindow::closeEvent(event);
+}
+
+// ─── Library / Loupe / Develop mode switching ───────────────────────────────
+
+void PhotoEditorApp::setMode(Mode m) {
+    m_stack->setCurrentIndex(static_cast<int>(m));
+    // Keep the toolbar checkmark in sync with programmatic transitions
+    // (e.g. double-click in the grid jumps us to Loupe).
+    for (QAction* a : m_modeGroup->actions()) {
+        if (a->data().toInt() == static_cast<int>(m)) {
+            a->setChecked(true);
+            break;
+        }
+    }
+}
+
+void PhotoEditorApp::openFolder() {
+    const QString folder = QFileDialog::getExistingDirectory(
+        this, "Open Folder", m_lastDir, QFileDialog::ShowDirsOnly);
+    if (folder.isEmpty()) return;
+    m_lastDir = folder;
+    loadFolderIntoGrid(folder);
+    setMode(Mode::Library);
+}
+
+// Recognised image extensions: same set the single-file dialog accepts. Kept
+// here as a static QStringList so the lookup is amortised across all photos.
+static const QStringList& imageExtensions() {
+    static const QStringList exts = {
+        "png", "jpg", "jpeg", "bmp", "tiff", "tif",
+        "cr2", "cr3", "nef", "nrw", "arw", "sr2", "srf", "dng",
+        "raf", "orf", "rw2", "pef", "srw", "x3f", "rwl", "mrw",
+        "3fr", "kdc", "dcr", "erf",
+    };
+    return exts;
+}
+
+void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
+    QStringList paths;
+    QDirIterator it(folder, QDir::Files | QDir::Readable, QDirIterator::NoIteratorFlags);
+    while (it.hasNext()) {
+        const QString p = it.next();
+        if (imageExtensions().contains(QFileInfo(p).suffix().toLower()))
+            paths.append(p);
+    }
+    paths.sort(Qt::CaseInsensitive);
+
+    m_currentFolder = folder;
+    m_gridView->setPhotos(paths);
+    readCatalog(folder);
+
+    // Decode thumbnails on the global thread pool. Each finished decode posts
+    // back to the GUI thread via QueuedConnection. Stale results from a
+    // previous folder are dropped via the m_currentFolder guard.
+    QPointer<PhotoEditorApp> self(this);
+    const QString tag = folder;
+    for (const QString& path : paths) {
+        QThreadPool::globalInstance()->start([self, path, tag]() {
+            QImage thumb;
+            if (RawLoader::isRawFile(path)) {
+                thumb = RawLoader::loadThumbnail(path);
+            } else {
+                thumb = QImage(path);
+            }
+            if (thumb.isNull()) return;
+            // Cap the side at 512px — saves memory when the grid is showing
+            // hundreds of thumbnails and avoids holding full-res JPEGs alive.
+            if (thumb.width() > 512 || thumb.height() > 512)
+                thumb = thumb.scaled(512, 512, Qt::KeepAspectRatio,
+                                     Qt::SmoothTransformation);
+            QMetaObject::invokeMethod(qApp, [self, path, thumb, tag]() {
+                if (!self) return;
+                if (self->m_currentFolder != tag) return;
+                self->m_gridView->setThumbnail(path, thumb);
+            }, Qt::QueuedConnection);
+        });
+    }
+}
+
+void PhotoEditorApp::onPhotoActivated(const QString& path) {
+    // Fast preview: prefer the embedded JPEG for RAW files; fall back to
+    // QImage decode for non-RAW. Loaded synchronously since the embedded
+    // JPEG is a few MB at most — measured later if it shows up as jank.
+    QImage preview;
+    if (RawLoader::isRawFile(path)) preview = RawLoader::loadThumbnail(path);
+    if (preview.isNull())            preview = QImage(path);
+    if (preview.isNull()) {
+        qWarning() << "No preview available for" << path;
+        return;
+    }
+    m_currentImagePath = path;
+    m_loupeView->setImage(preview);
+    setMode(Mode::Loupe);
+}
+
+void PhotoEditorApp::onDevelopRequested() {
+    if (m_currentImagePath.isEmpty()) return;
+    loadFullImage(m_currentImagePath);
+    setMode(Mode::Develop);
+}
+
+void PhotoEditorApp::onMarkChanged(const QString& path, GridView::Mark mark) {
+    m_gridView->setMark(path, mark);
+    writeCatalog();
+}
+
+// ─── Per-folder catalog (triage marks) ──────────────────────────────────────
+//
+// Stored as a flat JSON object next to the photos: <folder>/.afterglow-catalog.json
+// Keys are basenames (so the file survives the folder being moved); values
+// are single-character mark codes ('P', 'X', 'U').
+
+QString PhotoEditorApp::catalogPath(const QString& folder) const {
+    return QDir(folder).filePath(".afterglow-catalog.json");
+}
+
+void PhotoEditorApp::readCatalog(const QString& folder) {
+    QFile f(catalogPath(folder));
+    if (!f.open(QIODevice::ReadOnly)) return;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject()) return;
+    const QJsonObject obj = doc.object();
+    for (auto it = obj.begin(); it != obj.end(); ++it) {
+        const QString fullPath = QDir(folder).filePath(it.key());
+        const QString s = it.value().toString();
+        if (s.isEmpty()) continue;
+        m_gridView->setMark(fullPath, static_cast<GridView::Mark>(s.at(0).toLatin1()));
+    }
+}
+
+void PhotoEditorApp::writeCatalog() const {
+    if (m_currentFolder.isEmpty()) return;
+    QJsonObject obj;
+    QDirIterator it(m_currentFolder, QDir::Files, QDirIterator::NoIteratorFlags);
+    while (it.hasNext()) {
+        const QString p = it.next();
+        if (!imageExtensions().contains(QFileInfo(p).suffix().toLower())) continue;
+        const auto m = m_gridView->mark(p);
+        if (m == GridView::Mark::None) continue;  // unflagged is the default
+        obj.insert(QFileInfo(p).fileName(), QString(QChar(static_cast<char>(m))));
+    }
+    QFile f(catalogPath(m_currentFolder));
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+    f.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
 }
