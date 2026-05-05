@@ -43,7 +43,10 @@ push with `touch .git/check-coverage-skip`; lower the bar with
 
 ### Coverage build
 
-One-shot via the `coverage` workflow preset (configure → build → test → coverage report):
+Coverage instrumentation lives in a separate `build-coverage/` directory so
+the dev `build/` never gets `--coverage` flags (which would make every run
+of the main binary write `.gcda` files and emit libgcov errors after a gcc
+upgrade).  One-shot via the workflow preset:
 
 ```bash
 cmake --workflow --preset coverage
@@ -52,20 +55,20 @@ cmake --workflow --preset coverage
 Or manually:
 
 ```bash
-cmake -B build -G Ninja -DCOVERAGE=ON   # enable --coverage flags (gcovr required)
-cmake --build build
-ctest --test-dir build -j8                        # populate .gcda files
-cmake --build build --target coverage             # generate report from existing .gcda files
+cmake -B build-coverage -G Ninja -DCOVERAGE=ON   # gcovr required
+cmake --build build-coverage
+ctest --test-dir build-coverage -j8                        # populate .gcda files
+cmake --build build-coverage --target coverage             # generate report
 ```
 
-Report lands in `build/coverage/index.html` (HTML detail) and `build/coverage/coverage.xml`.
+Report lands in `build-coverage/coverage/index.html` (HTML detail) and `build-coverage/coverage/coverage.xml`.
 
 To check a specific file's line coverage without regenerating the full HTML report:
 
 ```bash
 gcovr \
   --root . \
-  --object-directory build \
+  --object-directory build-coverage \
   --exclude "build/" --exclude "tests/" --exclude "src/ui/" \
   --exclude "src/core/ImageProcessor\.cpp" \
   --exclude "src/core/RawLoader\.cpp" \

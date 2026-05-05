@@ -10,7 +10,7 @@
     {
       "name": "coverage",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "${sourceDir}/build-coverage",
       "cacheVariables": {
         "COVERAGE": "ON"
       }
