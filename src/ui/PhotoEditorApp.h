@@ -87,6 +87,7 @@ private:
 
     QString         m_currentFolder;
     QStringList     m_currentPaths;   // photos shown in the gallery, in display order
+    QString         m_developedPath;  // path currently loaded in m_originalImage
 
     // Set by saveImage() before kicking off the async export, consumed (and
     // cleared) by onExportComplete().  std::nullopt means "no options" — that

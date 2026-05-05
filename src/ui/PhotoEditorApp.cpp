@@ -117,7 +117,15 @@ void PhotoEditorApp::setupToolBar() {
     };
     addModeAction("Gallery", Mode::Gallery)->setChecked(true);
     addModeAction("Loupe",   Mode::Loupe);
-    addModeAction("Develop", Mode::Develop);
+    QAction* developAct = addModeAction("Develop", Mode::Develop);
+    // The default addModeAction handler only switches the page, which leaves
+    // the editor empty when the user clicks Develop after browsing in
+    // Loupe.  Run the full develop flow (load + reprocess) on top so the
+    // toolbar button matches what double-click or Enter does in Loupe.
+    connect(developAct, &QAction::triggered, this, [this]() {
+        if (!m_currentImagePath.isEmpty() && m_currentImagePath != m_developedPath)
+            loadFullImage(m_currentImagePath);
+    });
 
     // Spacer + processing indicator label on the right side of the toolbar
     QWidget* spacer = new QWidget();
@@ -147,6 +155,10 @@ void PhotoEditorApp::setupUI() {
             this, &PhotoEditorApp::onPhotoActivated);
     connect(m_gridView, &GridView::markChanged,
             this, &PhotoEditorApp::onMarkChanged);
+    // Single-click / arrow keys in the grid track m_currentImagePath so
+    // the toolbar Develop / Loupe buttons act on the highlighted photo.
+    connect(m_gridView, &GridView::currentPathChanged,
+            this, [this](const QString& path) { m_currentImagePath = path; });
     m_stack->addWidget(m_gridView);
 
     // ── Loupe page ──────────────────────────────────────────────────────────
@@ -400,6 +412,7 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
 
     m_originalImage = img;
     m_currentImagePath = path;
+    m_developedPath = path;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
     // Notify effects with whatever metadata is already cheap to provide
@@ -844,7 +857,8 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
 void PhotoEditorApp::onDevelopRequested() {
     if (m_currentImagePath.isEmpty()) return;
     setMode(Mode::Develop);
-    loadFullImage(m_currentImagePath);
+    if (m_currentImagePath != m_developedPath)
+        loadFullImage(m_currentImagePath);
 }
 
 void PhotoEditorApp::onLoupeNavigate(int direction) {

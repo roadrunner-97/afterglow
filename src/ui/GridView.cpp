@@ -26,6 +26,14 @@ GridView::GridView(QWidget* parent)
                 emit photoActivated(path);
             });
 
+    // Track selection changes so the host can sync m_currentImagePath as
+    // the user clicks or arrow-keys through the grid.
+    connect(m_list, &QListWidget::currentItemChanged, this,
+            [this](QListWidgetItem* current, QListWidgetItem*) {
+                emit currentPathChanged(current ? current->data(Qt::UserRole).toString()
+                                                : QString());
+            });
+
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_list);
@@ -47,6 +55,12 @@ void GridView::setPhotos(const QStringList& paths)
         // Set a placeholder icon (empty icon until setThumbnail is called)
         item->setIcon(QIcon());
     }
+
+    // Default the cursor to the first item so the toolbar's Develop /
+    // Loupe buttons have something to act on without the user having to
+    // click first.
+    if (m_list->count() > 0)
+        m_list->setCurrentRow(0);
 }
 
 void GridView::setThumbnail(const QString& path, const QImage& thumb)

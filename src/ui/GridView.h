@@ -36,6 +36,10 @@ signals:
     // Emitted when the user presses P/X/U with a cell selected.
     void markChanged(const QString& path, Mark m);
 
+    // Emitted as the user moves the selection cursor (single click or
+    // arrow keys).  Empty path when nothing is selected.
+    void currentPathChanged(const QString& path);
+
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
