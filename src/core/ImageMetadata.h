@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QDateTime>
+#include <QString>
 #include <cstdint>
 #include <vector>
 
@@ -19,4 +21,15 @@ struct ImageMetadata {
     // luminance.  Empty until computed; populated once by the app on image load
     // and is not updated when effect parameters change.
     std::vector<uint32_t> luminanceHistogram;
+
+    // EXIF camera/exposure fields populated by RawLoader.  Strings empty and
+    // numerics 0 when unknown — the Loupe sidebar treats those as "—" rows.
+    QString   cameraMake;
+    QString   cameraModel;
+    QString   lens;
+    float     isoSpeed   = 0.0f;
+    float     shutterSec = 0.0f;   // exposure time in seconds (0.004 = 1/250)
+    float     aperture   = 0.0f;   // f-number
+    float     focalLenMm = 0.0f;
+    QDateTime captureTime;          // null when the file lacks a timestamp
 };

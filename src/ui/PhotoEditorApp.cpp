@@ -170,6 +170,14 @@ void PhotoEditorApp::setupUI() {
             this, [this]() { onLoupeNavigate(-1); });
     connect(m_loupeView, &LoupeView::nextRequested,
             this, [this]() { onLoupeNavigate(+1); });
+    // Marks set from the Loupe sidebar / A-R-D keys flow through the same
+    // catalog-write path as marks set from the grid.  LoupeView doesn't
+    // know the path; we inject the currently-displayed one here.
+    connect(m_loupeView, &LoupeView::markChanged, this,
+            [this](GridView::Mark m) {
+                if (!m_currentImagePath.isEmpty())
+                    onMarkChanged(m_currentImagePath, m);
+            });
     m_stack->addWidget(m_loupeView);
 
     // ── Develop page (existing editor: viewport + right panel) ─────────────
@@ -872,15 +880,20 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
     // Fast preview: prefer the embedded JPEG for RAW files; fall back to
     // QImage decode for non-RAW. Loaded synchronously since the embedded
     // JPEG is a few MB at most — measured later if it shows up as jank.
+    // Also harvest EXIF metadata in the same call so the Loupe sidebar
+    // gets camera/lens/exposure for free off the LibRaw open.
     QImage preview;
-    if (RawLoader::isRawFile(path)) preview = RawLoader::loadThumbnail(path);
-    if (preview.isNull())            preview = decodeOriented(path);
+    ImageMetadata meta;
+    if (RawLoader::isRawFile(path)) preview = RawLoader::loadThumbnail(path, &meta);
+    if (preview.isNull())           preview = decodeOriented(path);
     if (preview.isNull()) {
         qWarning() << "No preview available for" << path;
         return;
     }
     m_currentImagePath = path;
     m_loupeView->setImage(preview);
+    m_loupeView->setMetadata(meta);
+    m_loupeView->setCurrentMark(m_gridView->mark(path));
     setMode(Mode::Loupe);
 }
 
@@ -954,7 +967,12 @@ void PhotoEditorApp::readCatalog(const QString& folder) {
         const QString fullPath = QDir(folder).filePath(it.key());
         const QString s = it.value().toString();
         if (s.isEmpty()) continue;
-        m_gridView->setMark(fullPath, static_cast<GridView::Mark>(s.at(0).toLatin1()));
+        // Only accept the current code set — a catalog written by an older
+        // build (with 'P'/'X'/'U') simply loses its marks rather than
+        // populating the map with bogus enum values.
+        const char c = s.at(0).toLatin1();
+        if (c == 'A' || c == 'R' || c == 'D')
+            m_gridView->setMark(fullPath, static_cast<GridView::Mark>(c));
     }
 }
 

@@ -84,10 +84,13 @@ void GridView::setMark(const QString& path, Mark m)
         QListWidgetItem* item = m_list->item(i);
         if (item->data(Qt::UserRole).toString() == path) {
             switch (m) {
-                case Mark::Pick:
+                case Mark::Accept:
                     item->setBackground(QColor(144, 238, 144, 100));  // light green
                     break;
-                case Mark::Reject:
+                case Mark::Refine:
+                    item->setBackground(QColor(240, 210, 120, 110));  // warm amber
+                    break;
+                case Mark::Decline:
                     item->setBackground(QColor(255, 127, 127, 100));  // light red
                     break;
                 case Mark::None:
@@ -133,21 +136,23 @@ void GridView::keyPressEvent(QKeyEvent* event)
 
     QString currentPath = currentItem->data(Qt::UserRole).toString();
 
-    if (event->key() == Qt::Key_P) {
-        setMark(currentPath, Mark::Pick);
-        emit markChanged(currentPath, Mark::Pick);
+    auto applyMark = [&](Mark requested) {
+        // Pressing the same letter as the current mark toggles it off
+        // (back to None) — matches the "exclusive but defaults to none"
+        // behaviour the Loupe sidebar buttons present.
+        const Mark next = (mark(currentPath) == requested) ? Mark::None : requested;
+        setMark(currentPath, next);
+        emit markChanged(currentPath, next);
         m_list->setCurrentRow(m_list->currentRow() + 1);
         event->accept();
-    } else if (event->key() == Qt::Key_X) {
-        setMark(currentPath, Mark::Reject);
-        emit markChanged(currentPath, Mark::Reject);
-        m_list->setCurrentRow(m_list->currentRow() + 1);
-        event->accept();
-    } else if (event->key() == Qt::Key_U) {
-        setMark(currentPath, Mark::None);
-        emit markChanged(currentPath, Mark::None);
-        m_list->setCurrentRow(m_list->currentRow() + 1);
-        event->accept();
+    };
+
+    if (event->key() == Qt::Key_A) {
+        applyMark(Mark::Accept);
+    } else if (event->key() == Qt::Key_R) {
+        applyMark(Mark::Refine);
+    } else if (event->key() == Qt::Key_D) {
+        applyMark(Mark::Decline);
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         emit photoActivated(currentPath);
         event->accept();

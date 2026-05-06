@@ -2,10 +2,41 @@
 #include <QFileInfo>
 #include <QStringList>
 #include <QBuffer>
+#include <QDateTime>
 #include <QImageReader>
 #include <libraw/libraw.h>
 #include <cmath>
 #include <algorithm>
+#include <cstring>
+
+// Lift the camera/exposure fields out of an opened LibRaw instance.  Cheap
+// and shared between load(), loadThumbnail(), and loadMetadata() so a
+// single open_file() populates everything the sidebar needs.  Strings are
+// copied from LibRaw's fixed-size char buffers; trimmed because cameras
+// pad with spaces (Canon notably).
+static void fillExifFields(LibRaw& raw, ImageMetadata& meta) {
+    const auto& idata = raw.imgdata.idata;
+    const auto& other = raw.imgdata.other;
+    const auto& lens  = raw.imgdata.lens;
+
+    meta.cameraMake  = QString::fromLatin1(idata.make).trimmed();
+    meta.cameraModel = QString::fromLatin1(idata.model).trimmed();
+
+    // libraw_lensinfo.Lens is the resolved human-readable lens string;
+    // fall back to LensMake + makernotes Lens when it's blank.
+    QString lensName = QString::fromLatin1(lens.Lens).trimmed();
+    if (lensName.isEmpty())
+        lensName = QString::fromLatin1(lens.makernotes.Lens).trimmed();
+    meta.lens = lensName;
+
+    meta.isoSpeed   = other.iso_speed;
+    meta.shutterSec = other.shutter;
+    meta.aperture   = other.aperture;
+    meta.focalLenMm = other.focal_len;
+
+    if (other.timestamp > 0)
+        meta.captureTime = QDateTime::fromSecsSinceEpoch(other.timestamp);
+}
 
 // Convert LibRaw's `imgdata.sizes.flip` (the rotation it applies to the
 // demosaiced sensor data) into a standard EXIF orientation tag (1..8).
@@ -131,6 +162,7 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
         float tempK = camMulToTemp(rawProcessor.imgdata.color.cam_mul);
         meta->colorTempK = (tempK >= 1500.0f && tempK <= 15000.0f) ? tempK : 0.0f;
         meta->orientation = librawFlipToExifOrientation(rawProcessor.imgdata.sizes.flip);
+        fillExifFields(rawProcessor, *meta);
     }
     if (rawProcessor.dcraw_process() != LIBRAW_SUCCESS)
         return {};
@@ -176,10 +208,13 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
 // Decode the camera-embedded preview JPEG. Most modern bodies bundle a
 // full-resolution JPEG; we hand the bytes straight to QImage::fromData().
 // Some older cameras embed bitmaps instead — those are handled too.
-QImage RawLoader::loadThumbnail(const QString& filePath) {
+QImage RawLoader::loadThumbnail(const QString& filePath, ImageMetadata* meta) {
     LibRaw rawProcessor;
     if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS)
         return {};
+    // EXIF fields are populated by open_file() — read them here so the Loupe
+    // sidebar gets the camera/lens/shutter/etc. for free off the same call.
+    if (meta) fillExifFields(rawProcessor, *meta);
     if (rawProcessor.unpack_thumb() != LIBRAW_SUCCESS)
         return {};
 
@@ -209,4 +244,13 @@ QImage RawLoader::loadThumbnail(const QString& filePath) {
 
     LibRaw::dcraw_clear_mem(thumb);
     return result;
+}
+
+bool RawLoader::loadMetadata(const QString& filePath, ImageMetadata* meta) {
+    if (!meta) return false;
+    LibRaw rawProcessor;
+    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS)
+        return false;
+    fillExifFields(rawProcessor, *meta);
+    return true;
 }

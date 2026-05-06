@@ -12,7 +12,9 @@ class QListWidgetItem;
 class GridView : public QWidget {
     Q_OBJECT
 public:
-    enum class Mark : char { None = 'U', Pick = 'P', Reject = 'X' };
+    // Stored as the persisted single-char code in .afterglow-catalog.json.
+    // Pressing the same key twice cycles back to None (the resting state).
+    enum class Mark : char { None = 0, Accept = 'A', Refine = 'R', Decline = 'D' };
 
     explicit GridView(QWidget* parent = nullptr);
 
