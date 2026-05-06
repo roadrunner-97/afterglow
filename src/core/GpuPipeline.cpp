@@ -4,7 +4,6 @@
 #include "GpuDeviceRegistryOCL.h"
 #include "color_kernels.h"
 #include <QDebug>
-#include <QElapsedTimer>
 #include <algorithm>
 
 // ── Pipeline kernels ─────────────────────────────────────────────────────────
@@ -244,9 +243,6 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
 
     if (!m_available) return {};
 
-    QElapsedTimer t;
-    t.start();
-
     try {
         // Compute preview dimensions from viewport.
         const int previewW = viewport.displaySize.isValid() ? viewport.displaySize.width()  : m_width;
@@ -294,15 +290,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             ds.setArg(10, cropY1);
             m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
                                          cl::NDRange(previewW, previewH));
-            const qint64 t1 = t.nsecsElapsed();
-            QImage result = packAndReadbackLocked(m_workBuf, previewW, previewH);
-            const qint64 t3 = t.nsecsElapsed();
-            qDebug() << "[GpuPipeline] PanZoom (cache hit)"
-                     << " downsample:" << (t1 + 500) / 1000 << "µs"
-                     << " pack+read:"  << (t3 - t1 + 500) / 1000 << "µs"
-                     << " total:"      << (t3 + 500) / 1000 << "µs"
-                     << " preview:"    << previewW << "x" << previewH;
-            return result;
+            return packAndReadbackLocked(m_workBuf, previewW, previewH);
         }
 
         // ── Commit path ───────────────────────────────────────────────────────
@@ -312,7 +300,6 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         if (mode == RunMode::Commit) {
             if (!decodeFullResLocked())
                 return {}; // GCOVR_EXCL_LINE — decodeFullResLocked can only fail via cl::Error
-            const qint64 tDecode = t.nsecsElapsed();
 
             // Effects at full resolution: pixel radii are in source pixels.
             for (const auto& call : calls) {
@@ -331,7 +318,6 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
                 }
             }
             m_queue.finish();
-            const qint64 tEffects = t.nsecsElapsed();
             m_processedValid = true;
 
             // Downsample cache → workBuf at the requested preview dimensions.
@@ -349,19 +335,8 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             ds.setArg(10, cropY1);
             m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
                                          cl::NDRange(previewW, previewH));
-            const qint64 tDs = t.nsecsElapsed();
 
-            QImage result = packAndReadbackLocked(m_workBuf, previewW, previewH);
-            const qint64 tTotal = t.nsecsElapsed();
-            qDebug() << "[GpuPipeline] Commit"
-                     << " decode:"     << (tDecode + 500) / 1000 << "µs"
-                     << " effects:"    << (tEffects - tDecode + 500) / 1000 << "µs"
-                     << " downsample:" << (tDs - tEffects + 500) / 1000 << "µs"
-                     << " pack+read:"  << (tTotal - tDs + 500) / 1000 << "µs"
-                     << " total:"      << (tTotal + 500) / 1000 << "µs"
-                     << " full:"       << m_width << "x" << m_height
-                     << " preview:"    << previewW << "x" << previewH;
-            return result;
+            return packAndReadbackLocked(m_workBuf, previewW, previewH);
         }
 
         // ── LiveDrag / PanZoom fallback ───────────────────────────────────────
@@ -392,7 +367,6 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange,
                                      cl::NDRange(previewW, previewH));
         m_queue.finish();
-        const qint64 t1 = t.nsecsElapsed();
 
         const float srcPixelsPerPreviewPixel = regionW / static_cast<float>(previewW);
         for (const auto& call : calls) {
@@ -412,20 +386,8 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             }
         }
         m_queue.finish();
-        const qint64 t2 = t.nsecsElapsed();
 
-        QImage result = packAndReadbackLocked(m_workBuf, previewW, previewH);
-        const qint64 t3 = t.nsecsElapsed();
-
-        qDebug() << "[GpuPipeline] LiveDrag"
-                 << " downsample:" << (t1 + 500) / 1000 << "µs"
-                 << " effects:"    << (t2 - t1 + 500) / 1000 << "µs"
-                 << " pack+read:"  << (t3 - t2 + 500) / 1000 << "µs"
-                 << " total:"      << (t3 + 500) / 1000 << "µs"
-                 << " preview:"    << previewW << "x" << previewH
-                 << (m_inputIsLinear ? "(linear src)" : "(sRGB src)");
-        return result;
-
+        return packAndReadbackLocked(m_workBuf, previewW, previewH);
     }
     // GCOVR_EXCL_START
     catch (const cl::Error& e) {
@@ -561,20 +523,10 @@ void GpuPipeline::uploadImageLocked(const QImage& image) {
     m_previewH = 0;
     m_processedValid = false;  // new image content invalidates the cache
 
-    QElapsedTimer t;
-    t.start();
-
     try {
         m_srcBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                 m_bufBytes, src.bits());
         m_lastBits = image.constBits();
-
-        qDebug() << "[GpuPipeline] uploaded" << m_width << "x" << m_height
-                 << (m_is16bit ? "16-bit" : "8-bit")
-                 << (m_inputIsLinear ? "linear" : "sRGB")
-                 << "bufBytes" << m_bufBytes
-                 << "in" << (t.nsecsElapsed() + 500) / 1000 << "µs";
-
     }
     // GCOVR_EXCL_START
     catch (const cl::Error& e) {

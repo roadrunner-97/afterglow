@@ -5,8 +5,6 @@
 #include "PhotoEditorEffect.h"
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
-#include <QElapsedTimer>
-#include <QDebug>
 
 ImageProcessor::ImageProcessor(QObject *parent)
     : QObject(parent) {}
@@ -64,17 +62,11 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
 
     emit processingStarted();
 
-    QElapsedTimer timer;
-    timer.start();
-
     auto *watcher = new QFutureWatcher<QImage>(this);
     connect(watcher, &QFutureWatcher<QImage>::finished, this,
-            [this, watcher, myGen, timer, genPtr]() {
-        if (myGen == genPtr->load(std::memory_order_relaxed)) {
-            qint64 us = (timer.nsecsElapsed() + 500) / 1000;
-            qDebug() << "Image reprocessing took" << us << "µs";
+            [this, watcher, myGen, genPtr]() {
+        if (myGen == genPtr->load(std::memory_order_relaxed))
             emit processingComplete(watcher->result());
-        }
         watcher->deleteLater();
     });
 
