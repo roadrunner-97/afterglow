@@ -51,10 +51,10 @@ private slots:
     void saturation() {
         SaturationEffect e;
         QWidget* w = makeControls(e);
-        e.applyParameters({{"saturation", 12.5}, {"vibrancy", -7.0}});
+        e.applyParameters({{"saturation", 40.0}, {"vibrancy", -25.0}});
         const auto p = e.getParameters();
-        QCOMPARE(p.value("saturation").toDouble(), 12.5);
-        QCOMPARE(p.value("vibrancy").toDouble(),   -7.0);
+        QCOMPARE(p.value("saturation").toDouble(), 40.0);
+        QCOMPARE(p.value("vibrancy").toDouble(),   -25.0);
         delete w;
     }
 
