@@ -21,7 +21,7 @@
  */
 class IGpuEffect {
 public:
-    virtual ~IGpuEffect() = default;
+    virtual ~IGpuEffect() = default; // GCOVR_EXCL_LINE
 
     // Called when the shared pipeline context is (re)created.
     // Compile kernels into ctx and store them as member variables.

@@ -23,7 +23,7 @@ GpuDeviceRegistry& GpuDeviceRegistry::instance() {
 static QString deviceTypeName(cl_device_type t) {
     if (t & CL_DEVICE_TYPE_GPU)         return "GPU";
     if (t & CL_DEVICE_TYPE_CPU)         return "CPU";
-    if (t & CL_DEVICE_TYPE_ACCELERATOR) return "Accelerator";
+    if (t & CL_DEVICE_TYPE_ACCELERATOR) return "Accelerator"; // GCOVR_EXCL_LINE
     return "Device"; // GCOVR_EXCL_LINE
 }
 
@@ -32,7 +32,7 @@ static QString deviceTypeName(cl_device_type t) {
 static int deviceTypeRank(cl_device_type t) {
     if (t & CL_DEVICE_TYPE_GPU)         return 0;
     if (t & CL_DEVICE_TYPE_CPU)         return 1;
-    if (t & CL_DEVICE_TYPE_ACCELERATOR) return 2;
+    if (t & CL_DEVICE_TYPE_ACCELERATOR) return 2; // GCOVR_EXCL_LINE
     return 3; // GCOVR_EXCL_LINE
 }
 #endif

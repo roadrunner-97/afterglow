@@ -190,6 +190,33 @@ private slots:
 
     // ── Quarter-turn buttons ────────────────────────────────────────────────
 
+    // ── clampToImageBounds oversized branch ─────────────────────────────────
+    //
+    // A near-full manual crop + 45° rotation produces a rotated AABB whose
+    // half-extents exceed 0.5, triggering the in-place scale-down branch
+    // (otherwise unreached by tests with default-sized crops).
+    void clampToImageBounds_oversizedCrop_scalesDown() {
+        CropRotateEffect e;
+        // Mark as manual by applying off-default crop params + 45° rotation.
+        QMap<QString, QVariant> params;
+        params["angle"]   = 45.0;
+        params["cropX0"]  = 0.001;
+        params["cropY0"]  = 0.001;
+        params["cropX1"]  = 0.999;
+        params["cropY1"]  = 0.999;
+        e.applyParameters(params);
+        // setSourceImageSize → reFitOrClamp → clampToImageBounds with the
+        // oversized-rotated-AABB branch active.
+        e.setSourceImageSize(QSize(800, 600));
+        const QRectF c = e.userCropRect();
+        // Crop must have been scaled down to fit within [0, 1]² after rotation.
+        QVERIFY(c.width()  < 0.999);
+        QVERIFY(c.height() < 0.999);
+        // Centre stays roughly in the middle (the original was ~centred).
+        QVERIFY(qAbs(c.center().x() - 0.5) < 0.05);
+        QVERIFY(qAbs(c.center().y() - 0.5) < 0.05);
+    }
+
     void rotate90ccw_incrementsQuarterTurns() {
         CropRotateEffect e;
         QWidget* w = e.createControlsWidget();

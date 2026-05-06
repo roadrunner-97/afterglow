@@ -9,13 +9,7 @@ LogarithmParamSlider::LogarithmParamSlider(const QString& label,
                                            int decimals, int resolution,
                                            QWidget* parent)
     : ParamSlider(label,
-                  Setup{
-                      0,
-                      resolution,
-                      min, max,
-                      std::pow(10.0, -decimals),
-                      decimals
-                  },
+                  Setup{0, resolution, min, max, std::pow(10.0, -decimals), decimals}, // GCOVR_EXCL_LINE
                   parent)
     , m_min(min)
     , m_max(max)

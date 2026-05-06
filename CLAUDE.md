@@ -75,6 +75,7 @@ gcovr \
   --exclude "src/main\.cpp" \
   --exclude-throw-branches \
   --exclude-unreachable-branches \
+  --exclude-lines-by-pattern '^\s*\}\s*$' \
   --merge-mode-functions=merge-use-line-min \
   --gcov-ignore-errors=no_working_dir_found \
   --print-summary
@@ -87,7 +88,7 @@ gcovr \
 Some paths (OpenCL `cl::Error` catch blocks, enumeration fallbacks) cannot be driven from a unit test. Two mechanisms keep them out of the headline number:
 
 - **Source markers** — wrap the block with `// GCOVR_EXCL_START` / `// GCOVR_EXCL_STOP` (or `// GCOVR_EXCL_LINE` for a single line). The marker lines themselves are also excluded.
-- **gcovr flags** — `--exclude-throw-branches` drops compiler-synthesised exception branches (every potentially-throwing call emits one); `--exclude-unreachable-branches` drops branches the compiler proved unreachable. Both are on by default in the `coverage` target.
+- **gcovr flags** — `--exclude-throw-branches` drops compiler-synthesised exception branches (every potentially-throwing call emits one); `--exclude-unreachable-branches` drops branches the compiler proved unreachable; `--exclude-lines-by-pattern '^\s*\}\s*$'` drops standalone closing braces (gcov assigns destructor / RVO unwind code there even when the function ran). All three are on by default in the `coverage` target.
 
 ---
 

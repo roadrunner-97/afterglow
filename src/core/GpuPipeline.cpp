@@ -380,9 +380,12 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             scaledParams.insert("_srcH", m_height);
             if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
                                previewW, previewH, scaledParams)) {
+                // GCOVR_EXCL_START — every shipped IGpuEffect returns true
+                // unless it threw, in which case the surrounding catch fires.
                 qWarning() << "[GpuPipeline]" << call.effect->getName()
                            << "enqueueGpu() failed — aborting pipeline";
                 return {};
+                // GCOVR_EXCL_STOP
             }
         }
         m_queue.finish();

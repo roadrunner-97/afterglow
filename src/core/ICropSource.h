@@ -11,7 +11,7 @@
 // frame without any coupling to the crop plugin.
 class ICropSource {
 public:
-    virtual ~ICropSource() = default;
+    virtual ~ICropSource() = default; // GCOVR_EXCL_LINE
 
     // Crop rect in normalised source coordinates (0..1 on both axes).
     virtual QRectF userCropRect() const = 0;
@@ -23,7 +23,7 @@ public:
     // Optional sink: PhotoEditorApp pushes the loaded image's size in pixels
     // here so the crop owner can constrain its rect against the actual image
     // aspect ratio.  Default no-op for implementations that don't care.
-    virtual void setSourceImageSize(QSize) {}
+    virtual void setSourceImageSize(QSize) {} // GCOVR_EXCL_LINE
 };
 
 #endif // ICROPSOURCE_H

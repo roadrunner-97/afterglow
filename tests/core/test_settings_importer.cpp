@@ -337,6 +337,55 @@ private slots:
                                             &parsed, &error));
         QVERIFY(!error.isEmpty());
     }
+
+    // The dash-line ("- id:") seeds the entry's id; a separate "id:" at
+    // indent 4 overrides it.  Hand-edited sidecars do this; canonical
+    // exporter output does not.
+    void parses_idAtIndentFourOverridesDashLine() {
+        const QString yaml = QStringLiteral(
+            "effects:\n"
+            "  - id: \"old_id\"\n"
+            "    id: \"new_id\"\n"
+            "    enabled: true\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.effects.size(), 1);
+        QCOMPARE(s.effects[0].id, QString("new_id"));
+    }
+
+    // Same for "name:" at indent 4 — covers the parallel branch that
+    // updates the display-name field outside the dash line.
+    void parses_nameAtIndentFourOverridesDashLine() {
+        const QString yaml = QStringLiteral(
+            "effects:\n"
+            "  - id: \"x\"\n"
+            "    name: \"Pretty Name\"\n");
+        SettingsImporter::Settings s;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
+        QCOMPARE(s.effects.size(), 1);
+        QCOMPARE(s.effects[0].name, QString("Pretty Name"));
+    }
+
+    // applyToManager prefers id-keyed lookup over name-keyed lookup.
+    // Build a settings entry with a stale name but a current id; the
+    // effect must be matched and its parameters applied.
+    void applyToManager_prefersIdMatchOverNameMatch() {
+        EffectManager mgr;
+        auto owned = std::make_unique<FakeEffect>("Brightness");
+        auto* fake = owned.get();
+        mgr.addEffect(std::move(owned));
+
+        SettingsImporter::Settings s;
+        SettingsImporter::EffectSettings entry;
+        entry.id   = "brightness";          // matches FakeEffect's auto-id
+        entry.name = "WrongOldName";        // would not match by name
+        entry.parameters["k"] = 99;
+        s.effects.append(entry);
+
+        SettingsImporter::applyToManager(s, mgr);
+        QCOMPARE(fake->applyCalls(), 1);
+        QCOMPARE(fake->lastApplied().value("k").toInt(), 99);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSettingsImporter)

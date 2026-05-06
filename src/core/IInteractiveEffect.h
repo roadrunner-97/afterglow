@@ -55,15 +55,17 @@ struct ViewportTransform {
 // falls through to its own pan behaviour on false.
 class IInteractiveEffect {
 public:
-    virtual ~IInteractiveEffect() = default;
+    virtual ~IInteractiveEffect() = default; // GCOVR_EXCL_LINE
 
     virtual void    paintOverlay (QPainter& painter,  const ViewportTransform& vt) = 0;
     virtual bool    mousePress   (QMouseEvent* event, const ViewportTransform& vt) = 0;
     virtual bool    mouseMove    (QMouseEvent* event, const ViewportTransform& vt) = 0;
     virtual bool    mouseRelease (QMouseEvent* event, const ViewportTransform& vt) = 0;
+    // GCOVR_EXCL_START
     virtual QCursor cursorFor    (QPointF /*screenPx*/, const ViewportTransform& /*vt*/) {
         return {};
     }
+    // GCOVR_EXCL_STOP
 };
 
 #endif // IINTERACTIVEEFFECT_H

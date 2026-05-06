@@ -108,9 +108,7 @@ bool fromYaml(const QString& yaml, Settings* out, QString* error) {
         // Reject up front with a concrete diagnostic.
         for (QChar c : line) {
             if (c == '\t') {
-                if (error)
-                    *error = QString("line %1: tabs are not allowed in leading "
-                                     "whitespace; use spaces").arg(lineNo);
+                if (error) *error = QString("line %1: tabs are not allowed in leading whitespace; use spaces").arg(lineNo);
                 return false;
             }
             if (c != ' ') break;

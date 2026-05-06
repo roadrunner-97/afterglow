@@ -503,8 +503,10 @@ QWidget* ExposureEffect::createControlsWidget() {
         });
     };
 
-    // Graph to sliders: update the relevant slider 
+    // Graph to sliders: update the relevant slider
     // then refresh the curve and use liveParametersChanged once.
+    // GCOVR_EXCL_START — only invoked from real curve-handle drags in the UI;
+    // ToneCurveWidget is a private internal class so unit tests can't reach it.
     curve->onZoneChanged = [this, refreshCurve](int zone, float ev) {
         ParamSlider* zoneSliders[4] = { blacksParam, shadowsParam, highlightsParam, whitesParam };
         if (zoneSliders[zone]) {
@@ -524,6 +526,7 @@ QWidget* ExposureEffect::createControlsWidget() {
         refreshCurve();
         emit liveParametersChanged();
     };
+    // GCOVR_EXCL_STOP
     curve->onEditingFinished = [this]() { emit parametersChanged(); };
 
     // Global exposure — range ±5 EV, 0.01 steps

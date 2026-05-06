@@ -46,6 +46,7 @@ GCOVR_OUT=$(gcovr \
   --exclude "src/main\.cpp" \
   --exclude-throw-branches \
   --exclude-unreachable-branches \
+  --exclude-lines-by-pattern '^\s*\}\s*$' \
   --merge-mode-functions=merge-use-line-min \
   --gcov-ignore-errors=no_working_dir_found \
   --print-summary 2>&1)

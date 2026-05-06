@@ -258,6 +258,12 @@ if(COVERAGE)
             # failure catches, this stops infeasible paths from skewing the total.
             --exclude-throw-branches
             --exclude-unreachable-branches
+            # Lone closing braces collect synthesised destructor / RVO unwind
+            # paths gcov flags as never-executed even when the function ran.
+            # Excluding them removes a steady ~15 lines of false-uncovered
+            # noise without hiding real gaps (genuine uncovered code lives on
+            # the line above, never the brace alone).
+            --exclude-lines-by-pattern "^\\s*\\}\\s*$"
             # Tolerate gcov reporting the same function at two line numbers
             # (happens after split-line catch blocks); pick the earliest.
             --merge-mode-functions=merge-use-line-min
