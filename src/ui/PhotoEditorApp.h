@@ -10,6 +10,7 @@
 #include "ExportOptions.h"
 #include "GridView.h"
 #include "ImageProcessor.h"
+#include "SettingsImporter.h"
 #include "ViewportWidget.h"
 
 class QVBoxLayout;
@@ -68,6 +69,14 @@ private:
     void readCatalog(const QString& folder);
     void writeCatalog() const;
 
+    // Per-image edit state lives in <basename>.yml next to the source.  Always
+    // present once an image has been opened: loadFullImage creates one filled
+    // with defaults if missing, and onParametersChanged rewrites it on every
+    // committed edit so the sidecar tracks the live editor state.
+    QString sidecarPathFor(const QString& imagePath) const;
+    void writeSidecar() const;
+    void snapshotDefaults();
+
     EffectManager*  m_effects;
     ImageProcessor* m_processor;
     QImage          m_originalImage;
@@ -88,6 +97,11 @@ private:
     QString         m_currentFolder;
     QStringList     m_currentPaths;   // photos shown in the gallery, in display order
     QString         m_developedPath;  // path currently loaded in m_originalImage
+
+    // Constructor-time snapshot of every effect's enabled flag and parameter
+    // map.  Reapplied at the start of every loadFullImage so edits from a
+    // previously opened photo can't bleed onto the next one.
+    SettingsImporter::Settings m_defaults;
 
     // Set by saveImage() before kicking off the async export, consumed (and
     // cleared) by onExportComplete().  std::nullopt means "no options" — that

@@ -83,6 +83,7 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
 
     setupToolBar();
     setupUI();
+    snapshotDefaults();
     setWindowTitle("Afterglow");
 
     // Restore geometry and last-used directory from previous session
@@ -257,6 +258,7 @@ void PhotoEditorApp::setupMenuBar() {
         connect(act, &QAction::toggled, this, [this, i](bool on) {
             m_effects->setEnabled(i, on);
             triggerReprocess();
+            writeSidecar();
         });
     }
 
@@ -415,6 +417,14 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
     m_developedPath = path;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
+
+    // Reset every effect to its constructor-time state before touching the
+    // new image: otherwise a brightness/crop tweak from the previous photo
+    // would silently apply to this one too.  onImageLoaded then layers on
+    // any image-aware adjustments (e.g. as-shot WB), and the sidecar (if
+    // present) overrides on top of that.
+    SettingsImporter::applyToManager(m_defaults, *m_effects);
+
     // Notify effects with whatever metadata is already cheap to provide
     // (RAW colorTempK from LibRaw); the luminance histogram follows from
     // a worker thread because computing it on a 60MP RAW would otherwise
@@ -423,6 +433,19 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
         e.effect->onImageLoaded(meta);
     if (auto* cs = m_effects->cropSource())
         cs->setSourceImageSize(img.size());
+
+    const QString sidecar = sidecarPathFor(path);
+    if (QFile::exists(sidecar)) {
+        SettingsImporter::Settings parsed;
+        QString error;
+        if (SettingsImporter::readYaml(sidecar, &parsed, &error))
+            SettingsImporter::applyToManager(parsed, *m_effects);
+        else
+            qWarning() << "Sidecar parse failed for" << sidecar << ":" << error;
+    } else {
+        writeSidecar();
+    }
+
     syncViewportRotation();
     triggerReprocess();
 
@@ -505,6 +528,7 @@ void PhotoEditorApp::importSettings() {
     // applyToManager blocks parametersChanged on each effect; fire one
     // definitive reprocess now that the full state is in place.
     triggerReprocess();
+    writeSidecar();
 }
 
 void PhotoEditorApp::saveTestCase() {
@@ -629,6 +653,7 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
 void PhotoEditorApp::onParametersChanged() {
     syncViewportRotation();
     triggerReprocess();
+    writeSidecar();
 }
 
 void PhotoEditorApp::onLiveParametersChanged() {
@@ -872,6 +897,36 @@ void PhotoEditorApp::onLoupeNavigate(int direction) {
 void PhotoEditorApp::onMarkChanged(const QString& path, GridView::Mark mark) {
     m_gridView->setMark(path, mark);
     writeCatalog();
+}
+
+// ─── Per-image sidecar (.yml) ───────────────────────────────────────────────
+
+QString PhotoEditorApp::sidecarPathFor(const QString& imagePath) const {
+    const QFileInfo fi(imagePath);
+    return fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
+}
+
+void PhotoEditorApp::snapshotDefaults() {
+    m_defaults.image.clear();
+    m_defaults.effects.clear();
+    const auto& entries = m_effects->entries();
+    m_defaults.effects.reserve(entries.size());
+    for (const auto& e : entries) {
+        SettingsImporter::EffectSettings es;
+        es.id         = e.effect->getId();
+        es.name       = e.effect->getName();
+        es.enabled    = e.enabled;
+        es.parameters = e.effect->getParameters();
+        m_defaults.effects.append(es);
+    }
+}
+
+void PhotoEditorApp::writeSidecar() const {
+    if (m_currentImagePath.isEmpty()) return;
+    const QString path = sidecarPathFor(m_currentImagePath);
+    QString error;
+    if (!SettingsExporter::writeYaml(path, *m_effects, m_currentImagePath, &error))
+        qWarning() << "Sidecar write failed for" << path << ":" << error;
 }
 
 // ─── Per-folder catalog (triage marks) ──────────────────────────────────────
