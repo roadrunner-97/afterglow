@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QEvent>
+#include <QPoint>
 
 class QLabel;
 class QSlider;
@@ -11,13 +12,20 @@ class QDoubleSpinBox;
 /**
  * @brief A labeled slider+spinbox pair for a single numeric parameter.
  *
- * Encapsulates the label, QSlider, and QDoubleSpinBox trio so plugins
- * don't have to repeat the wiring boilerplate. The slider always updates
- * in real-time; the spinbox fires only on editingFinished.
+ * Mouse drag uses velocity-based gain rather than absolute mouse-position
+ * tracking: a slow drag is precise (~0.25× the slider's nominal pixel
+ * sensitivity), a fast flick is coarse (up to ~6×). Click-to-jump on the
+ * groove is disabled — every press anchors at the current value and
+ * accumulates from there. Hold Shift during a drag for forced fine-grain.
+ * Double-click resets to 0.
+ *
+ * Subclass and override sliderToValue()/valueToSlider() (plus pass a custom
+ * Setup to the protected constructor) for non-linear mappings —
+ * see LogarithmParamSlider.
  *
  * Usage:
- *   auto* p = new ParamSlider("Brightness", -100, 100);       // integer steps
- *   auto* p = new ParamSlider("Saturation", -20.0, 20.0, 0.1, 1); // 0.1 steps, 1 decimal
+ *   auto* p = new ParamSlider("Brightness", -100, 100);             // integer steps
+ *   auto* p = new ParamSlider("Saturation", -20.0, 20.0, 0.1, 1);   // 0.1 steps
  *   connect(p, &ParamSlider::valueChanged, this, [this](double v) { ... });
  */
 class ParamSlider : public QWidget {
@@ -34,19 +42,51 @@ public:
 
 signals:
     void valueChanged(double value);  // fires on every slider drag / spinbox sync
-    void editingFinished();           // fires only on slider release or spinbox commit
+    void editingFinished();           // fires only on slider release (with change) or spinbox commit
 
 protected:
+    // Subclass hook — describes the slider's integer range and the spinbox bounds.
+    struct Setup {
+        int    sliderMin;
+        int    sliderMax;
+        double spinMin;
+        double spinMax;
+        double spinStep;
+        int    spinDecimals;
+    };
+    ParamSlider(const QString& label, const Setup& s, QWidget* parent);
+
+    // Default mapping is linear via the public constructor's step.
+    // Override these in subclasses (e.g. LogarithmParamSlider) for non-linear curves.
+    virtual double sliderToValue(int sliderInt) const;
+    virtual int    valueToSlider(double v) const;
+
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    void buildUi(const QString& label, const Setup& s);
+    void wireSignals();
+    void updateLabel(double v);
+
+    bool   handleDragPress(QMouseEvent* me);
+    bool   handleDragMove(QMouseEvent* me);
+    bool   handleDragRelease(QMouseEvent* me);
+
     QLabel*         m_label;
     QSlider*        m_slider;
     QDoubleSpinBox* m_spinBox;
     QString         m_labelPrefix;
-    double          m_scaleFactor; // = 1.0 / step; slider runs at integer × scale
 
-    void updateLabel(double v);
+    // Default linear mapping uses this. Subclasses with their own mapping ignore it.
+    double m_scaleFactor = 1.0;
+
+    // Velocity-based drag state
+    bool   m_dragging         = false;
+    bool   m_dragMoved        = false;
+    int    m_dragStartInt     = 0;
+    double m_dragSliderPosF   = 0.0;
+    QPoint m_dragLastPos;
+    qulonglong m_dragLastTimeMs = 0;
 };
 
 #endif // PARAMSLIDER_H

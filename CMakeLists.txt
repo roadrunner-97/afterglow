@@ -66,6 +66,8 @@ pkg_check_modules(LIBRAW REQUIRED libraw)
 add_library(photoeditor_widgets STATIC
     src/widgets/ParamSlider.cpp
     src/widgets/ParamSlider.h
+    src/widgets/LogarithmParamSlider.cpp
+    src/widgets/LogarithmParamSlider.h
 )
 
 target_link_libraries(photoeditor_widgets
