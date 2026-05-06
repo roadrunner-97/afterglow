@@ -142,6 +142,33 @@ private slots:
         QVERIFY(!cache.proof(m_img).isNull());
     }
 
+    void proof_coldCache_loadsFromDisk() {
+        // Store → clear LRU → proof() must fall through to disk.
+        QImage img(8, 8, QImage::Format_RGB32);
+        img.fill(qRgb(77, 77, 77));
+
+        ProofCache cache;
+        cache.store(m_img, img);
+        cache.clear();  // evict in-memory; disk file survives
+
+        QVERIFY(!cache.proof(m_img).isNull());
+    }
+
+    void store_updatesExistingLruEntry() {
+        // Calling store() twice for the same path exercises lruInsert's
+        // "key already in cache — promote and replace" branch.
+        QImage img1(8, 8, QImage::Format_RGB32);
+        img1.fill(Qt::red);
+        QImage img2(8, 8, QImage::Format_RGB32);
+        img2.fill(Qt::blue);
+
+        ProofCache cache;
+        cache.store(m_img, img1);
+        cache.store(m_img, img2);  // update branch
+
+        QVERIFY(!cache.proof(m_img).isNull());
+    }
+
     void proof_hotCacheHit_survivesRemovedDiskFile() {
         // Store puts the image in both disk and LRU.  Remove the disk copy
         // without calling invalidate() — the LRU entry must still be returned.
