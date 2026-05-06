@@ -635,6 +635,11 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
             result = applyCropAndRotate(result, *cs);
     }
 
+    // chooseDestination() resolves opts.subfolder into the path but never
+    // touches the filesystem.  Create the parent dir here so a token-driven
+    // subfolder (e.g. {date}) materialises on first export.
+    QDir().mkpath(QFileInfo(path).absolutePath());
+
     // With opts: explicit format hint + quality (saveImage path).
     // Without: legacy QImage::save behaviour, used by saveTestCase().
     const bool ok = !result.isNull() && (opts

@@ -27,9 +27,17 @@ QString chooseDestination(const ExportOptions::Options& opts,
     if (!exists)
         exists = [](const QString& p) { return QFile::exists(p); };
 
-    const QString stem      = resolvePattern(opts.filenamePattern, sourcePath, batchIndex);
-    const QString ext       = ExportOptions::extensionFor(opts.format);
-    const QDir    dir(opts.destinationDir);
+    const QString stem = resolvePattern(opts.filenamePattern, sourcePath, batchIndex);
+    const QString ext  = ExportOptions::extensionFor(opts.format);
+
+    QString baseDir = opts.destinationDir;
+    if (!opts.subfolder.isEmpty()) {
+        const QString sub =
+            resolvePattern(opts.subfolder, sourcePath, batchIndex).trimmed();
+        if (!sub.isEmpty())
+            baseDir = QDir(baseDir).filePath(sub);
+    }
+    const QDir    dir(baseDir);
     const QString candidate = dir.filePath(stem + "." + ext);
 
     using Policy = ExportOptions::OverwritePolicy;

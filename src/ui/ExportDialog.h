@@ -36,13 +36,16 @@ private:
     void persistToSettings() const;
     void accept() override;
 
-    QLineEdit*   m_destEdit       = nullptr;
-    QPushButton* m_browseBtn      = nullptr;
-    QLineEdit*   m_patternEdit    = nullptr;
-    QComboBox*   m_formatCombo    = nullptr;
-    QSlider*     m_qualitySlider  = nullptr;
-    QLabel*      m_qualityLabel   = nullptr;
-    QComboBox*   m_conflictCombo  = nullptr;
+    QLineEdit*   m_destEdit         = nullptr;
+    QPushButton* m_browseBtn        = nullptr;
+    QLineEdit*   m_patternEdit      = nullptr;
+    QPushButton* m_subfolderToggle  = nullptr;
+    QWidget*     m_subfolderBody    = nullptr;
+    QLineEdit*   m_subfolderEdit    = nullptr;
+    QComboBox*   m_formatCombo      = nullptr;
+    QSlider*     m_qualitySlider    = nullptr;
+    QLabel*      m_qualityLabel     = nullptr;
+    QComboBox*   m_conflictCombo    = nullptr;
 };
 
 #endif // EXPORTDIALOG_H

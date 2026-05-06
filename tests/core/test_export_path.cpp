@@ -162,6 +162,78 @@ private slots:
             QString("/some/where/else/out_005.png"));
     }
 
+    // ── Subfolder ──────────────────────────────────────────────────────────
+
+    void chooseDestination_emptySubfolderWritesIntoDestination() {
+        // Backward compat: existing callers that never set subfolder.
+        ExportOptions::Options opts;
+        opts.destinationDir   = "/out";
+        opts.filenamePattern  = "{name}";
+        opts.format           = ExportOptions::Format::JPEG;
+        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(
+            opts, "/x/photo.cr2", 1,
+            [](const QString&) { return false; }),
+            QString("/out/photo.jpg"));
+    }
+
+    void chooseDestination_subfolderJoinsBetweenDestAndStem() {
+        ExportOptions::Options opts;
+        opts.destinationDir   = "/out";
+        opts.subfolder        = "exports/2026";
+        opts.filenamePattern  = "{name}";
+        opts.format           = ExportOptions::Format::JPEG;
+        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(
+            opts, "/x/photo.cr2", 1,
+            [](const QString&) { return false; }),
+            QString("/out/exports/2026/photo.jpg"));
+    }
+
+    void chooseDestination_subfolderResolvesTokens() {
+        // {name} in subfolder, distinct from stem — proves tokens are
+        // resolved on the subfolder string too, not just on the filename.
+        ExportOptions::Options opts;
+        opts.destinationDir   = "/out";
+        opts.subfolder        = "{name}";
+        opts.filenamePattern  = "{name}_{n}";
+        opts.format           = ExportOptions::Format::PNG;
+        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(
+            opts, "/x/sun.dng", 4,
+            [](const QString&) { return false; }),
+            QString("/out/sun/sun_004.png"));
+    }
+
+    void chooseDestination_subfolderTrimsWhitespace() {
+        ExportOptions::Options opts;
+        opts.destinationDir   = "/out";
+        opts.subfolder        = "   ";  // all whitespace → treated as empty
+        opts.filenamePattern  = "{name}";
+        opts.format           = ExportOptions::Format::JPEG;
+        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(
+            opts, "/x/photo.cr2", 1,
+            [](const QString&) { return false; }),
+            QString("/out/photo.jpg"));
+    }
+
+    void chooseDestination_subfolderConflictUsesSuffixedSibling() {
+        // Conflict resolution still operates on the leaf name within the
+        // resolved subfolder, not in the parent destinationDir.
+        const QSet<QString> taken { "/out/sub/photo.jpg" };
+        ExportOptions::Options opts;
+        opts.destinationDir   = "/out";
+        opts.subfolder        = "sub";
+        opts.filenamePattern  = "{name}";
+        opts.format           = ExportOptions::Format::JPEG;
+        opts.onConflict       = ExportOptions::OverwritePolicy::AppendSuffix;
+        QCOMPARE(ExportPath::chooseDestination(
+            opts, "/x/photo.cr2", 1,
+            [&](const QString& q) { return taken.contains(q); }),
+            QString("/out/sub/photo_1.jpg"));
+    }
+
     // ── ExportOptions helpers ──────────────────────────────────────────────
 
     void extensionFor_coversAllFormats() {

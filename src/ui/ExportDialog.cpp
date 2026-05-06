@@ -12,12 +12,16 @@
 #include <QSlider>
 #include <QVBoxLayout>
 
+#include "Stylesheets.h"
+
 namespace {
-constexpr const char* kKeyDir       = "export/destinationDir";
-constexpr const char* kKeyPattern   = "export/filenamePattern";
-constexpr const char* kKeyFormat    = "export/format";
-constexpr const char* kKeyQuality   = "export/jpegQuality";
-constexpr const char* kKeyConflict  = "export/onConflict";
+constexpr const char* kKeyDir               = "export/destinationDir";
+constexpr const char* kKeyPattern           = "export/filenamePattern";
+constexpr const char* kKeySubfolder         = "export/subfolder";
+constexpr const char* kKeySubfolderExpanded = "export/subfolderExpanded";
+constexpr const char* kKeyFormat            = "export/format";
+constexpr const char* kKeyQuality           = "export/jpegQuality";
+constexpr const char* kKeyConflict          = "export/onConflict";
 } // namespace
 
 ExportDialog::ExportDialog(QWidget* parent)
@@ -54,6 +58,40 @@ ExportDialog::ExportDialog(QWidget* parent)
         hint->setWordWrap(true);
         // Spacer column under the label keeps the hint flush with the field.
         form->addRow(QString(), hint);
+    }
+
+    // ── Subfolder (collapsed by default) ──────────────────────────────────
+    {
+        auto* hdr = new QHBoxLayout();
+        hdr->setContentsMargins(0, 0, 0, 0);
+        m_subfolderToggle = new QPushButton("+");
+        m_subfolderToggle->setStyleSheet(Stylesheets::collapseButton());
+        m_subfolderToggle->setToolTip("Show or hide the subfolder field.");
+        m_subfolderToggle->setMaximumWidth(28);
+        hdr->addStretch();
+        hdr->addWidget(m_subfolderToggle);
+        form->addRow("Subfolder:", hdr);
+
+        m_subfolderBody = new QWidget();
+        auto* body = new QVBoxLayout(m_subfolderBody);
+        body->setContentsMargins(0, 0, 0, 0);
+        m_subfolderEdit = new QLineEdit();
+        m_subfolderEdit->setPlaceholderText("optional — created if it doesn't exist");
+        body->addWidget(m_subfolderEdit);
+        auto* sfHint = new QLabel(
+            "Nested paths allowed (e.g. <code>2026/exports</code>). "
+            "Same tokens as the filename pattern are resolved here too.");
+        sfHint->setTextFormat(Qt::RichText);
+        sfHint->setWordWrap(true);
+        body->addWidget(sfHint);
+        form->addRow(QString(), m_subfolderBody);
+        m_subfolderBody->setVisible(false);
+
+        connect(m_subfolderToggle, &QPushButton::clicked, this, [this]() {
+            const bool v = !m_subfolderBody->isVisible();
+            m_subfolderBody->setVisible(v);
+            m_subfolderToggle->setText(v ? "−" : "+");
+        });
     }
 
     // ── Format ────────────────────────────────────────────────────────────
@@ -113,6 +151,7 @@ void ExportDialog::setDefaultDestinationDir(const QString& dir) {
 ExportOptions::Options ExportDialog::options() const {
     ExportOptions::Options opts;
     opts.destinationDir  = m_destEdit->text();
+    opts.subfolder       = m_subfolderEdit->text();
     opts.filenamePattern = m_patternEdit->text();
     opts.format          = static_cast<ExportOptions::Format>(
         m_formatCombo->currentData().toInt());
@@ -140,8 +179,18 @@ void ExportDialog::onFormatChanged(int /*idx*/) {
 
 void ExportDialog::loadFromSettings() {
     QSettings s("Afterglow", "Afterglow");
-    m_destEdit   ->setText(s.value(kKeyDir,     QString()).toString());
-    m_patternEdit->setText(s.value(kKeyPattern, "{name}").toString());
+    m_destEdit     ->setText(s.value(kKeyDir,       QString()).toString());
+    m_patternEdit  ->setText(s.value(kKeyPattern,   "{name}").toString());
+    m_subfolderEdit->setText(s.value(kKeySubfolder, QString()).toString());
+
+    // Auto-expand if there's content to show, even if the user collapsed it
+    // last time — otherwise a non-empty subfolder silently applies, which
+    // surprises (cf. the original concern that drove this whole field).
+    const bool hasSubfolder = !m_subfolderEdit->text().isEmpty();
+    const bool expanded = hasSubfolder ||
+        s.value(kKeySubfolderExpanded, false).toBool();
+    m_subfolderBody  ->setVisible(expanded);
+    m_subfolderToggle->setText(expanded ? "−" : "+");
 
     const int fmt      = s.value(kKeyFormat,
         static_cast<int>(ExportOptions::Format::JPEG)).toInt();
@@ -157,11 +206,13 @@ void ExportDialog::loadFromSettings() {
 
 void ExportDialog::persistToSettings() const {
     QSettings s("Afterglow", "Afterglow");
-    s.setValue(kKeyDir,      m_destEdit->text());
-    s.setValue(kKeyPattern,  m_patternEdit->text());
-    s.setValue(kKeyFormat,   m_formatCombo->currentData().toInt());
-    s.setValue(kKeyQuality,  m_qualitySlider->value());
-    s.setValue(kKeyConflict, m_conflictCombo->currentData().toInt());
+    s.setValue(kKeyDir,               m_destEdit->text());
+    s.setValue(kKeyPattern,           m_patternEdit->text());
+    s.setValue(kKeySubfolder,         m_subfolderEdit->text());
+    s.setValue(kKeySubfolderExpanded, m_subfolderBody->isVisible());
+    s.setValue(kKeyFormat,            m_formatCombo->currentData().toInt());
+    s.setValue(kKeyQuality,           m_qualitySlider->value());
+    s.setValue(kKeyConflict,          m_conflictCombo->currentData().toInt());
 }
 
 void ExportDialog::accept() {

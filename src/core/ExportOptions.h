@@ -16,6 +16,11 @@ enum class OverwritePolicy {
 struct Options {
     QString destinationDir;
 
+    // Optional subfolder (or nested path) below destinationDir.  Same brace
+    // tokens as filenamePattern are resolved before the join, so e.g. "{date}"
+    // produces a per-day folder.  Empty → write straight into destinationDir.
+    QString subfolder;
+
     // Pattern with brace tokens — {name}, {n}, {date}.  Anything outside a
     // recognised token (literal text, unknown tokens) passes through verbatim.
     QString filenamePattern = "{name}";
