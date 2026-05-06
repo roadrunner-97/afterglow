@@ -176,7 +176,7 @@ QWidget* UnsharpEffect::createControlsWidget() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    amountParam = new ParamSlider("Amount", 0.0, 5.0, 0.1, 1);
+    amountParam = new ParamSlider("Amount", 0.0, 5.0, 0.01, 2);
     amountParam->setValue(1.0);
     amountParam->setToolTip("Sharpening strength. 1.0 is a standard boost; values above 2 can produce visible edge halos.");
     connect(amountParam, &ParamSlider::editingFinished, this, [this]() {

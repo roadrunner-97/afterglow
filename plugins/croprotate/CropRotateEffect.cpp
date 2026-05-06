@@ -42,7 +42,7 @@ QWidget* CropRotateEffect::createControlsWidget() {
     layout->setSpacing(8);
 
     // ── Rotation slider ─────────────────────────────────────────────────────
-    m_angleSlider = new ParamSlider("Rotation", -45.0, 45.0, 0.1, 1);
+    m_angleSlider = new ParamSlider("Rotation", -45.0, 45.0, 0.01, 2);
     connect(m_angleSlider, &ParamSlider::valueChanged, this, [this](double v) {
         m_angleDeg = static_cast<float>(v);
         reFitOrClamp();

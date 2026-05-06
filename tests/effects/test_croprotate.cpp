@@ -295,9 +295,9 @@ private slots:
         QVERIFY(!sliders.isEmpty());
         auto* qs = sliders.first()->findChild<QSlider*>();
         QVERIFY(qs);
-        // Scale: range is -45..45 with step 0.1, so slider int = value / 0.1
-        // We want m_angleDeg = 10°, so set slider to 100 ticks from 0
-        qs->setValue(100);  // 100 * 0.1 = 10°
+        // Scale: range is -45..45 with step 0.01, so slider int = value / 0.01
+        // We want m_angleDeg = 10°, so set slider to 1000 ticks from 0
+        qs->setValue(1000);  // 1000 * 0.01 = 10°
 
         // One CCW turn: quarterTurns=1
         auto btns = w->findChildren<QPushButton*>();
@@ -1140,7 +1140,7 @@ private slots:
         // 30° is bigger than 1×1, so the clamp must shrink the crop.
         auto* slider = w->findChild<QSlider*>();
         QVERIFY(slider);
-        slider->setValue(300);  // 300 * 0.1 = 30°
+        slider->setValue(3000);  // 3000 * 0.01 = 30°
 
         const QRectF c = e.userCropRect();
         const double half = std::abs(std::cos(30.0 * M_PI / 180.0)) * c.width()  * 0.5
@@ -1160,7 +1160,7 @@ private slots:
         // Apply a 20° rotation via the slider.
         auto* slider = w->findChild<QSlider*>();
         QVERIFY(slider);
-        slider->setValue(200);
+        slider->setValue(2000);
 
         const QRectF before = e.userCropRect();
         const double cxBefore = before.center().x();
@@ -1217,7 +1217,7 @@ private slots:
         e.setSourceImageSize({100, 100});
         QWidget* w = e.createControlsWidget();
         auto* slider = w->findChild<QSlider*>();
-        slider->setValue(300);   // 30°
+        slider->setValue(3000);   // 30°
 
         const QRectF c = e.userCropRect();
         const double expected = 1.0 / (std::cos(30.0 * M_PI / 180.0)
@@ -1237,7 +1237,7 @@ private slots:
         e.setSourceImageSize({1600, 900});       // 16:9
         QWidget* w = e.createControlsWidget();
         auto* slider = w->findChild<QSlider*>();
-        slider->setValue(200);   // 20°
+        slider->setValue(2000);   // 20°
 
         const QRectF c = e.userCropRect();
         const double a = 20.0 * M_PI / 180.0;
@@ -1257,7 +1257,7 @@ private slots:
         e.setSourceImageSize({100, 100});
         QWidget* w = e.createControlsWidget();
         auto* slider = w->findChild<QSlider*>();
-        slider->setValue(300);   // 30°
+        slider->setValue(3000);   // 30°
         QVERIFY(e.userCropRect().width() < 0.9);
 
         slider->setValue(0);
@@ -1280,7 +1280,7 @@ private slots:
 
         // Apply rotation; the crop should keep the same size (still fits).
         auto* slider = w->findChild<QSlider*>();
-        slider->setValue(50);    // 5°
+        slider->setValue(500);    // 5°
         const QRectF after = e.userCropRect();
         QCOMPARE(after.size(), before.size());
     }
@@ -1306,7 +1306,7 @@ private slots:
 
         // Now rotation should auto-fit again.
         auto* slider = w->findChild<QSlider*>();
-        slider->setValue(300);   // 30°
+        slider->setValue(3000);   // 30°
         QVERIFY(e.userCropRect().width() < 0.9);
     }
 
@@ -1317,7 +1317,7 @@ private slots:
         e.setSourceImageSize({100, 100});
         QWidget* w = e.createControlsWidget();
         auto* slider = w->findChild<QSlider*>();
-        slider->setValue(300);   // 30° — square auto-fit ≈ 0.732
+        slider->setValue(3000);   // 30° — square auto-fit ≈ 0.732
         const double squareSize = e.userCropRect().width();
 
         // Switch to a 16:9 image: auto-fit should change.

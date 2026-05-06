@@ -256,12 +256,12 @@ private slots:
         QSignalSpy spy(&e, &PhotoEditorEffect::liveParametersChanged);
 
         // exposure ParamSlider is the first child ParamSlider.
-        // scaleFactor = 10 (step=0.1), so int value 10 → 1.0 EV.
+        // scaleFactor = 100 (step=0.01), so int value 100 → 1.0 EV.
         auto* paramSlider = w->findChildren<ParamSlider*>().value(0);
         QVERIFY(paramSlider);
         auto* qslider = paramSlider->findChild<QSlider*>();
         QVERIFY(qslider);
-        qslider->setValue(10);
+        qslider->setValue(100);
 
         QCOMPARE(spy.count(), 1);
     }
@@ -299,26 +299,26 @@ private slots:
     // the backing store is set up. The first paint event then draws the
     // "Base: +1.0 EV" label (lines 381–391) with a cleanly initialised QPainter.
     //
-    // The exposure ParamSlider uses range [-5.0, 5.0] with step 0.1
-    // (scaleFactor=10), giving QSlider integer range [-50, 50].  We find it
+    // The exposure ParamSlider uses range [-5.0, 5.0] with step 0.01
+    // (scaleFactor=100), giving QSlider integer range [-500, 500].  We find it
     // explicitly by range to be robust against any ordering uncertainty.
     void toneCurveWidget_paintEvent_withLabel() {
         ExposureEffect e;
         QWidget* w = e.createControlsWidget();
         w->resize(300, 500);
 
-        // Find the exposure QSlider by its unique integer range ±50.
+        // Find the exposure QSlider by its unique integer range ±500.
         QSlider* exposureQSlider = nullptr;
         for (auto* ps : w->findChildren<ParamSlider*>()) {
             auto* qs = ps->findChild<QSlider*>();
-            if (qs && qs->minimum() == -50 && qs->maximum() == 50) {
+            if (qs && qs->minimum() == -500 && qs->maximum() == 500) {
                 exposureQSlider = qs;
                 break;
             }
         }
         QVERIFY(exposureQSlider);
-        // int 10 / scaleFactor 10 = 1.0 EV → refreshCurve → setParams(global=1.0).
-        exposureQSlider->setValue(10);
+        // int 100 / scaleFactor 100 = 1.0 EV → refreshCurve → setParams(global=1.0).
+        exposureQSlider->setValue(100);
 
         w->show();
         QApplication::processEvents();  // first paint: m_z.global = 1.0 → label shown
