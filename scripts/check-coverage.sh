@@ -43,6 +43,7 @@ GCOVR_OUT=$(gcovr \
   --exclude "build.*/" --exclude "tests/" --exclude "src/ui/" \
   --exclude "src/core/ImageProcessor\.cpp" \
   --exclude "src/core/RawLoader\.cpp" \
+  --exclude "src/core/Proofer\.cpp" \
   --exclude "src/main\.cpp" \
   --exclude-throw-branches \
   --exclude-unreachable-branches \

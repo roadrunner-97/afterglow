@@ -82,11 +82,18 @@ LoupeView::LoupeView(QWidget* parent)
     : QWidget(parent)
 {
     setFocusPolicy(Qt::StrongFocus);
-    // Image area gets the dark photo-viewing background; the sidebar
-    // restyles itself in buildSidebar() so it matches the rest of the
-    // 70s-warm chrome instead of inheriting this.
     setStyleSheet(QString("LoupeView { background-color: #1e1e1e; }"));
     buildSidebar();
+
+    // "Proofing…" overlay — shown in the top-right of the image area while
+    // the background proofer generates this photo's proof.
+    m_proofingLabel = new QLabel("Proofing…", this);
+    m_proofingLabel->setStyleSheet(
+        "QLabel { color: #e0d8c0; background: rgba(30,30,30,160);"
+        "  border-radius: 4px; padding: 3px 8px; font-size: 11px; }");
+    m_proofingLabel->adjustSize();
+    m_proofingLabel->hide();
+    m_proofingLabel->raise();
 }
 
 void LoupeView::buildSidebar()
@@ -162,6 +169,26 @@ void LoupeView::buildSidebar()
 
     outer->addLayout(btnRow);
 
+    // ── Camera JPEG toggle ────────────────────────────────────────────────
+    m_btnCameraJpeg = new QPushButton("Camera JPEG", m_sidebar);
+    m_btnCameraJpeg->setCheckable(true);
+    m_btnCameraJpeg->setToolTip(
+        "Compare against the camera's embedded JPEG (as-shot, no edits applied).\n"
+        "Uncheck to return to the pipeline-rendered proof.");
+    m_btnCameraJpeg->setStyleSheet(QString(
+        "QPushButton { color: %1; background: %2; border: 1px solid %3;"
+        "  border-radius: 3px; padding: 5px 8px; font-size: 12px; }"
+        "QPushButton:hover   { background: %4; }"
+        "QPushButton:checked { background: %5; color: %6; border-color: %5; }"
+        ).arg(Theme::TEXT_PRIMARY, Theme::BG_MAIN, Theme::BORDER,
+              Theme::COLLAPSE_HOVER, Theme::CHECKED_BG, Theme::CHECKED_TEXT));
+    connect(m_btnCameraJpeg, &QPushButton::toggled, this,
+            [this](bool checked) {
+        m_userForcedCameraJpeg = checked;
+        updateDisplayedImage();
+    });
+    outer->addWidget(m_btnCameraJpeg);
+
     auto* sep = new QFrame(m_sidebar);
     sep->setFrameShape(QFrame::HLine);
     sep->setStyleSheet(QString("color: %1;").arg(Theme::BORDER_PANEL));
@@ -211,10 +238,40 @@ void LoupeView::buildSidebar()
     m_sidebar->raise();
 }
 
-void LoupeView::setImage(QImage image)
+void LoupeView::setProofImage(QImage proof)
 {
-    m_image = image;
-    resetView();
+    m_proofImage = proof;
+    // Reset the manual toggle so arriving proofs auto-display, but only if
+    // the user hasn't explicitly requested Camera JPEG for this photo.
+    if (!m_userForcedCameraJpeg)
+        updateDisplayedImage();
+}
+
+void LoupeView::setCameraJpegImage(QImage jpeg)
+{
+    m_cameraJpegImage = jpeg;
+    // Reset per-photo toggle state when a new photo is loaded.
+    m_userForcedCameraJpeg = false;
+    {
+        QSignalBlocker sb(m_btnCameraJpeg);
+        m_btnCameraJpeg->setChecked(false);
+    }
+    m_proofImage = {};   // clear stale proof from previous photo
+    updateDisplayedImage();
+}
+
+void LoupeView::setProofingState(bool proofing)
+{
+    m_proofingLabel->setVisible(proofing);
+}
+
+void LoupeView::updateDisplayedImage()
+{
+    // Show the proof if available and the user hasn't forced camera view.
+    const bool useProof = !m_proofImage.isNull() && !m_userForcedCameraJpeg;
+    m_image = useProof ? m_proofImage : m_cameraJpegImage;
+    if (!m_image.isNull())
+        resetView();
     update();
 }
 
@@ -342,6 +399,12 @@ void LoupeView::resizeEvent(QResizeEvent* event)
     if (m_sidebar) {
         const int w = std::min(SIDEBAR_W, width());
         m_sidebar->setGeometry(width() - w, 0, w, height());
+    }
+    if (m_proofingLabel) {
+        const QRect imgR = imageRect();
+        const int margin = 8;
+        m_proofingLabel->move(imgR.right() - m_proofingLabel->width() - margin,
+                              imgR.top() + margin);
     }
     clampCentre();
     update();

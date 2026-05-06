@@ -5,11 +5,14 @@
 #include <QImage>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <memory>
 #include <optional>
 #include "EffectManager.h"
 #include "ExportOptions.h"
 #include "GridView.h"
 #include "ImageProcessor.h"
+#include "ProofCache.h"
+#include "Proofer.h"
 #include "SettingsImporter.h"
 #include "ViewportWidget.h"
 
@@ -26,6 +29,10 @@ class PhotoEditorApp : public QMainWindow {
 public:
     explicit PhotoEditorApp(EffectManager* effectManager, QWidget* parent = nullptr);
     ~PhotoEditorApp() override;
+
+    // Call once after construction with a dedicated EffectManager (separate
+    // instances from the Develop pipeline) to enable proof cache generation.
+    void initProofer(std::unique_ptr<EffectManager> prooferEffects);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -74,7 +81,7 @@ private:
     // with defaults if missing, and onParametersChanged rewrites it on every
     // committed edit so the sidecar tracks the live editor state.
     QString sidecarPathFor(const QString& imagePath) const;
-    void writeSidecar() const;
+    void writeSidecar();
     void snapshotDefaults();
 
     EffectManager*  m_effects;
@@ -97,6 +104,9 @@ private:
     QString         m_currentFolder;
     QStringList     m_currentPaths;   // photos shown in the gallery, in display order
     QString         m_developedPath;  // path currently loaded in m_originalImage
+
+    ProofCache*     m_proofCache = nullptr;
+    Proofer*        m_proofer    = nullptr;
 
     // Constructor-time snapshot of every effect's enabled flag and parameter
     // map.  Reapplied at the start of every loadFullImage so edits from a

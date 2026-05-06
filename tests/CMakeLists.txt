@@ -8,6 +8,40 @@ add_executable(test_effect_manager
 )
 
 # ---------------------------------------------------------------------------
+# ProofCache tests — disk + in-memory LRU, no GPU required (GUILESS)
+# ---------------------------------------------------------------------------
+add_executable(test_proof_cache
+    core/test_proof_cache.cpp
+)
+target_link_libraries(test_proof_cache
+    PRIVATE
+        photoeditor_core
+        Qt6::Test Qt6::Core Qt6::Gui
+)
+set_target_properties(test_proof_cache PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME ProofCache COMMAND test_proof_cache)
+
+# ---------------------------------------------------------------------------
+# Proofer queue-management tests — no GPU required (GUILESS)
+# ---------------------------------------------------------------------------
+add_executable(test_proofer
+    core/test_proofer.cpp
+)
+target_link_libraries(test_proofer
+    PRIVATE
+        photoeditor_core
+        Qt6::Test Qt6::Core Qt6::Gui
+)
+set_target_properties(test_proofer PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME Proofer COMMAND test_proofer)
+
+# ---------------------------------------------------------------------------
 # GpuPipeline tests — exercises run(), initGpuKernels(), enqueueGpu() for
 # all 7 effects plus the viewportOnly fast path.
 # ---------------------------------------------------------------------------

@@ -15,8 +15,16 @@ class LoupeView : public QWidget {
 public:
     explicit LoupeView(QWidget* parent = nullptr);
 
-    // Replace the displayed image. Resets to fit-zoom centred.
-    void setImage(QImage image);
+    // Set the pipeline-rendered proof.  Displayed automatically unless the
+    // user has toggled to Camera JPEG view.  Pass a null QImage to clear.
+    void setProofImage(QImage proof);
+
+    // Set the camera-embedded JPEG (shown as placeholder while proofing, or
+    // when the user activates the "Camera JPEG" toggle).
+    void setCameraJpegImage(QImage jpeg);
+
+    // Show or hide the "Proofing…" overlay in the top-right of the image area.
+    void setProofingState(bool proofing);
 
     // Push EXIF / camera fields into the sidebar table.  Pass an empty
     // ImageMetadata to clear all rows back to "—".
@@ -26,7 +34,7 @@ public:
     // leaves all three buttons unchecked.
     void setCurrentMark(GridView::Mark m);
 
-    // Reset to fit-zoom centred (also called automatically by setImage).
+    // Reset to fit-zoom centred (also called automatically when the image changes).
     void resetView();
 
 signals:
@@ -67,7 +75,14 @@ private:
     // a second time cycles back to None, matching GridView's behaviour.
     void emitMarkToggle(GridView::Mark requested);
 
-    QImage  m_image;          // null until setImage()
+    // Pick which image to render based on the current toggle state.
+    void updateDisplayedImage();
+
+    QImage  m_proofImage;                // pipeline-rendered proof
+    QImage  m_cameraJpegImage;           // camera-embedded JPEG
+    QImage  m_image;                     // currently displayed (proof or JPEG)
+    bool    m_userForcedCameraJpeg = false; // true after user clicks toggle
+
     float   m_zoom    = 1.0f; // 1.0 = fit-to-widget; >1 zooms in
     QPointF m_centre  = {0.5f, 0.5f}; // image-space normalised
     QPoint  m_lastMousePos;
@@ -76,18 +91,20 @@ private:
     // Sidebar widgets — all live as direct children of LoupeView and are
     // positioned manually in resizeEvent().  Holding pointers here lets
     // setMetadata() swap text without rebuilding the layout.
-    QWidget*     m_sidebar  = nullptr;
-    QPushButton* m_btnAccept  = nullptr;
-    QPushButton* m_btnRefine  = nullptr;
-    QPushButton* m_btnDecline = nullptr;
-    QLabel*      m_valCamera  = nullptr;
-    QLabel*      m_valLens    = nullptr;
-    QLabel*      m_valIso     = nullptr;
-    QLabel*      m_valShutter = nullptr;
-    QLabel*      m_valAperture= nullptr;
-    QLabel*      m_valFocal   = nullptr;
-    QLabel*      m_valDate    = nullptr;
-    QLabel*      m_valTempK   = nullptr;
+    QWidget*     m_sidebar        = nullptr;
+    QPushButton* m_btnAccept      = nullptr;
+    QPushButton* m_btnRefine      = nullptr;
+    QPushButton* m_btnDecline     = nullptr;
+    QPushButton* m_btnCameraJpeg  = nullptr;
+    QLabel*      m_proofingLabel  = nullptr;  // "Proofing…" overlay
+    QLabel*      m_valCamera      = nullptr;
+    QLabel*      m_valLens        = nullptr;
+    QLabel*      m_valIso         = nullptr;
+    QLabel*      m_valShutter     = nullptr;
+    QLabel*      m_valAperture    = nullptr;
+    QLabel*      m_valFocal       = nullptr;
+    QLabel*      m_valDate        = nullptr;
+    QLabel*      m_valTempK       = nullptr;
 
     GridView::Mark m_currentMark = GridView::Mark::None;
 };

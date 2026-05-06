@@ -16,6 +16,9 @@ public:
     // Pressing the same key twice cycles back to None (the resting state).
     enum class Mark : char { None = 0, Accept = 'A', Refine = 'R', Decline = 'D' };
 
+    // Proof status shown as a small dot in each thumbnail's corner.
+    enum class ProofStatus { NotProofed, Proofing, Proofed };
+
     explicit GridView(QWidget* parent = nullptr);
 
     // Replace the displayed list. Items show a placeholder icon until
@@ -30,6 +33,9 @@ public:
     // displays it (colored border).
     void setMark(const QString& path, Mark m);
     Mark mark(const QString& path) const;
+
+    // Update the proof status dot for a single photo.
+    void setProofStatus(const QString& path, ProofStatus status);
 
 signals:
     // Emitted on double-click or Enter on a cell.
@@ -49,6 +55,7 @@ protected:
 private:
     QListWidget* m_list;
     QHash<QString, Mark> m_marks;
+    QHash<QString, ProofStatus> m_proofStatus;
     int m_iconPx = 160;  // initial cell edge in pixels
     void applyIconSize();
 };

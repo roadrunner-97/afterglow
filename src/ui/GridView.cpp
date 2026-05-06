@@ -2,16 +2,62 @@
 
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QPainter>
+#include <QStyledItemDelegate>
+#include <QStyleOptionViewItem>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QKeyEvent>
 #include <QFileInfo>
 #include <QPixmap>
 
+namespace {
+
+// Paints the base list item then overlays a small status circle in the
+// bottom-right corner of each thumbnail to show proof state.
+class ProofStatusDelegate : public QStyledItemDelegate {
+public:
+    explicit ProofStatusDelegate(const QHash<QString, GridView::ProofStatus>* status,
+                                  QObject* parent = nullptr)
+        : QStyledItemDelegate(parent), m_status(status) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override {
+        QStyledItemDelegate::paint(painter, option, index);
+
+        const QString path = index.data(Qt::UserRole).toString();
+        const GridView::ProofStatus status =
+            m_status->value(path, GridView::ProofStatus::NotProofed);
+
+        QColor color;
+        switch (status) {
+            case GridView::ProofStatus::NotProofed: color = QColor(130, 130, 130, 200); break;
+            case GridView::ProofStatus::Proofing:   color = QColor(255, 195, 40,  220); break;
+            case GridView::ProofStatus::Proofed:    color = QColor(72,  200, 100, 220); break;
+        }
+
+        constexpr int R = 5;
+        const QPoint centre(option.rect.right() - R - 5,
+                            option.rect.bottom() - R - 5);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(color);
+        painter->drawEllipse(centre, R, R);
+        painter->restore();
+    }
+
+private:
+    const QHash<QString, GridView::ProofStatus>* m_status;
+};
+
+} // namespace
+
 GridView::GridView(QWidget* parent)
     : QWidget(parent)
 {
     m_list = new QListWidget(this);
+    m_list->setItemDelegate(new ProofStatusDelegate(&m_proofStatus, this));
     m_list->setViewMode(QListView::IconMode);
     m_list->setResizeMode(QListView::Adjust);
     m_list->setMovement(QListView::Static);
@@ -47,6 +93,7 @@ void GridView::setPhotos(const QStringList& paths)
 {
     m_list->clear();
     m_marks.clear();
+    m_proofStatus.clear();
 
     for (const QString& path : paths) {
         QListWidgetItem* item = new QListWidgetItem(m_list);
@@ -105,6 +152,18 @@ void GridView::setMark(const QString& path, Mark m)
 GridView::Mark GridView::mark(const QString& path) const
 {
     return m_marks.value(path, Mark::None);
+}
+
+void GridView::setProofStatus(const QString& path, ProofStatus status)
+{
+    m_proofStatus[path] = status;
+    for (int i = 0; i < m_list->count(); ++i) {
+        QListWidgetItem* item = m_list->item(i);
+        if (item->data(Qt::UserRole).toString() == path) {
+            m_list->update(m_list->indexFromItem(item));
+            break;
+        }
+    }
 }
 
 void GridView::applyIconSize()

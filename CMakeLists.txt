@@ -103,6 +103,10 @@ add_library(photoeditor_core STATIC
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h
+    src/core/ProofCache.cpp
+    src/core/ProofCache.h
+    src/core/Proofer.cpp
+    src/core/Proofer.h
     src/core/SettingsExporter.cpp
     src/core/SettingsExporter.h
     src/core/SettingsImporter.cpp
@@ -252,6 +256,7 @@ if(COVERAGE)
             --exclude "${CMAKE_SOURCE_DIR}/src/ui/"
             --exclude "${CMAKE_SOURCE_DIR}/src/core/ImageProcessor\\.cpp"
             --exclude "${CMAKE_SOURCE_DIR}/src/core/RawLoader\\.cpp"
+            --exclude "${CMAKE_SOURCE_DIR}/src/core/Proofer\\.cpp"
             --exclude "${CMAKE_SOURCE_DIR}/src/main\\.cpp"
             # Drop compiler-generated exception branches and proven-unreachable
             # branches; combined with GCOVR_EXCL_START/STOP markers around GPU

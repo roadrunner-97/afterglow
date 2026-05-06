@@ -97,6 +97,35 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
 
 PhotoEditorApp::~PhotoEditorApp() = default;
 
+void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) {
+    m_proofCache = new ProofCache(this);
+    m_proofer    = new Proofer(std::move(prooferEffects), m_defaults,
+                               m_proofCache, this);
+
+    connect(m_proofer, &Proofer::proofStarted, this,
+            [this](const QString& path) {
+        m_gridView->setProofStatus(path, GridView::ProofStatus::Proofing);
+        if (m_currentImagePath == path)
+            m_loupeView->setProofingState(true);
+    });
+
+    connect(m_proofer, &Proofer::proofFinished, this,
+            [this](const QString& path, const QImage& proof) {
+        m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
+        if (m_currentImagePath == path) {
+            m_loupeView->setProofingState(false);
+            m_loupeView->setProofImage(proof);
+        }
+    });
+
+    connect(m_proofer, &Proofer::proofFailed, this,
+            [this](const QString& path, const QString& /*error*/) {
+        m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
+        if (m_currentImagePath == path)
+            m_loupeView->setProofingState(false);
+    });
+}
+
 void PhotoEditorApp::setupToolBar() {
     QToolBar* toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
@@ -762,13 +791,17 @@ void PhotoEditorApp::closeEvent(QCloseEvent* event) {
 
 void PhotoEditorApp::setMode(Mode m) {
     m_stack->setCurrentIndex(static_cast<int>(m));
-    // Keep the toolbar checkmark in sync with programmatic transitions
-    // (e.g. double-click in the grid jumps us to Loupe).
     for (QAction* a : m_modeGroup->actions()) {
         if (a->data().toInt() == static_cast<int>(m)) {
             a->setChecked(true);
             break;
         }
+    }
+    if (m_proofer) {
+        if (m == Mode::Develop)
+            m_proofer->pause();
+        else
+            m_proofer->resume();
     }
 }
 
@@ -848,6 +881,21 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
     m_gridView->setPhotos(paths);
     readCatalog(folder);
 
+    if (m_proofCache && m_proofer) {
+        m_proofCache->clear();
+        m_proofer->clear();
+
+        QStringList unproofed;
+        for (const QString& path : paths) {
+            if (m_proofCache->isProofed(path)) {
+                m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
+            } else {
+                unproofed.append(path);
+            }
+        }
+        m_proofer->setQueue(unproofed);
+    }
+
     // Decode thumbnails on the global thread pool. Each finished decode posts
     // back to the GUI thread via QueuedConnection. Stale results from a
     // previous folder are dropped via the m_currentFolder guard.
@@ -877,23 +925,35 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
 }
 
 void PhotoEditorApp::onPhotoActivated(const QString& path) {
-    // Fast preview: prefer the embedded JPEG for RAW files; fall back to
-    // QImage decode for non-RAW. Loaded synchronously since the embedded
-    // JPEG is a few MB at most — measured later if it shows up as jank.
-    // Also harvest EXIF metadata in the same call so the Loupe sidebar
-    // gets camera/lens/exposure for free off the LibRaw open.
-    QImage preview;
+    // Load the camera-embedded JPEG for instant display while the proof may
+    // be fetched from cache or scheduled for generation.
+    QImage cameraJpeg;
     ImageMetadata meta;
-    if (RawLoader::isRawFile(path)) preview = RawLoader::loadThumbnail(path, &meta);
-    if (preview.isNull())           preview = decodeOriented(path);
-    if (preview.isNull()) {
+    if (RawLoader::isRawFile(path)) cameraJpeg = RawLoader::loadThumbnail(path, &meta);
+    if (cameraJpeg.isNull())        cameraJpeg = decodeOriented(path);
+    if (cameraJpeg.isNull()) {
         qWarning() << "No preview available for" << path;
         return;
     }
+
     m_currentImagePath = path;
-    m_loupeView->setImage(preview);
+    m_loupeView->setCameraJpegImage(cameraJpeg);
     m_loupeView->setMetadata(meta);
     m_loupeView->setCurrentMark(m_gridView->mark(path));
+
+    if (m_proofCache) {
+        const QImage proof = m_proofCache->proof(path);
+        if (!proof.isNull()) {
+            m_loupeView->setProofImage(proof);
+            m_loupeView->setProofingState(false);
+        } else {
+            m_loupeView->setProofImage({});
+            m_loupeView->setProofingState(true);
+            if (m_proofer)
+                m_proofer->promote(path);
+        }
+    }
+
     setMode(Mode::Loupe);
 }
 
@@ -939,12 +999,18 @@ void PhotoEditorApp::snapshotDefaults() {
     }
 }
 
-void PhotoEditorApp::writeSidecar() const {
+void PhotoEditorApp::writeSidecar() {
     if (m_currentImagePath.isEmpty()) return;
     const QString path = sidecarPathFor(m_currentImagePath);
     QString error;
     if (!SettingsExporter::writeYaml(path, *m_effects, m_currentImagePath, &error))
         qWarning() << "Sidecar write failed for" << path << ":" << error;
+
+    // Invalidate the proof for this photo: the pipeline output has changed.
+    // Re-proof is lazy — generated the next time Loupe lands on this photo
+    // or when the background proofer's walk reaches it.
+    if (m_proofCache)
+        m_proofCache->invalidate(m_currentImagePath);
 }
 
 // ─── Per-folder catalog (triage marks) ──────────────────────────────────────
