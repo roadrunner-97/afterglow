@@ -93,30 +93,48 @@ void LoupeView::buildSidebar()
 {
     m_sidebar = new QWidget(this);
     m_sidebar->setObjectName("loupeSidebar");
+    // Single stylesheet covers all sidebar children: panel chrome, the two
+    // label roles ("section" headers and "key" labels), and the one body
+    // text size used by metadata values.  Centralising it here keeps the
+    // type/colour rhythm consistent — every label inherits one of three
+    // explicit roles instead of falling back to Qt's default body font,
+    // which is what made the old version look ungoverned.
     m_sidebar->setStyleSheet(QString(
         "QWidget#loupeSidebar { background-color: %1; border-left: 1px solid %2; }"
-        "QLabel { color: %3; background: transparent; }"
-        "QLabel[role=\"key\"] { color: %4; font-size: 10px; text-transform: uppercase; }"
+        "QLabel { color: %3; background: transparent; font-size: 12px; }"
+        "QLabel[role=\"key\"] { color: %4; font-size: 10px;"
+        "  text-transform: uppercase; letter-spacing: 1px; }"
+        "QLabel[role=\"section\"] { color: %4; font-size: 10px;"
+        "  text-transform: uppercase; letter-spacing: 1px;"
+        "  padding-top: 4px; }"
         ).arg(Theme::BG_RIGHT_PANEL, Theme::BORDER,
               Theme::TEXT_PRIMARY,  Theme::TEXT_SECONDARY));
 
     auto* outer = new QVBoxLayout(m_sidebar);
-    outer->setContentsMargins(10, 10, 10, 10);
-    outer->setSpacing(8);
+    outer->setContentsMargins(14, 14, 14, 14);
+    outer->setSpacing(10);
 
     // ── Mark buttons row ──────────────────────────────────────────────────
+    auto* markHeader = new QLabel("Mark", m_sidebar);
+    markHeader->setProperty("role", "section");
+    outer->addWidget(markHeader);
+
     auto* btnRow = new QHBoxLayout();
     btnRow->setSpacing(4);
 
+    // Match the rest of the app's button language (toolbar / collapse btn):
+    // flat cream surface, thin border, amber-on-cream when checked, no bold.
+    // The toolbar uses `BG_MAIN` for its buttons; we follow suit so the
+    // sidebar doesn't introduce a third button style.
     auto makeBtn = [&](const QString& label) {
         auto* b = new QPushButton(label, m_sidebar);
         b->setCheckable(true);
         b->setStyleSheet(QString(
             "QPushButton { color: %1; background: %2; border: 1px solid %3;"
-            "  border-radius: 3px; padding: 6px 4px; font-weight: bold; }"
+            "  border-radius: 3px; padding: 5px 4px; font-size: 12px; }"
             "QPushButton:hover  { background: %4; }"
             "QPushButton:checked { background: %5; color: %6; border-color: %5; }"
-            ).arg(Theme::TEXT_PRIMARY, Theme::BG_EFFECT_PANEL, Theme::BORDER,
+            ).arg(Theme::TEXT_PRIMARY, Theme::BG_MAIN, Theme::BORDER,
                   Theme::COLLAPSE_HOVER, Theme::CHECKED_BG, Theme::CHECKED_TEXT));
         btnRow->addWidget(b, 1);
         return b;
@@ -150,6 +168,10 @@ void LoupeView::buildSidebar()
     outer->addWidget(sep);
 
     // ── Metadata table (scrollable) ───────────────────────────────────────
+    auto* metaHeader = new QLabel("Metadata", m_sidebar);
+    metaHeader->setProperty("role", "section");
+    outer->addWidget(metaHeader);
+
     auto* scroll = new QScrollArea(m_sidebar);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -159,9 +181,13 @@ void LoupeView::buildSidebar()
     table->setStyleSheet("background: transparent;");
     auto* form = new QFormLayout(table);
     form->setContentsMargins(0, 0, 0, 0);
-    form->setHorizontalSpacing(10);
-    form->setVerticalSpacing(4);
-    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form->setHorizontalSpacing(12);
+    form->setVerticalSpacing(6);
+    // Right-align keys so the value column reads as a clean left-aligned
+    // list — same pattern as Lightroom's metadata panel.  The eye scans the
+    // values, the keys recede; without this they fight for attention.
+    form->setLabelAlignment(Qt::AlignRight | Qt::AlignTop);
+    form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
 
     auto addRow = [&](const QString& key, QLabel*& valSlot) {
         auto* k = new QLabel(key, table);
