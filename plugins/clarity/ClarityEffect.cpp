@@ -95,9 +95,9 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
                                 cl::Buffer& buf, cl::Buffer& aux,
                                 int w, int h,
                                 const QMap<QString, QVariant>& params) {
-    const int amountPct  = params.value("amount", 0).toInt();
-    const int radiusSrc  = params.value("radius", 30).toInt();
-    if (amountPct == 0 || radiusSrc == 0) return true;
+    const float amountPct = float(params.value("amount", 0).toDouble());
+    const int   radiusSrc = params.value("radius", 30).toInt();
+    if (amountPct == 0.0f || radiusSrc == 0) return true;
 
     const float amount = amountPct / 100.0f;
 
@@ -179,7 +179,7 @@ QWidget* ClarityEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     };
 
-    amountParam = new ParamSlider("Amount", -100, 100);
+    amountParam = new ParamSlider("Amount", -100.0, 100.0, 0.1, 1);
     amountParam->setToolTip("Midtone local-contrast strength.\nPositive values add \"pop\" to midtones; negative values soften them for a dreamy look.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
@@ -196,7 +196,7 @@ QWidget* ClarityEffect::createControlsWidget() {
 
 QMap<QString, QVariant> ClarityEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["amount"] = static_cast<int>(amountParam ? amountParam->value() : 0.0);
+    params["amount"] = amountParam ? amountParam->value() : 0.0;
     params["radius"] = static_cast<int>(radiusParam ? radiusParam->value() : 30.0);
     return params;
 }

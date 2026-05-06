@@ -204,8 +204,8 @@ QWidget* WhiteBalanceEffect::createControlsWidget() {
     });
     layout->addWidget(temperatureParam);
 
-    // Tint: −100 (green) … +100 (magenta), 1-step, default 0.
-    tintParam = new ParamSlider("Tint", -100.0, 100.0, 1.0, 0);
+    // Tint: −100 (green) … +100 (magenta), 0.1-step, default 0.
+    tintParam = new ParamSlider("Tint", -100.0, 100.0, 0.1, 1);
     tintParam->setToolTip("Fine-tunes the green–magenta axis, orthogonal to colour temperature.\nPositive = magenta shift (less green), negative = green shift.\nUse to correct fluorescent or mixed-light casts after setting temperature.");
     connect(tintParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();

@@ -195,9 +195,9 @@ bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
                                 cl::Buffer& buf, cl::Buffer& aux,
                                 int w, int h,
                                 const QMap<QString, QVariant>& params) {
-    const float strength       = params.value("strength",       30).toInt() / 100.0f;
-    const float shadowPreserve = params.value("shadowPreserve", 50).toInt() / 100.0f;
-    const float colorNoise     = params.value("colorNoise",     50).toInt() / 100.0f;
+    const float strength       = float(params.value("strength",       30).toDouble()) / 100.0f;
+    const float shadowPreserve = float(params.value("shadowPreserve", 50).toDouble()) / 100.0f;
+    const float colorNoise     = float(params.value("colorNoise",     50).toDouble()) / 100.0f;
     const int   algorithm      = params.value("algorithm", 0).toInt();
 
     if (strength == 0.0f && colorNoise == 0.0f) return true;
@@ -355,21 +355,21 @@ QWidget* DenoiseEffect::createControlsWidget() {
         emit parametersChanged();
     });
 
-    m_strengthParam = new ParamSlider("Strength", 0, 100);
+    m_strengthParam = new ParamSlider("Strength", 0.0, 100.0, 0.1, 1);
     m_strengthParam->setValue(30);
     m_strengthParam->setToolTip("Amount of luminance (brightness) noise reduction. Higher values blend more strongly toward the smoothed result.\nTip: keep below 60 to preserve fine texture.");
     connect(m_strengthParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
     connect(m_strengthParam, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(m_strengthParam);
 
-    m_shadowPreserveParam = new ParamSlider("Shadow Preserve", 0, 100);
+    m_shadowPreserveParam = new ParamSlider("Shadow Preserve", 0.0, 100.0, 0.1, 1);
     m_shadowPreserveParam->setValue(50);
     m_shadowPreserveParam->setToolTip("Reduces denoising strength in dark areas to protect shadow detail from over-smoothing.\nAt 100, the darkest pixels receive almost no noise reduction.");
     connect(m_shadowPreserveParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
     connect(m_shadowPreserveParam, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(m_shadowPreserveParam);
 
-    m_colorNoiseParam = new ParamSlider("Color Noise", 0, 100);
+    m_colorNoiseParam = new ParamSlider("Color Noise", 0.0, 100.0, 0.1, 1);
     m_colorNoiseParam->setValue(50);
     m_colorNoiseParam->setToolTip("Reduces chroma (colour speckle) noise by blending colour channels toward a heavily-smoothed reference while keeping luminance unchanged.");
     connect(m_colorNoiseParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
@@ -382,9 +382,9 @@ QWidget* DenoiseEffect::createControlsWidget() {
 
 QMap<QString, QVariant> DenoiseEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["strength"]       = m_strengthParam       ? static_cast<int>(m_strengthParam->value())       : 30;
-    params["shadowPreserve"] = m_shadowPreserveParam ? static_cast<int>(m_shadowPreserveParam->value()) : 50;
-    params["colorNoise"]     = m_colorNoiseParam     ? static_cast<int>(m_colorNoiseParam->value())     : 50;
+    params["strength"]       = m_strengthParam       ? m_strengthParam->value()       : 30.0;
+    params["shadowPreserve"] = m_shadowPreserveParam ? m_shadowPreserveParam->value() : 50.0;
+    params["colorNoise"]     = m_colorNoiseParam     ? m_colorNoiseParam->value()     : 50.0;
     params["algorithm"]      = m_algorithm;
     return params;
 }

@@ -26,12 +26,12 @@ struct BalanceArgs {
     float hR, hG, hB;
 };
 
-// Each slider is an integer in [-100, 100] mapping to ±0.25 per channel.
+// Each slider is in [-100, 100] mapping to ±0.25 per channel.
 static constexpr float SLIDER_TO_OFFSET = 0.25f / 100.0f;
 
-static BalanceArgs makeArgs(int sR, int sG, int sB,
-                             int mR, int mG, int mB,
-                             int hR, int hG, int hB) {
+static BalanceArgs makeArgs(float sR, float sG, float sB,
+                             float mR, float mG, float mB,
+                             float hR, float hG, float hB) {
     BalanceArgs a;
     a.sR = sR * SLIDER_TO_OFFSET; a.sG = sG * SLIDER_TO_OFFSET; a.sB = sB * SLIDER_TO_OFFSET;
     a.mR = mR * SLIDER_TO_OFFSET; a.mG = mG * SLIDER_TO_OFFSET; a.mB = mB * SLIDER_TO_OFFSET;
@@ -123,9 +123,9 @@ QWidget* ColorBalanceEffect::createControlsWidget() {
                         ParamSlider*& r, ParamSlider*& g, ParamSlider*& b) {
         auto* header = new QLabel(label, controlsWidget);
         layout->addWidget(header);
-        r = new ParamSlider("Red",   -100, 100);
-        g = new ParamSlider("Green", -100, 100);
-        b = new ParamSlider("Blue",  -100, 100);
+        r = new ParamSlider("Red",   -100.0, 100.0, 0.1, 1);
+        g = new ParamSlider("Green", -100.0, 100.0, 0.1, 1);
+        b = new ParamSlider("Blue",  -100.0, 100.0, 0.1, 1);
         r->setToolTip("Shift the red channel (negative = cyan, positive = red).");
         g->setToolTip("Shift the green channel (negative = magenta, positive = green).");
         b->setToolTip("Shift the blue channel (negative = yellow, positive = blue).");
@@ -145,15 +145,15 @@ QWidget* ColorBalanceEffect::createControlsWidget() {
 
 QMap<QString, QVariant> ColorBalanceEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["shadowR"]    = static_cast<int>(shadowRParam    ? shadowRParam->value()    : 0.0);
-    params["shadowG"]    = static_cast<int>(shadowGParam    ? shadowGParam->value()    : 0.0);
-    params["shadowB"]    = static_cast<int>(shadowBParam    ? shadowBParam->value()    : 0.0);
-    params["midtoneR"]   = static_cast<int>(midtoneRParam   ? midtoneRParam->value()   : 0.0);
-    params["midtoneG"]   = static_cast<int>(midtoneGParam   ? midtoneGParam->value()   : 0.0);
-    params["midtoneB"]   = static_cast<int>(midtoneBParam   ? midtoneBParam->value()   : 0.0);
-    params["highlightR"] = static_cast<int>(highlightRParam ? highlightRParam->value() : 0.0);
-    params["highlightG"] = static_cast<int>(highlightGParam ? highlightGParam->value() : 0.0);
-    params["highlightB"] = static_cast<int>(highlightBParam ? highlightBParam->value() : 0.0);
+    params["shadowR"]    = shadowRParam    ? shadowRParam->value()    : 0.0;
+    params["shadowG"]    = shadowGParam    ? shadowGParam->value()    : 0.0;
+    params["shadowB"]    = shadowBParam    ? shadowBParam->value()    : 0.0;
+    params["midtoneR"]   = midtoneRParam   ? midtoneRParam->value()   : 0.0;
+    params["midtoneG"]   = midtoneGParam   ? midtoneGParam->value()   : 0.0;
+    params["midtoneB"]   = midtoneBParam   ? midtoneBParam->value()   : 0.0;
+    params["highlightR"] = highlightRParam ? highlightRParam->value() : 0.0;
+    params["highlightG"] = highlightGParam ? highlightGParam->value() : 0.0;
+    params["highlightB"] = highlightBParam ? highlightBParam->value() : 0.0;
     return params;
 }
 
@@ -201,7 +201,7 @@ static bool allZero(const QMap<QString, QVariant>& p) {
         "highlightR", "highlightG", "highlightB",
     };
     for (const char* k : keys)
-        if (p.value(k, 0).toInt() != 0) return false;
+        if (p.value(k, 0).toDouble() != 0.0) return false;
     return true;
 }
 
@@ -212,15 +212,15 @@ bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue& queue,
     if (allZero(params)) return true;  // no-op
 
     const BalanceArgs a = makeArgs(
-        params.value("shadowR",    0).toInt(),
-        params.value("shadowG",    0).toInt(),
-        params.value("shadowB",    0).toInt(),
-        params.value("midtoneR",   0).toInt(),
-        params.value("midtoneG",   0).toInt(),
-        params.value("midtoneB",   0).toInt(),
-        params.value("highlightR", 0).toInt(),
-        params.value("highlightG", 0).toInt(),
-        params.value("highlightB", 0).toInt());
+        float(params.value("shadowR",    0).toDouble()),
+        float(params.value("shadowG",    0).toDouble()),
+        float(params.value("shadowB",    0).toDouble()),
+        float(params.value("midtoneR",   0).toDouble()),
+        float(params.value("midtoneG",   0).toDouble()),
+        float(params.value("midtoneB",   0).toDouble()),
+        float(params.value("highlightR", 0).toDouble()),
+        float(params.value("highlightG", 0).toDouble()),
+        float(params.value("highlightB", 0).toDouble()));
 
     m_kernelLinear.setArg(0,  buf);
     m_kernelLinear.setArg(1,  w);

@@ -72,8 +72,8 @@ bool HotPixelEffect::enqueueGpu(cl::CommandQueue& queue,
                                  cl::Buffer& buf, cl::Buffer& aux,
                                  int w, int h,
                                  const QMap<QString, QVariant>& params) {
-    const int thresholdPct = params.value("threshold", 30).toInt();
-    if (thresholdPct == 0) return true;  // no-op
+    const float thresholdPct = float(params.value("threshold", 30).toDouble());
+    if (thresholdPct == 0.0f) return true;  // no-op
 
     // UI 0–100 → normalised [0, 1] linear-channel deviation.
     const float threshold = thresholdPct / 100.0f;
@@ -119,7 +119,7 @@ QWidget* HotPixelEffect::createControlsWidget() {
     layout->setSpacing(8);
 
     // Threshold slider: 0–100 (maps internally to per-channel deviation 0–255 / 0–65535)
-    thresholdParam = new ParamSlider("Threshold", 0, 100);
+    thresholdParam = new ParamSlider("Threshold", 0.0, 100.0, 0.1, 1);
     thresholdParam->setValue(30);
     thresholdParam->setToolTip("How far a pixel must deviate from its 8 neighbours to be considered a hot/dead pixel and replaced with the local average.\nLower values = more aggressive correction. Typical range: 20–40.");
     connect(thresholdParam, &ParamSlider::editingFinished, this, [this]() {
@@ -136,7 +136,7 @@ QWidget* HotPixelEffect::createControlsWidget() {
 
 QMap<QString, QVariant> HotPixelEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["threshold"] = thresholdParam ? static_cast<int>(thresholdParam->value()) : 30;
+    params["threshold"] = thresholdParam ? thresholdParam->value() : 30.0;
     return params;
 }
 

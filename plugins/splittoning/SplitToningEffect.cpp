@@ -3,6 +3,7 @@
 #include "color_kernels.h"
 #include <QDebug>
 #include <QVBoxLayout>
+#include <cmath>
 
 
 namespace {
@@ -28,13 +29,18 @@ struct SplitArgs {
     float balance;       // [-1, 1]
 };
 
-static SplitArgs makeArgs(int shadowHueDeg, int shadowSatPct,
-                           int highlightHueDeg, int highlightSatPct,
-                           int balancePct) {
+static float wrapHue01(float deg) {
+    float h = std::fmod(std::fmod(deg, 360.0f) + 360.0f, 360.0f);
+    return h / 360.0f;
+}
+
+static SplitArgs makeArgs(float shadowHueDeg, float shadowSatPct,
+                           float highlightHueDeg, float highlightSatPct,
+                           float balancePct) {
     SplitArgs a;
-    a.shadowHue    = (((shadowHueDeg    % 360) + 360) % 360) / 360.0f;
+    a.shadowHue    = wrapHue01(shadowHueDeg);
     a.shadowSat    = shadowSatPct    / 100.0f;
-    a.highlightHue = (((highlightHueDeg % 360) + 360) % 360) / 360.0f;
+    a.highlightHue = wrapHue01(highlightHueDeg);
     a.highlightSat = highlightSatPct / 100.0f;
     a.balance      = balancePct      / 100.0f;
     return a;
@@ -142,27 +148,27 @@ QWidget* SplitToningEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     };
 
-    shadowHueParam = new ParamSlider("Shadow Hue", 0, 359);
+    shadowHueParam = new ParamSlider("Shadow Hue", 0.0, 359.0, 0.1, 1);
     shadowHueParam->setToolTip("Hue angle (degrees) of the tint applied to the darker tones.\n0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta.");
     connectSlider(shadowHueParam);
     layout->addWidget(shadowHueParam);
 
-    shadowSatParam = new ParamSlider("Shadow Saturation", 0, 100);
+    shadowSatParam = new ParamSlider("Shadow Saturation", 0.0, 100.0, 0.1, 1);
     shadowSatParam->setToolTip("Strength of the shadow tint.\n0 leaves shadows untouched; 100 fully tints them at the chosen hue.");
     connectSlider(shadowSatParam);
     layout->addWidget(shadowSatParam);
 
-    highlightHueParam = new ParamSlider("Highlight Hue", 0, 359);
+    highlightHueParam = new ParamSlider("Highlight Hue", 0.0, 359.0, 0.1, 1);
     highlightHueParam->setToolTip("Hue angle (degrees) of the tint applied to the brighter tones.\n0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta.");
     connectSlider(highlightHueParam);
     layout->addWidget(highlightHueParam);
 
-    highlightSatParam = new ParamSlider("Highlight Saturation", 0, 100);
+    highlightSatParam = new ParamSlider("Highlight Saturation", 0.0, 100.0, 0.1, 1);
     highlightSatParam->setToolTip("Strength of the highlight tint.\n0 leaves highlights untouched; 100 fully tints them at the chosen hue.");
     connectSlider(highlightSatParam);
     layout->addWidget(highlightSatParam);
 
-    balanceParam = new ParamSlider("Balance", -100, 100);
+    balanceParam = new ParamSlider("Balance", -100.0, 100.0, 0.1, 1);
     balanceParam->setToolTip("Shifts the crossover between shadow and highlight tints.\nNegative values favour the shadow tint; positive values favour the highlight tint.");
     connectSlider(balanceParam);
     layout->addWidget(balanceParam);
@@ -173,11 +179,11 @@ QWidget* SplitToningEffect::createControlsWidget() {
 
 QMap<QString, QVariant> SplitToningEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["shadowHue"]    = static_cast<int>(shadowHueParam    ? shadowHueParam->value()    : 0.0);
-    params["shadowSat"]    = static_cast<int>(shadowSatParam    ? shadowSatParam->value()    : 0.0);
-    params["highlightHue"] = static_cast<int>(highlightHueParam ? highlightHueParam->value() : 0.0);
-    params["highlightSat"] = static_cast<int>(highlightSatParam ? highlightSatParam->value() : 0.0);
-    params["balance"]      = static_cast<int>(balanceParam      ? balanceParam->value()      : 0.0);
+    params["shadowHue"]    = shadowHueParam    ? shadowHueParam->value()    : 0.0;
+    params["shadowSat"]    = shadowSatParam    ? shadowSatParam->value()    : 0.0;
+    params["highlightHue"] = highlightHueParam ? highlightHueParam->value() : 0.0;
+    params["highlightSat"] = highlightSatParam ? highlightSatParam->value() : 0.0;
+    params["balance"]      = balanceParam      ? balanceParam->value()      : 0.0;
     return params;
 }
 
@@ -218,14 +224,14 @@ bool SplitToningEffect::enqueueGpu(cl::CommandQueue& queue,
                                     cl::Buffer& buf, cl::Buffer& /*aux*/,
                                     int w, int h,
                                     const QMap<QString, QVariant>& params) {
-    const int shadowSat    = params.value("shadowSat",    0).toInt();
-    const int highlightSat = params.value("highlightSat", 0).toInt();
-    if (shadowSat == 0 && highlightSat == 0) return true;  // no-op
+    const float shadowSat    = float(params.value("shadowSat",    0).toDouble());
+    const float highlightSat = float(params.value("highlightSat", 0).toDouble());
+    if (shadowSat == 0.0f && highlightSat == 0.0f) return true;  // no-op
 
     const SplitArgs a = makeArgs(
-        params.value("shadowHue",    0).toInt(), shadowSat,
-        params.value("highlightHue", 0).toInt(), highlightSat,
-        params.value("balance",      0).toInt());
+        float(params.value("shadowHue",    0).toDouble()), shadowSat,
+        float(params.value("highlightHue", 0).toDouble()), highlightSat,
+        float(params.value("balance",      0).toDouble()));
 
     m_kernelLinear.setArg(0, buf);
     m_kernelLinear.setArg(1, w);

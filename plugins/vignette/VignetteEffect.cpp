@@ -34,7 +34,7 @@ struct VignetteArgs {
     float p;         // L^p exponent
 };
 
-static VignetteArgs makeArgs(int amount, int midpoint, int feather, int roundness) {
+static VignetteArgs makeArgs(float amount, float midpoint, float feather, float roundness) {
     VignetteArgs a;
     a.amount   = amount   / 100.0f;
     a.midpoint = midpoint / 100.0f;
@@ -136,24 +136,24 @@ QWidget* VignetteEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     };
 
-    amountParam = new ParamSlider("Amount", -100, 100);
+    amountParam = new ParamSlider("Amount", -100.0, 100.0, 0.1, 1);
     amountParam->setToolTip("Strength and direction of the vignette.\nNegative darkens the corners; positive lightens them.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
 
-    midpointParam = new ParamSlider("Midpoint", 0, 100);
+    midpointParam = new ParamSlider("Midpoint", 0.0, 100.0, 0.1, 1);
     midpointParam->setValue(50);
     midpointParam->setToolTip("Centre of the transition, as a fraction of the way from image centre to corner.\nLower values move the vignette inward.");
     connectSlider(midpointParam);
     layout->addWidget(midpointParam);
 
-    featherParam = new ParamSlider("Feather", 0, 100);
+    featherParam = new ParamSlider("Feather", 0.0, 100.0, 0.1, 1);
     featherParam->setValue(50);
     featherParam->setToolTip("Softness of the transition.\n0 is a hard edge; 100 fades across the full image.");
     connectSlider(featherParam);
     layout->addWidget(featherParam);
 
-    roundnessParam = new ParamSlider("Roundness", -100, 100);
+    roundnessParam = new ParamSlider("Roundness", -100.0, 100.0, 0.1, 1);
     roundnessParam->setToolTip("Shape of the vignette.\nPositive values round the falloff (heavier corner darkening);\nnegative values pull it toward the rectangular frame.");
     connectSlider(roundnessParam);
     layout->addWidget(roundnessParam);
@@ -164,10 +164,10 @@ QWidget* VignetteEffect::createControlsWidget() {
 
 QMap<QString, QVariant> VignetteEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["amount"]    = static_cast<int>(amountParam    ? amountParam->value()    : 0.0);
-    params["midpoint"]  = static_cast<int>(midpointParam  ? midpointParam->value()  : 50.0);
-    params["feather"]   = static_cast<int>(featherParam   ? featherParam->value()   : 50.0);
-    params["roundness"] = static_cast<int>(roundnessParam ? roundnessParam->value() : 0.0);
+    params["amount"]    = amountParam    ? amountParam->value()    : 0.0;
+    params["midpoint"]  = midpointParam  ? midpointParam->value()  : 50.0;
+    params["feather"]   = featherParam   ? featherParam->value()   : 50.0;
+    params["roundness"] = roundnessParam ? roundnessParam->value() : 0.0;
     return params;
 }
 
@@ -207,14 +207,14 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
                                  cl::Buffer& buf, cl::Buffer& /*aux*/,
                                  int w, int h,
                                  const QMap<QString, QVariant>& params) {
-    const int amount = params.value("amount", 0).toInt();
-    if (amount == 0) return true;  // no-op
+    const float amount = float(params.value("amount", 0).toDouble());
+    if (amount == 0.0f) return true;  // no-op
 
     const VignetteArgs a = makeArgs(
         amount,
-        params.value("midpoint",  50).toInt(),
-        params.value("feather",   50).toInt(),
-        params.value("roundness",  0).toInt());
+        float(params.value("midpoint",  50).toDouble()),
+        float(params.value("feather",   50).toDouble()),
+        float(params.value("roundness",  0).toDouble()));
 
     // Compute geometry in source-image coordinates so the vignette stays
     // anchored to the source centre regardless of preview crop / aspect.

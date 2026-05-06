@@ -32,7 +32,7 @@ struct GrainArgs {
     float    srcPPP;      // source pixels per preview pixel (1.0 when run on full-res)
 };
 
-static GrainArgs makeArgs(int amount, int size, bool lumWeight, int userSeed,
+static GrainArgs makeArgs(float amount, int size, bool lumWeight, int userSeed,
                           double srcX0 = 0.0, double srcY0 = 0.0, double srcPPP = 1.0) {
     GrainArgs a;
     a.size      = static_cast<float>(size < 1 ? 1 : size);
@@ -195,7 +195,7 @@ QWidget* FilmGrainEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
     };
 
-    amountParam = new ParamSlider("Amount", 0, 40);
+    amountParam = new ParamSlider("Amount", 0.0, 40.0, 0.1, 1);
     amountParam->setToolTip("Strength of the grain.\n0 disables the effect.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
@@ -226,9 +226,9 @@ QWidget* FilmGrainEffect::createControlsWidget() {
 
 QMap<QString, QVariant> FilmGrainEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["amount"]    = static_cast<int>(amountParam ? amountParam->value() : 0.0);
-    params["size"]      = static_cast<int>(sizeParam   ? sizeParam->value()   : 8.0);
-    params["seed"]      = static_cast<int>(seedParam   ? seedParam->value()   : 0.0);
+    params["amount"]    = amountParam ? amountParam->value() : 0.0;
+    params["size"]      = static_cast<int>(sizeParam ? sizeParam->value() : 8.0);
+    params["seed"]      = static_cast<int>(seedParam ? seedParam->value() : 0.0);
     params["lumWeight"] = lumWeightBox ? lumWeightBox->isChecked() : true;
     return params;
 }
@@ -271,8 +271,8 @@ bool FilmGrainEffect::enqueueGpu(cl::CommandQueue& queue,
                                   cl::Buffer& buf, cl::Buffer& /*aux*/,
                                   int w, int h,
                                   const QMap<QString, QVariant>& params) {
-    const int amount = params.value("amount", 0).toInt();
-    if (amount == 0) return true;  // no-op
+    const float amount = float(params.value("amount", 0).toDouble());
+    if (amount == 0.0f) return true;  // no-op
 
     const GrainArgs a = makeArgs(
         amount,

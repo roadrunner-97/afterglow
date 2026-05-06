@@ -12,7 +12,7 @@ static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 __kernel void adjustBrightnessLinear(__global float4* pixels,
                                      int   w,
                                      int   h,
-                                     int   brightnessFactor,
+                                     float brightnessFactor,
                                      float contrastFactor)
 {
     int x = get_global_id(0);
@@ -69,7 +69,7 @@ QWidget* BrightnessEffect::createControlsWidget() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    brightnessParam = new ParamSlider("Brightness", -100, 100);
+    brightnessParam = new ParamSlider("Brightness", -100.0, 100.0, 0.1, 1);
     brightnessParam->setToolTip("Shifts all pixel values brighter (positive) or darker (negative).");
     connect(brightnessParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
@@ -79,7 +79,7 @@ QWidget* BrightnessEffect::createControlsWidget() {
     });
     layout->addWidget(brightnessParam);
 
-    contrastParam = new ParamSlider("Contrast", -50, 50);
+    contrastParam = new ParamSlider("Contrast", -50.0, 50.0, 0.1, 1);
     contrastParam->setToolTip("Expands (positive) or compresses (negative) the tonal range around the midpoint (128).");
     connect(contrastParam, &ParamSlider::editingFinished, this, [this]() {
         emit parametersChanged();
@@ -95,8 +95,8 @@ QWidget* BrightnessEffect::createControlsWidget() {
 
 QMap<QString, QVariant> BrightnessEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["brightness"] = static_cast<int>(brightnessParam ? brightnessParam->value() : 0.0);
-    params["contrast"]   = static_cast<int>(contrastParam   ? contrastParam->value()   : 0.0);
+    params["brightness"] = brightnessParam ? brightnessParam->value() : 0.0;
+    params["contrast"]   = contrastParam   ? contrastParam->value()   : 0.0;
     return params;
 }
 
@@ -128,11 +128,11 @@ bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,
                                    cl::Buffer& buf, cl::Buffer& /*aux*/,
                                    int w, int h,
                                    const QMap<QString, QVariant>& params) {
-    const int brightnessFactor = params.value("brightness", 0).toInt();
-    const int contrastInt      = params.value("contrast", 0).toInt();
-    if (brightnessFactor == 0 && contrastInt == 0) return true;
+    const float brightnessFactor = float(params.value("brightness", 0).toDouble());
+    const float contrastValue    = float(params.value("contrast",   0).toDouble());
+    if (brightnessFactor == 0.0f && contrastValue == 0.0f) return true;
 
-    const float contrastFactor = (contrastInt + 100.0f) / 100.0f;
+    const float contrastFactor = (contrastValue + 100.0f) / 100.0f;
 
     m_kernelLinear.setArg(0, buf);
     m_kernelLinear.setArg(1, w);
