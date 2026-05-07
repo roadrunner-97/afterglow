@@ -12,13 +12,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC \
     -Wduplicated-branches \
     -Werror")
 
-# -Wuseless-cast trips on Qt moc-generated code under GCC < 13 (the moc
-# template emits a cast that's only useless on the precise overload it
-# expanded into). GCC 13+ recognises the pattern and stays quiet.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "13")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wuseless-cast")
-endif()
-
 # Coverage instrumentation — overrides -O3 with -O0 for accurate results
 option(COVERAGE "Enable gcov coverage instrumentation (requires gcovr)" OFF)
 if(COVERAGE)
