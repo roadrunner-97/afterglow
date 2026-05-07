@@ -12,7 +12,9 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-24.04
+    # Pinned to 22.04 (glibc 2.35) so the AppImage runs on any Linux from
+    # ~2022 onward. Bumping to a newer runner narrows the compatibility floor.
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -45,8 +47,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure -j$(nproc)
 
-      - name: Package
-        id: package
+      - name: Package tarball
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
@@ -57,7 +58,25 @@ jobs:
           tar -czf "${STAGE}.tar.gz" "$STAGE"
           sha256sum "${STAGE}.tar.gz" > "${STAGE}.tar.gz.sha256"
           ls -la "${STAGE}.tar.gz"*
-          echo "tarball=${STAGE}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Install AppImage tooling deps
+        # FUSE is needed at runtime by the linuxdeploy / appimagetool AppImages
+        # themselves. (The output AppImage runs fine without FUSE on the user's
+        # box; it only matters here, on the build host.)
+        run: sudo apt-get install -y --no-install-recommends fuse libfuse2 file
+
+      - name: Build AppImage
+        env:
+          AFTERGLOW_VERSION: ${{ github.ref_name }}
+        run: ./scripts/build-appimage.sh
+
+      - name: Rename AppImage with version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mv Afterglow-x86_64.AppImage "afterglow-${VERSION}-linux-x86_64.AppImage"
+          sha256sum "afterglow-${VERSION}-linux-x86_64.AppImage" > "afterglow-${VERSION}-linux-x86_64.AppImage.sha256"
+          ls -la afterglow-*.AppImage*
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -65,11 +84,27 @@ jobs:
           files: |
             afterglow-*-linux-x86_64.tar.gz
             afterglow-*-linux-x86_64.tar.gz.sha256
+            afterglow-*-linux-x86_64.AppImage
+            afterglow-*-linux-x86_64.AppImage.sha256
           generate_release_notes: true
           body: |
             Linux x86_64 build of afterglow ${{ github.ref_name }}.
 
-            ## Install
+            Built on Ubuntu 22.04 (glibc 2.35) — runs on any Linux from
+            ~2022 onward.
+
+            ## AppImage (recommended)
+
+            ```sh
+            chmod +x afterglow-*-linux-x86_64.AppImage
+            ./afterglow-*-linux-x86_64.AppImage
+            ```
+
+            Bundles Qt6, LibRaw, and a POCL CPU fallback. Uses the host's
+            installed OpenCL vendor ICD (NVIDIA / AMD / Intel) for GPU
+            acceleration; falls back to bundled POCL if none is installed.
+
+            ## Tarball (system-Qt install)
 
             ```sh
             tar xzf afterglow-*-linux-x86_64.tar.gz
@@ -77,24 +112,12 @@ jobs:
             ./bin/afterglow
             ```
 
-            ## Runtime requirements
-
-            The binary statically links the project's own libraries, but
-            still depends on these system libraries at runtime — install
-            via your package manager:
-
-            - Qt6 (Core, Gui, Widgets, Concurrent, OpenGLWidgets)
-            - OpenCL ICD loader (`ocl-icd`) plus a working OpenCL driver
-              (mesa-opencl, intel-compute-runtime, rocm-opencl, nvidia,
-              or `pocl` for a CPU fallback)
-            - OpenGL (`libGL`)
-            - LibRaw — only needed for RAW file support
-
-            On Ubuntu 24.04:
+            Requires Qt6, libGL, and an OpenCL ICD on the host. On Debian /
+            Ubuntu:
 
             ```sh
             sudo apt-get install \
               libqt6core6 libqt6gui6 libqt6widgets6 \
               libqt6concurrent6 libqt6openglwidgets6 \
-              ocl-icd-libopencl1 libgl1 libraw23
+              ocl-icd-libopencl1 libgl1 libraw-bin
             ```

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Afterglow
+GenericName=Photo Editor
+Comment=Non-destructive raw photo editor
+Exec=afterglow %F
+Icon=afterglow
+Terminal=false
+Categories=Graphics;Photography;Qt;
+MimeType=image/jpeg;image/png;image/tiff;image/x-canon-cr2;image/x-canon-cr3;image/x-nikon-nef;image/x-sony-arw;image/x-adobe-dng;image/x-fuji-raf;image/x-olympus-orf;image/x-panasonic-rw2;

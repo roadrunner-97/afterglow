@@ -1,0 +1,44 @@
+#!/bin/bash
+# AppRun — entrypoint for the Afterglow AppImage.
+#
+# Responsibilities:
+#   1. Point Qt + the dynamic loader at the bundled libs.
+#   2. Wire up OpenCL ICD discovery so the app can use:
+#        a) the user's installed vendor ICD (NVIDIA/AMD/Intel) — preferred,
+#        b) the bundled POCL CPU ICD as a guaranteed fallback.
+#
+# OpenCL ICD search rules (libOpenCL.so loader behaviour):
+#   - If $OCL_ICD_VENDORS is set to a directory, ONLY that directory is scanned.
+#   - If set to a single .icd file, only that file is loaded.
+#   - If unset, /etc/OpenCL/vendors is scanned.
+# We can't both honour the host vendor ICDs *and* add a bundled one via
+# OCL_ICD_VENDORS pointing at a single dir, so we stage a merged dir at runtime.
+
+set -e
+
+HERE="$(dirname "$(readlink -f "$0")")"
+export PATH="$HERE/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
+export QT_PLUGIN_PATH="$HERE/usr/plugins"
+export QML2_IMPORT_PATH="$HERE/usr/qml"
+
+# Build a merged ICD vendors dir in $XDG_RUNTIME_DIR (or /tmp) that contains
+# symlinks to whatever the host has in /etc/OpenCL/vendors PLUS our bundled
+# POCL .icd. Bundled POCL is rewritten to point at the AppImage-internal path.
+ICD_DIR="${XDG_RUNTIME_DIR:-/tmp}/afterglow-icd-$$"
+mkdir -p "$ICD_DIR"
+trap 'rm -rf "$ICD_DIR"' EXIT
+
+if [ -d /etc/OpenCL/vendors ]; then
+    for f in /etc/OpenCL/vendors/*.icd; do
+        [ -e "$f" ] && ln -sf "$f" "$ICD_DIR/$(basename "$f")"
+    done
+fi
+
+if [ -f "$HERE/usr/lib/libpocl.so" ]; then
+    echo "$HERE/usr/lib/libpocl.so" > "$ICD_DIR/pocl-bundled.icd"
+fi
+
+export OCL_ICD_VENDORS="$ICD_DIR"
+
+exec "$HERE/usr/bin/afterglow" "$@"
