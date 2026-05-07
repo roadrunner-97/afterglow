@@ -479,8 +479,8 @@ bool GpuPipeline::initContext() {
 }
 
 bool GpuPipeline::initDownsampleKernels() {
+    cl::Program prog(m_context, PIPELINE_KERNEL_SOURCE);
     try {
-        cl::Program prog(m_context, PIPELINE_KERNEL_SOURCE);
         prog.build({m_device});
         m_downsampleKernel8Srgb     = cl::Kernel(prog, "preview_downsample_8bit_srgb_to_linear");
         m_downsampleKernel16Srgb    = cl::Kernel(prog, "preview_downsample_16bit_srgb_to_linear");
@@ -497,7 +497,6 @@ bool GpuPipeline::initDownsampleKernels() {
         qWarning() << "[GpuPipeline] initDownsampleKernels failed:" << e.what()
                    << "(err" << e.err() << ")";
         try {
-            cl::Program prog(m_context, PIPELINE_KERNEL_SOURCE);
             std::string log = prog.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
             qWarning() << "Build log:" << QString::fromStdString(log);
         } catch (...) {}
