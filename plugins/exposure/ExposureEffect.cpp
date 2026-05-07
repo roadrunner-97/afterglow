@@ -33,10 +33,10 @@ static float cpuLinearToSrgb(float v) {
 }
 // CPU mirror of zoneEv() — must stay in sync with the OpenCL source above.
 static float cpuZoneEv(float L, const ZoneEvs& z) {
-    if (L <= 0.075f) return z.blacks;
-    if (L >= 0.925f) return z.whites;
+    if (L <= 0.05f) return z.blacks;
+    if (L >= 0.95f) return z.whites;
 
-    constexpr float h0 = 0.25f, h1 = 0.35f, h2 = 0.25f;
+    constexpr float h0 = 0.20f, h1 = 0.50f, h2 = 0.20f;
     float d0 = (z.shadows    - z.blacks)     / h0;
     float d1 = (z.highlights - z.shadows)    / h1;
     float d2 = (z.whites     - z.highlights) / h2;
@@ -45,14 +45,14 @@ static float cpuZoneEv(float L, const ZoneEvs& z) {
     float m2 = (d1 * d2 > 0.0f) ? (h1 * d2 + h2 * d1) / (h1 + h2) : 0.0f;
 
     float pk, pk1, mk, mk1, h, s;
-    if (L < 0.325f) {
-        s = (L - 0.075f) / h0;
+    if (L < 0.25f) {
+        s = (L - 0.05f) / h0;
         pk = z.blacks;     pk1 = z.shadows;    mk = 0.0f; mk1 = m1;   h = h0;
-    } else if (L < 0.675f) {
-        s = (L - 0.325f) / h1;
+    } else if (L < 0.75f) {
+        s = (L - 0.25f) / h1;
         pk = z.shadows;    pk1 = z.highlights; mk = m1;   mk1 = m2;   h = h1;
     } else {
-        s = (L - 0.675f) / h2;
+        s = (L - 0.75f) / h2;
         pk = z.highlights; pk1 = z.whites;     mk = m2;   mk1 = 0.0f; h = h2;
     }
 
@@ -73,7 +73,7 @@ static float cpuCurve(float L, const ZoneEvs& z) {
 }
 
 // Zone midpoints on the input luminance axis
-static constexpr float ZONE_X[4] = { 0.075f, 0.325f, 0.675f, 0.925f };
+static constexpr float ZONE_X[4] = { 0.05f, 0.25f, 0.75f, 0.95f };
 
 class ToneCurveWidget : public QWidget {
 public:
@@ -372,17 +372,19 @@ private:
 // ============================================================================
 static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 
-// PCHIP interpolation through control points at the midpoint of each zone:
-//   blacks=0.075  shadows=0.325  highlights=0.675  whites=0.925
-// Zone widths: blacks=15%, shadows=35%, highlights=35%, whites=15%.
-// Segment lengths (midpoint-to-midpoint): h0=0.25, h1=0.35, h2=0.25.
+// PCHIP interpolation through control points placed near the tonal extremes:
+//   blacks=0.05  shadows=0.25  highlights=0.75  whites=0.95
+// Each slider's 50%-influence boundary lies midway between adjacent control
+// points: blacks dominates L<0.15, shadows L=0.15..0.50, highlights
+// L=0.50..0.85, whites L>0.85 — matching Lightroom-like zone separation.
+// Segment lengths (midpoint-to-midpoint): h0=0.20, h1=0.50, h2=0.20.
 // Cubic Hermite with zero endpoint slopes; interior tangents are the
 // h-weighted arithmetic mean of adjacent slopes, zeroed on sign-change.
 float zoneEvLinear(float lum, float p0, float p1, float p2, float p3) {
-    if (lum <= 0.075f) return p0;
-    if (lum >= 0.925f) return p3;
+    if (lum <= 0.05f) return p0;
+    if (lum >= 0.95f) return p3;
 
-    const float h0 = 0.25f, h1 = 0.35f, h2 = 0.25f;
+    const float h0 = 0.20f, h1 = 0.50f, h2 = 0.20f;
     float d0 = (p1 - p0) / h0;
     float d1 = (p2 - p1) / h1;
     float d2 = (p3 - p2) / h2;
@@ -391,14 +393,14 @@ float zoneEvLinear(float lum, float p0, float p1, float p2, float p3) {
     float m2 = (d1 * d2 > 0.0f) ? (h1 * d2 + h2 * d1) / (h1 + h2) : 0.0f;
 
     float pk, pk1, mk, mk1, h, s;
-    if (lum < 0.325f) {
-        s = (lum - 0.075f) / h0;
+    if (lum < 0.25f) {
+        s = (lum - 0.05f) / h0;
         pk = p0; pk1 = p1; mk = 0.0f; mk1 = m1; h = h0;
-    } else if (lum < 0.675f) {
-        s = (lum - 0.325f) / h1;
+    } else if (lum < 0.75f) {
+        s = (lum - 0.25f) / h1;
         pk = p1; pk1 = p2; mk = m1;   mk1 = m2; h = h1;
     } else {
-        s = (lum - 0.675f) / h2;
+        s = (lum - 0.75f) / h2;
         pk = p2; pk1 = p3; mk = m2;   mk1 = 0.0f; h = h2;
     }
 

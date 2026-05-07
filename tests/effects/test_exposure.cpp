@@ -119,7 +119,7 @@ private slots:
     }
 
     // A dark pixel boosted by highlights=+3 EV must become brighter.
-    // Highlights zone centres on lum≈0.675; a mid-light pixel (lum≈0.55) sits
+    // Highlights zone centres on lum≈0.75; a mid-light pixel (lum≈0.63) sits
     // within that zone so it receives a significant boost.
     void highlightsZone_boostsMidlightPixel() {
         if (!m_hasGpu) QSKIP("No GPU");
@@ -377,8 +377,8 @@ private slots:
     }
 
     // Mouse press on a zone control point sets the drag target. With default
-    // (all-zero) params the curve is the identity, so zone 1 (shadows, L=0.325)
-    // renders at roughly (0.325 * W, H * (1 - 0.325)).
+    // (all-zero) params the curve is the identity, so zone 1 (shadows, L=0.25)
+    // renders at roughly (0.25 * W, H * (1 - 0.25)).
     void toneCurve_mousePress_onZonePoint_setsDragTarget() {
         ExposureEffect e;
         QWidget* w = e.createControlsWidget();
@@ -390,11 +390,11 @@ private slots:
         QVERIFY(curve);
         const qreal W = curve->width(), H = curve->height();
         sendMouse(curve, QEvent::MouseButtonPress,
-                  QPointF(0.325 * W, H * (1 - 0.325)),
+                  QPointF(0.25 * W, H * (1 - 0.25)),
                   Qt::LeftButton, Qt::LeftButton);
         // Release to leave state clean for other tests
         sendMouse(curve, QEvent::MouseButtonRelease,
-                  QPointF(0.325 * W, H * (1 - 0.325)),
+                  QPointF(0.25 * W, H * (1 - 0.25)),
                   Qt::LeftButton);
     }
 
@@ -430,7 +430,7 @@ private slots:
         QSignalSpy doneSpy(&e, &PhotoEditorEffect::parametersChanged);
 
         // Press on shadows zone point, drag up, release.
-        const QPointF p0(0.325 * W, H * (1 - 0.325));
+        const QPointF p0(0.25 * W, H * (1 - 0.25));
         sendMouse(curve, QEvent::MouseButtonPress, p0,
                   Qt::LeftButton, Qt::LeftButton);
         sendMouse(curve, QEvent::MouseMove, QPointF(p0.x(), p0.y() - 20),
@@ -483,7 +483,7 @@ private slots:
 
         // Hover over highlights zone point
         sendMouse(curve, QEvent::MouseMove,
-                  QPointF(0.675 * W, H * (1 - 0.675)));
+                  QPointF(0.75 * W, H * (1 - 0.75)));
         // Hover away into empty plot area
         sendMouse(curve, QEvent::MouseMove, QPointF(W * 0.5, H * 0.5));
 
