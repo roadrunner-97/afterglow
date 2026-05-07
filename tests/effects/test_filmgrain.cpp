@@ -4,16 +4,14 @@
 #include <QSlider>
 #include <QWidget>
 #include "FilmGrainEffect.h"
-#include "GpuDeviceRegistry.h"
+#include "GpuTestBase.h"
 #include "ImageHelpers.h"
 #include "ParamSlider.h"
 
-class TestFilmGrain : public QObject {
+class TestFilmGrain : public GpuTestBase {
     Q_OBJECT
 
 private:
-    bool m_hasGpu = false;
-
     // Count how many pixels of `out` differ from the single reference colour `ref`.
     static int differingPixels(const QImage& out, QRgb ref) {
         int n = 0;
@@ -26,14 +24,6 @@ private:
     }
 
 private slots:
-    void initTestCase() {
-        GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
-        GpuDeviceRegistry::instance().setDevice(0);
-        m_hasGpu = true;
-    }
-
     void nullImage_passThrough() {
         FilmGrainEffect e;
         QVERIFY(runEffect(e, QImage(), {}).isNull());

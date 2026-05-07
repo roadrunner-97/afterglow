@@ -3,16 +3,15 @@
 #include <QSlider>
 #include <QWidget>
 #include "VignetteEffect.h"
-#include "GpuDeviceRegistry.h"
+#include "GpuTestBase.h"
 #include "GpuPipeline.h"
 #include "ImageHelpers.h"
 #include "ParamSlider.h"
 
-class TestVignette : public QObject {
+class TestVignette : public GpuTestBase {
     Q_OBJECT
 
 private:
-    bool         m_hasGpu = false;
     GpuPipeline  m_pipeline;
     VignetteEffect m_pipelineVignette;
 
@@ -25,14 +24,6 @@ private:
     }
 
 private slots:
-    void initTestCase() {
-        GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
-        GpuDeviceRegistry::instance().setDevice(0);
-        m_hasGpu = true;
-    }
-
     void nullImage_passThrough() {
         VignetteEffect e;
         QVERIFY(runEffect(e, QImage(), {}).isNull());

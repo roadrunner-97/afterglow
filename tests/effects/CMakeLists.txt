@@ -20,7 +20,7 @@ find_package(Qt6 COMPONENTS Test REQUIRED)
 # QT_QPA_PLATFORM=offscreen so createControlsWidget() can run without a display.
 # ---------------------------------------------------------------------------
 macro(add_effect_test name src effect_lib)
-    add_executable(${name} ${src})
+    add_executable(${name} ${src} GpuTestBase.h)
     target_link_libraries(${name} PRIVATE
         ${effect_lib}
         photoeditor_core

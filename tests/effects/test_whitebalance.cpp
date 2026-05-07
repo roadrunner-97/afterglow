@@ -3,17 +3,15 @@
 #include <QSlider>
 #include <QWidget>
 #include "WhiteBalanceEffect.h"
-#include "GpuDeviceRegistry.h"
+#include "GpuTestBase.h"
 #include "ImageHelpers.h"
 #include "ImageMetadata.h"
 #include "ParamSlider.h"
 
-class TestWhiteBalance : public QObject {
+class TestWhiteBalance : public GpuTestBase {
     Q_OBJECT
 
 private:
-    bool m_hasGpu = false;
-
     // Build a neutral grey params map: target == shot → no colour shift.
     static QMap<QString, QVariant> neutralParams(double shotK = 5500.0) {
         QMap<QString, QVariant> p;
@@ -24,14 +22,6 @@ private:
     }
 
 private slots:
-    void initTestCase() {
-        GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
-        GpuDeviceRegistry::instance().setDevice(0);
-        m_hasGpu = true;
-    }
-
     void nullImage_passThrough() {
         WhiteBalanceEffect e;
         QVERIFY(runEffect(e, QImage(), {}).isNull());

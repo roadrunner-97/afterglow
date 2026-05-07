@@ -20,7 +20,7 @@ struct GpuDeviceInfo {
  * then accelerators. A box with no GPU still gets a working device list as
  * long as a CPU ICD is installed.
  *
- * Call enumerate() once at startup. The UI reads deviceNames() to populate a
+ * Call enumerate() once at startup. The UI reads devices() to populate a
  * combo box and calls setDevice(idx) on selection. setDevice() bumps revision()
  * so GpuPipeline reinitialises its OpenCL context on the next call.
  */

@@ -7,7 +7,7 @@
 #include <QWidget>
 #include <cmath>
 #include "ExposureEffect.h"
-#include "GpuDeviceRegistry.h"
+#include "GpuTestBase.h"
 #include "ImageHelpers.h"
 #include "ImageMetadata.h"
 #include "ParamSlider.h"
@@ -27,12 +27,10 @@ static void sendMouse(QWidget* w, QEvent::Type t, QPointF p,
     QApplication::sendEvent(w, &ev);
 }
 
-class TestExposure : public QObject {
+class TestExposure : public GpuTestBase {
     Q_OBJECT
 
 private:
-    bool m_hasGpu = false;
-
     // Zero-out all zone parameters.
     static QMap<QString, QVariant> zeroParams() {
         QMap<QString, QVariant> p;
@@ -45,14 +43,6 @@ private:
     }
 
 private slots:
-    void initTestCase() {
-        GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
-        GpuDeviceRegistry::instance().setDevice(0);
-        m_hasGpu = true;
-    }
-
     void nullImage_passThrough() {
         ExposureEffect e;
         QVERIFY(runEffect(e, QImage(), {}).isNull());

@@ -4,24 +4,14 @@
 #include <QSlider>
 #include <QWidget>
 #include "BlurEffect.h"
-#include "GpuDeviceRegistry.h"
+#include "GpuTestBase.h"
 #include "ImageHelpers.h"
 #include "ParamSlider.h"
 
-class TestBlur : public QObject {
+class TestBlur : public GpuTestBase {
     Q_OBJECT
 
-private:
-    bool m_hasGpu = false;
-
 private slots:
-    void initTestCase() {
-        GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
-        GpuDeviceRegistry::instance().setDevice(0);
-        m_hasGpu = true;
-    }
 
     void nullImage_passThrough() {
         BlurEffect e;

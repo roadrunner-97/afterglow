@@ -3,16 +3,14 @@
 #include <QSlider>
 #include <QWidget>
 #include "HotPixelEffect.h"
-#include "GpuDeviceRegistry.h"
+#include "GpuTestBase.h"
 #include "ImageHelpers.h"
 #include "ParamSlider.h"
 
-class TestHotPixel : public QObject {
+class TestHotPixel : public GpuTestBase {
     Q_OBJECT
 
 private:
-    bool m_hasGpu = false;
-
     // Build a uniform image with a single isolated bright spike at (cx, cy).
     static QImage makeWithSpike(int w, int h, int bgVal, int cx, int cy) {
         QImage img = makeSolid(w, h, bgVal, bgVal, bgVal);
@@ -22,14 +20,6 @@ private:
     }
 
 private slots:
-    void initTestCase() {
-        GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
-        GpuDeviceRegistry::instance().setDevice(0);
-        m_hasGpu = true;
-    }
-
     void nullImage_passThrough() {
         HotPixelEffect e;
         QVERIFY(runEffect(e, QImage(), {}).isNull());
