@@ -42,9 +42,14 @@ jobs:
         run: cmake --build build
 
       # Same gate CI uses — block a release if anything is broken.
+      # POCL_LLVM_CPU=x86-64: 22.04 ships POCL 1.8 with LLVM 11, which doesn't
+      # know about newer hosted-runner CPUs (EPYC 9V74 / Genoa). Forcing a
+      # generic x86-64 target sidesteps the "unknown target CPU 'generic'"
+      # build failure.
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
+          POCL_LLVM_CPU: x86-64
         run: ctest --test-dir build --output-on-failure -j$(nproc)
 
       - name: Package tarball
