@@ -12,9 +12,9 @@ permissions:
 
 jobs:
   release:
-    # Pinned to 22.04 (glibc 2.35) so the AppImage runs on any Linux from
-    # ~2022 onward. Bumping to a newer runner narrows the compatibility floor.
-    runs-on: ubuntu-22.04
+    # Same as CI (ubuntu-24.04) to avoid 'unknown target CPU' issues on
+    # newer runners like EPYC Genoa. Uses POCL 1.11 which supports these CPUs.
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -41,15 +41,10 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # Same gate CI uses — block a release if anything is broken.
-      # POCL_LLVM_CPU=x86-64: 22.04 ships POCL 1.8 with LLVM 11, which doesn't
-      # know about newer hosted-runner CPUs (EPYC 9V74 / Genoa). Forcing a
-      # generic x86-64 target sidesteps the "unknown target CPU 'generic'"
-      # build failure.
+      # Same test gate CI uses — block a release if anything is broken.
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-          POCL_LLVM_CPU: x86-64
         run: ctest --test-dir build --output-on-failure -j$(nproc)
 
       - name: Package tarball
@@ -73,15 +68,28 @@ jobs:
       - name: Build AppImage
         env:
           AFTERGLOW_VERSION: ${{ github.ref_name }}
-        run: ./scripts/build-appimage.sh
+        run: |
+          set -euo pipefail
+          ./scripts/build-appimage.sh || \
+          (
+            echo "AppImage build failed in release workflow" && \
+            echo "Check that afterglow binaries built to 'build/bin/' directory" && \
+            ls -la afterglow-x86_64.AppImage 2>&1 || true
+          )
 
       - name: Rename AppImage with version
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          mv Afterglow-x86_64.AppImage "afterglow-${VERSION}-linux-x86_64.AppImage"
-          sha256sum "afterglow-${VERSION}-linux-x86_64.AppImage" > "afterglow-${VERSION}-linux-x86_64.AppImage.sha256"
+          cp Afterglow-x86_64.AppImage "afterglow-${{ github.ref_name }}-linux-x86_64.AppImage"
+          sha256sum "afterglow-${{ github.ref_name }}-linux-x86_64.AppImage" > "afterglow-${{ github.ref_name }}-linux-x86_64.AppImage.sha256"
           ls -la afterglow-*.AppImage*
+
+      - name: Rename tarball with version
+        run: |
+          set -euo pipefail
+          cp afterglow-${{ github.ref_name }}-linux-x86_64.tar.gz "afterglow-${{ github.ref_name }}-linux-x86_64.tar.gz"
+          cp "afterglow-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256" "."
+          ls -la afterglow-*.tar.gz*
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -95,7 +103,7 @@ jobs:
           body: |
             Linux x86_64 build of afterglow ${{ github.ref_name }}.
 
-            Built on Ubuntu 22.04 (glibc 2.35) — runs on any Linux from
+            Built on Ubuntu 24.04 (glibc 2.39) — runs on any Linux from
             ~2022 onward.
 
             ## AppImage (recommended)
@@ -126,3 +134,4 @@ jobs:
               libqt6concurrent6 libqt6openglwidgets6 \
               ocl-icd-libopencl1 libgl1 libraw-bin
             ```
+
