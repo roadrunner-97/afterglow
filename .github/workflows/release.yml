@@ -84,13 +84,6 @@ jobs:
           sha256sum "afterglow-${{ github.ref_name }}-linux-x86_64.AppImage" > "afterglow-${{ github.ref_name }}-linux-x86_64.AppImage.sha256"
           ls -la afterglow-*.AppImage*
 
-      - name: Rename tarball with version
-        run: |
-          set -euo pipefail
-          cp afterglow-${{ github.ref_name }}-linux-x86_64.tar.gz "afterglow-${{ github.ref_name }}-linux-x86_64.tar.gz"
-          cp "afterglow-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256" "."
-          ls -la afterglow-*.tar.gz*
-
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
