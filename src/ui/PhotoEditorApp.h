@@ -37,6 +37,7 @@ public:
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private slots:
     void openImage();
@@ -70,6 +71,10 @@ private:
     void syncViewportRotation();    // push the user's crop angle/centre to the viewport
 
     void setMode(Mode m);
+    // Backslash-held "before edits" preview: bypass the pipeline in Develop
+    // and fall back to the camera JPEG in Loupe; restore on key release.
+    void enterBeforeView();
+    void exitBeforeView();
     void loadFolderIntoGrid(const QString& folder);
     void loadFullImage(const QString& path);
     QString catalogPath(const QString& folder) const;
@@ -118,6 +123,8 @@ private:
     // path is reserved for saveTestCase(), which writes a fixed PNG and wants
     // the default QImage::save() behaviour.
     std::optional<ExportOptions::Options> m_pendingExportOpts;
+
+    bool            m_beforeViewActive = false;
 };
 
 #endif // PHOTOEDITORAPP_H

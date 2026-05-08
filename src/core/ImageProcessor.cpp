@@ -52,13 +52,15 @@ static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager& effects) {
 void ImageProcessor::processImageAsync(const QImage &originalImage,
                                        const EffectManager &effects,
                                        ViewportRequest viewport,
-                                       RunMode mode) {
+                                       RunMode mode,
+                                       bool bypassEffects) {
     auto genPtr = generationPtr;
     uint64_t myGen = ++(*genPtr);
 
     // Snapshot parameters on the calling (main) thread so effect QObjects
     // are never touched from the worker thread.
-    QVector<GpuPipelineCall> calls = buildGpuCalls(effects);
+    QVector<GpuPipelineCall> calls =
+        bypassEffects ? QVector<GpuPipelineCall>{} : buildGpuCalls(effects);
 
     emit processingStarted();
 

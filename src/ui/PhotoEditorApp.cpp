@@ -31,6 +31,8 @@
 #include <QLabel>
 #include <QResizeEvent>
 #include <QCloseEvent>
+#include <QKeyEvent>
+#include <QEvent>
 #include <QToolBar>
 #include <QSettings>
 #include <QScreen>
@@ -93,6 +95,11 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     else
         setGeometry(100, 100, 1400, 900);
     m_lastDir = settings.value("lastDir", QDir::homePath()).toString();
+
+    // Global \-key "before edits" preview.  Filter on qApp so the binding
+    // works regardless of which child widget currently holds focus
+    // (Develop's viewport, Loupe, sidebar buttons, etc.).
+    qApp->installEventFilter(this);
 }
 
 PhotoEditorApp::~PhotoEditorApp() = default;
@@ -759,6 +766,52 @@ void PhotoEditorApp::dispatchViewportUpdate() {
     m_processor->processImageAsync(m_originalImage, *m_effects,
                                    m_viewport->viewportRequest(),
                                    RunMode::PanZoom);
+}
+
+bool PhotoEditorApp::eventFilter(QObject* obj, QEvent* event) {
+    if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+        auto* ke = static_cast<QKeyEvent*>(event);
+        if (ke->key() == Qt::Key_Backslash && !ke->isAutoRepeat()) {
+            // Don't steal the key from text input fields (path bars, etc.).
+            QWidget* fw = QApplication::focusWidget();
+            if (fw && (fw->inherits("QLineEdit")
+                       || fw->inherits("QAbstractSpinBox")
+                       || fw->inherits("QTextEdit")
+                       || fw->inherits("QPlainTextEdit"))) {
+                return QMainWindow::eventFilter(obj, event);
+            }
+            if (event->type() == QEvent::KeyPress && !m_beforeViewActive) {
+                enterBeforeView();
+                return true;
+            }
+            if (event->type() == QEvent::KeyRelease && m_beforeViewActive) {
+                exitBeforeView();
+                return true;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
+}
+
+void PhotoEditorApp::enterBeforeView() {
+    m_beforeViewActive = true;
+    if (m_stack && m_stack->currentWidget() == m_loupeView) {
+        m_loupeView->setShowBefore(true);
+    } else if (!m_originalImage.isNull()) {
+        m_processor->processImageAsync(m_originalImage, *m_effects,
+                                       m_viewport->viewportRequest(),
+                                       RunMode::Commit,
+                                       /*bypassEffects=*/true);
+    }
+}
+
+void PhotoEditorApp::exitBeforeView() {
+    m_beforeViewActive = false;
+    if (m_stack && m_stack->currentWidget() == m_loupeView) {
+        m_loupeView->setShowBefore(false);
+    } else {
+        triggerReprocess();
+    }
 }
 
 void PhotoEditorApp::onProcessingStarted() {

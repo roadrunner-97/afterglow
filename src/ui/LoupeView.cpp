@@ -265,10 +265,25 @@ void LoupeView::setProofingState(bool proofing)
     m_proofingLabel->setVisible(proofing);
 }
 
+void LoupeView::setShowBefore(bool on)
+{
+    if (m_showBefore == on) return;
+    m_showBefore = on;
+    // Swap the displayed image without calling resetView() so the user's
+    // current zoom/pan is preserved across the hold-and-release cycle.
+    const bool useProof = !m_proofImage.isNull()
+                          && !m_userForcedCameraJpeg
+                          && !m_showBefore;
+    m_image = useProof ? m_proofImage : m_cameraJpegImage;
+    update();
+}
+
 void LoupeView::updateDisplayedImage()
 {
     // Show the proof if available and the user hasn't forced camera view.
-    const bool useProof = !m_proofImage.isNull() && !m_userForcedCameraJpeg;
+    const bool useProof = !m_proofImage.isNull()
+                          && !m_userForcedCameraJpeg
+                          && !m_showBefore;
     m_image = useProof ? m_proofImage : m_cameraJpegImage;
     if (!m_image.isNull())
         resetView();

@@ -22,10 +22,14 @@ class ImageProcessor : public QObject {
 public:
     explicit ImageProcessor(QObject* parent = nullptr);
 
+    // bypassEffects=true skips the entire effect list — used by the
+     // \-key "before" preview so the viewport falls back to the raw,
+     // un-edited image without disturbing per-effect enabled flags.
     void processImageAsync(const QImage& originalImage,
                            const EffectManager& effects,
                            ViewportRequest viewport = {},
-                           RunMode mode = RunMode::Commit);
+                           RunMode mode = RunMode::Commit,
+                           bool bypassEffects = false);
 
     void exportImageAsync(const QImage& originalImage,
                           const EffectManager& effects,

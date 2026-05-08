@@ -37,6 +37,11 @@ public:
     // Reset to fit-zoom centred (also called automatically when the image changes).
     void resetView();
 
+    // Hold-to-show "before edits" preview.  While true the displayed image
+    // falls back to the camera JPEG (no pipeline edits applied) without
+    // touching the user's persistent Camera-JPEG toggle.
+    void setShowBefore(bool on);
+
 signals:
     // Emitted when the user presses Enter or double-clicks the image —
     // the host typically transitions to the full Develop mode in response.
@@ -82,6 +87,7 @@ private:
     QImage  m_cameraJpegImage;           // camera-embedded JPEG
     QImage  m_image;                     // currently displayed (proof or JPEG)
     bool    m_userForcedCameraJpeg = false; // true after user clicks toggle
+    bool    m_showBefore = false;           // backslash held — show JPEG transiently
 
     float   m_zoom    = 1.0f; // 1.0 = fit-to-widget; >1 zooms in
     QPointF m_centre  = {0.5f, 0.5f}; // image-space normalised
