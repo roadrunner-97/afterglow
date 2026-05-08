@@ -1,5 +1,6 @@
 #include "ExportDialog.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -10,6 +11,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSlider>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 #include "Stylesheets.h"
@@ -22,6 +24,10 @@ constexpr const char* kKeySubfolderExpanded = "export/subfolderExpanded";
 constexpr const char* kKeyFormat            = "export/format";
 constexpr const char* kKeyQuality           = "export/jpegQuality";
 constexpr const char* kKeyConflict          = "export/onConflict";
+constexpr const char* kKeyResizeMode        = "export/resizeMode";
+constexpr const char* kKeyResizePixels      = "export/resizePixels";
+constexpr const char* kKeyResizePercent     = "export/resizePercent";
+constexpr const char* kKeyResizeNoEnlarge   = "export/resizeNoEnlarge";
 } // namespace
 
 ExportDialog::ExportDialog(QWidget* parent)
@@ -126,6 +132,36 @@ ExportDialog::ExportDialog(QWidget* parent)
         static_cast<int>(ExportOptions::OverwritePolicy::Overwrite));
     form->addRow("When file exists:", m_conflictCombo);
 
+    // ── Resize ────────────────────────────────────────────────────────────
+    {
+        m_resizeModeCombo = new QComboBox();
+        m_resizeModeCombo->addItem("Original size", static_cast<int>(ExportResize::Mode::None));
+        m_resizeModeCombo->addItem("Long edge",     static_cast<int>(ExportResize::Mode::LongEdge));
+        m_resizeModeCombo->addItem("Short edge",    static_cast<int>(ExportResize::Mode::ShortEdge));
+        m_resizeModeCombo->addItem("Width",         static_cast<int>(ExportResize::Mode::Width));
+        m_resizeModeCombo->addItem("Height",        static_cast<int>(ExportResize::Mode::Height));
+        m_resizeModeCombo->addItem("Percentage",    static_cast<int>(ExportResize::Mode::Percentage));
+        form->addRow("Resize:", m_resizeModeCombo);
+
+        auto* row = new QHBoxLayout();
+        m_resizePixelsSpin = new QSpinBox();
+        m_resizePixelsSpin->setRange(1, 32768);
+        m_resizePixelsSpin->setSuffix(" px");
+        m_resizePercentSpin = new QSpinBox();
+        m_resizePercentSpin->setRange(1, 1000);
+        m_resizePercentSpin->setSuffix(" %");
+        row->addWidget(m_resizePixelsSpin);
+        row->addWidget(m_resizePercentSpin);
+        row->addStretch();
+        form->addRow(QString(), row);
+
+        m_resizeNoEnlarge = new QCheckBox("Don't enlarge");
+        form->addRow(QString(), m_resizeNoEnlarge);
+
+        connect(m_resizeModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, &ExportDialog::onResizeModeChanged);
+    }
+
     root->addLayout(form);
 
     // ── OK / Cancel ───────────────────────────────────────────────────────
@@ -158,6 +194,11 @@ ExportOptions::Options ExportDialog::options() const {
     opts.jpegQuality     = m_qualitySlider->value();
     opts.onConflict      = static_cast<ExportOptions::OverwritePolicy>(
         m_conflictCombo->currentData().toInt());
+    opts.resize.mode    = static_cast<ExportResize::Mode>(
+        m_resizeModeCombo->currentData().toInt());
+    opts.resize.pixels  = m_resizePixelsSpin->value();
+    opts.resize.percent = m_resizePercentSpin->value();
+    opts.resize.dontEnlarge = m_resizeNoEnlarge->isChecked();
     return opts;
 }
 
@@ -175,6 +216,16 @@ void ExportDialog::onFormatChanged(int /*idx*/) {
     const bool jpeg = (fmt == ExportOptions::Format::JPEG);
     m_qualitySlider->setEnabled(jpeg);
     m_qualityLabel ->setEnabled(jpeg);
+}
+
+void ExportDialog::onResizeModeChanged(int /*idx*/) {
+    const auto mode = static_cast<ExportResize::Mode>(
+        m_resizeModeCombo->currentData().toInt());
+    const bool active  = (mode != ExportResize::Mode::None);
+    const bool percent = (mode == ExportResize::Mode::Percentage);
+    m_resizePixelsSpin ->setVisible(active && !percent);
+    m_resizePercentSpin->setVisible(active &&  percent);
+    m_resizeNoEnlarge  ->setEnabled(active);
 }
 
 void ExportDialog::loadFromSettings() {
@@ -202,6 +253,18 @@ void ExportDialog::loadFromSettings() {
     if (const int idx = m_conflictCombo->findData(conflict); idx >= 0) m_conflictCombo->setCurrentIndex(idx);
     m_qualitySlider->setValue(quality);
     m_qualityLabel ->setText(QString::number(quality));
+
+    const int rmode    = s.value(kKeyResizeMode,
+        static_cast<int>(ExportResize::Mode::None)).toInt();
+    const int rpixels  = s.value(kKeyResizePixels,  2048).toInt();
+    const int rpercent = s.value(kKeyResizePercent, 100 ).toInt();
+    const bool rnoenl  = s.value(kKeyResizeNoEnlarge, true).toBool();
+    if (const int idx = m_resizeModeCombo->findData(rmode); idx >= 0)
+        m_resizeModeCombo->setCurrentIndex(idx);
+    m_resizePixelsSpin ->setValue(rpixels);
+    m_resizePercentSpin->setValue(rpercent);
+    m_resizeNoEnlarge  ->setChecked(rnoenl);
+    onResizeModeChanged(m_resizeModeCombo->currentIndex());
 }
 
 void ExportDialog::persistToSettings() const {
@@ -213,6 +276,10 @@ void ExportDialog::persistToSettings() const {
     s.setValue(kKeyFormat,            m_formatCombo->currentData().toInt());
     s.setValue(kKeyQuality,           m_qualitySlider->value());
     s.setValue(kKeyConflict,          m_conflictCombo->currentData().toInt());
+    s.setValue(kKeyResizeMode,        m_resizeModeCombo->currentData().toInt());
+    s.setValue(kKeyResizePixels,      m_resizePixelsSpin->value());
+    s.setValue(kKeyResizePercent,     m_resizePercentSpin->value());
+    s.setValue(kKeyResizeNoEnlarge,   m_resizeNoEnlarge->isChecked());
 }
 
 void ExportDialog::accept() {

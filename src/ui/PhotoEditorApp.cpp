@@ -1,6 +1,7 @@
 #include "PhotoEditorApp.h"
 #include "ExportDialog.h"
 #include "ExportPath.h"
+#include "ExportResize.h"
 #include "LoupeView.h"
 #include "Stylesheets.h"
 #include "Theme.h"
@@ -677,6 +678,7 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
     if (!result.isNull()) {
         if (auto* cs = m_effects->activeCropSource())
             result = applyCropAndRotate(result, *cs);
+        if (opts) result = ExportResize::apply(result, opts->resize);
     }
 
     // chooseDestination() resolves opts.subfolder into the path but never

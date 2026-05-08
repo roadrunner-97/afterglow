@@ -3,6 +3,8 @@
 
 #include <QString>
 
+#include "ExportResize.h"
+
 namespace ExportOptions {
 
 enum class Format { JPEG, PNG, TIFF };
@@ -31,6 +33,8 @@ struct Options {
     int jpegQuality = 90;
 
     OverwritePolicy onConflict = OverwritePolicy::AppendSuffix;
+
+    ExportResize::Params resize;
 };
 
 inline QString extensionFor(Format f) {

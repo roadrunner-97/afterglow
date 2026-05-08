@@ -4,11 +4,13 @@
 #include <QDialog>
 #include "ExportOptions.h"
 
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSlider;
+class QSpinBox;
 
 // Modal dialog that collects an ExportOptions::Options for batch-friendly
 // image export.  Tied to no specific source file: filename templating and the
@@ -30,6 +32,7 @@ public:
 private slots:
     void browseForDirectory();
     void onFormatChanged(int idx);
+    void onResizeModeChanged(int idx);
 
 private:
     void loadFromSettings();
@@ -46,6 +49,10 @@ private:
     QSlider*     m_qualitySlider    = nullptr;
     QLabel*      m_qualityLabel     = nullptr;
     QComboBox*   m_conflictCombo    = nullptr;
+    QComboBox*   m_resizeModeCombo  = nullptr;
+    QSpinBox*    m_resizePixelsSpin = nullptr;
+    QSpinBox*    m_resizePercentSpin= nullptr;
+    QCheckBox*   m_resizeNoEnlarge  = nullptr;
 };
 
 #endif // EXPORTDIALOG_H

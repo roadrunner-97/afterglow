@@ -131,6 +131,25 @@ set_target_properties(test_export_path PROPERTIES
 add_test(NAME ExportPath COMMAND test_export_path)
 
 # ---------------------------------------------------------------------------
+# ExportResize tests — pure CPU resize sizing logic
+# ---------------------------------------------------------------------------
+add_executable(test_export_resize
+    core/test_export_resize.cpp
+)
+target_link_libraries(test_export_resize
+    PRIVATE
+        photoeditor_core
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+)
+set_target_properties(test_export_resize PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME ExportResize COMMAND test_export_resize)
+
+# ---------------------------------------------------------------------------
 # Effect applyParameters() round-trip tests — widget tests, offscreen
 # ---------------------------------------------------------------------------
 add_executable(test_effect_apply_parameters
