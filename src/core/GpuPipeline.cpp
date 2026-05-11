@@ -187,6 +187,28 @@ __kernel void preview_downsample_float4_linear(
     dst[dy*dstW + dx] = (float4)(r * inv, g * inv, b * inv, 1.0f);
 }
 
+// After effects have run on the full preview buffer (which includes black
+// letterbox pixels for images that don't fill the viewport), some effects
+// (e.g. brightness +offset, contrast midpoint shift) corrupt those black
+// pixels.  This kernel restores them: any preview pixel whose source
+// coordinate falls outside [0, srcW) × [0, srcH) is clamped back to black.
+__kernel void clear_letterbox(__global float4* buf,
+                              int previewW, int previewH,
+                              float cropX0, float cropY0,
+                              float cropX1, float cropY1,
+                              int srcW,    int srcH)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= previewW || y >= previewH) return;
+
+    float rgnW = cropX1 - cropX0, rgnH = cropY1 - cropY0;
+    float sx = cropX0 + ((float)x + 0.5f) * rgnW / (float)previewW;
+    float sy = cropY0 + ((float)y + 0.5f) * rgnH / (float)previewH;
+
+    if (sx < 0.0f || sx >= (float)srcW || sy < 0.0f || sy >= (float)srcH)
+        buf[y * previewW + x] = (float4)(0.0f, 0.0f, 0.0f, 1.0f);
+}
+
 // Final stage: clamp each channel to [0, 1], apply the sRGB OETF, round to
 // 8-bit, pack into 0xFFRRGGBB (QImage::Format_RGB32 byte order).
 __kernel void pack_linear_to_srgb_rgb32(
@@ -390,6 +412,19 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         }
         m_queue.finish();
 
+        // Restore letterbox pixels that effects may have corrupted.
+        m_clearLetterboxKernel.setArg(0, m_workBuf);
+        m_clearLetterboxKernel.setArg(1, previewW);
+        m_clearLetterboxKernel.setArg(2, previewH);
+        m_clearLetterboxKernel.setArg(3, cropX0);
+        m_clearLetterboxKernel.setArg(4, cropY0);
+        m_clearLetterboxKernel.setArg(5, cropX1);
+        m_clearLetterboxKernel.setArg(6, cropY1);
+        m_clearLetterboxKernel.setArg(7, m_width);
+        m_clearLetterboxKernel.setArg(8, m_height);
+        m_queue.enqueueNDRangeKernel(m_clearLetterboxKernel, cl::NullRange,
+                                     cl::NDRange(previewW, previewH));
+
         return packAndReadbackLocked(m_workBuf, previewW, previewH);
     }
     // GCOVR_EXCL_START
@@ -490,6 +525,7 @@ bool GpuPipeline::initDownsampleKernels() {
         m_decodeKernel16Srgb        = cl::Kernel(prog, "fullres_decode_16bit_srgb_to_linear");
         m_decodeKernel16Linear      = cl::Kernel(prog, "fullres_decode_16bit_linear");
         m_packKernel                = cl::Kernel(prog, "pack_linear_to_srgb_rgb32");
+        m_clearLetterboxKernel      = cl::Kernel(prog, "clear_letterbox");
         return true;
     }
     // GCOVR_EXCL_START

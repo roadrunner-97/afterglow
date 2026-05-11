@@ -101,6 +101,7 @@ private:
     cl::Kernel m_decodeKernel16Srgb;        // 1:1 decode: 16-bit sRGB ushort → float4 linear
     cl::Kernel m_decodeKernel16Linear;      // 1:1 decode: 16-bit linear ushort → float4 linear
     cl::Kernel m_packKernel;                // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
+    cl::Kernel m_clearLetterboxKernel;     // zero pixels that map outside the source image (letterbox mask)
 
     int        m_previewW = 0;
     int        m_previewH = 0;
