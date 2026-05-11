@@ -1,5 +1,4 @@
 #include "LoupeView.h"
-#include "Theme.h"
 
 #include <QButtonGroup>
 #include <QFormLayout>
@@ -24,7 +23,7 @@ namespace {
 // for a two-column "Camera | Sony ILCE-7M4" row at the body font without
 // wrapping, narrow enough to leave the image area dominant on a 1280px
 // laptop screen.
-constexpr int SIDEBAR_W = 260;
+constexpr int SIDEBAR_W = 320;
 
 QString formatShutter(float s) {
     if (s <= 0.0f) return "—";
@@ -82,15 +81,11 @@ LoupeView::LoupeView(QWidget* parent)
     : QWidget(parent)
 {
     setFocusPolicy(Qt::StrongFocus);
-    setStyleSheet(QString("LoupeView { background-color: #1e1e1e; }"));
     buildSidebar();
 
     // "Proofing…" overlay — shown in the top-right of the image area while
     // the background proofer generates this photo's proof.
     m_proofingLabel = new QLabel("Proofing…", this);
-    m_proofingLabel->setStyleSheet(
-        "QLabel { color: #e0d8c0; background: rgba(30,30,30,160);"
-        "  border-radius: 4px; padding: 3px 8px; font-size: 11px; }");
     m_proofingLabel->adjustSize();
     m_proofingLabel->hide();
     m_proofingLabel->raise();
@@ -100,22 +95,10 @@ void LoupeView::buildSidebar()
 {
     m_sidebar = new QWidget(this);
     m_sidebar->setObjectName("loupeSidebar");
-    // Single stylesheet covers all sidebar children: panel chrome, the two
-    // label roles ("section" headers and "key" labels), and the one body
-    // text size used by metadata values.  Centralising it here keeps the
-    // type/colour rhythm consistent — every label inherits one of three
-    // explicit roles instead of falling back to Qt's default body font,
-    // which is what made the old version look ungoverned.
-    m_sidebar->setStyleSheet(QString(
-        "QWidget#loupeSidebar { background-color: %1; border-left: 1px solid %2; }"
-        "QLabel { color: %3; background: transparent; font-size: 12px; }"
-        "QLabel[role=\"key\"] { color: %4; font-size: 10px;"
-        "  text-transform: uppercase; letter-spacing: 1px; }"
-        "QLabel[role=\"section\"] { color: %4; font-size: 10px;"
-        "  text-transform: uppercase; letter-spacing: 1px;"
-        "  padding-top: 4px; }"
-        ).arg(Theme::BG_RIGHT_PANEL, Theme::BORDER,
-              Theme::TEXT_PRIMARY,  Theme::TEXT_SECONDARY));
+    m_sidebar->setStyleSheet(
+        "QLabel { font-size: 14px; }"
+        "QLabel[role=\"key\"]     { font-size: 13px; letter-spacing: 1px; }"
+        "QLabel[role=\"section\"] { font-size: 13px; letter-spacing: 1px; padding-top: 4px; }");
 
     auto* outer = new QVBoxLayout(m_sidebar);
     outer->setContentsMargins(14, 14, 14, 14);
@@ -129,20 +112,9 @@ void LoupeView::buildSidebar()
     auto* btnRow = new QHBoxLayout();
     btnRow->setSpacing(4);
 
-    // Match the rest of the app's button language (toolbar / collapse btn):
-    // flat cream surface, thin border, amber-on-cream when checked, no bold.
-    // The toolbar uses `BG_MAIN` for its buttons; we follow suit so the
-    // sidebar doesn't introduce a third button style.
     auto makeBtn = [&](const QString& label) {
         auto* b = new QPushButton(label, m_sidebar);
         b->setCheckable(true);
-        b->setStyleSheet(QString(
-            "QPushButton { color: %1; background: %2; border: 1px solid %3;"
-            "  border-radius: 3px; padding: 5px 4px; font-size: 12px; }"
-            "QPushButton:hover  { background: %4; }"
-            "QPushButton:checked { background: %5; color: %6; border-color: %5; }"
-            ).arg(Theme::TEXT_PRIMARY, Theme::BG_MAIN, Theme::BORDER,
-                  Theme::COLLAPSE_HOVER, Theme::CHECKED_BG, Theme::CHECKED_TEXT));
         btnRow->addWidget(b, 1);
         return b;
     };
@@ -175,13 +147,6 @@ void LoupeView::buildSidebar()
     m_btnCameraJpeg->setToolTip(
         "Compare against the camera's embedded JPEG (as-shot, no edits applied).\n"
         "Uncheck to return to the pipeline-rendered proof.");
-    m_btnCameraJpeg->setStyleSheet(QString(
-        "QPushButton { color: %1; background: %2; border: 1px solid %3;"
-        "  border-radius: 3px; padding: 5px 8px; font-size: 12px; }"
-        "QPushButton:hover   { background: %4; }"
-        "QPushButton:checked { background: %5; color: %6; border-color: %5; }"
-        ).arg(Theme::TEXT_PRIMARY, Theme::BG_MAIN, Theme::BORDER,
-              Theme::COLLAPSE_HOVER, Theme::CHECKED_BG, Theme::CHECKED_TEXT));
     connect(m_btnCameraJpeg, &QPushButton::toggled, this,
             [this](bool checked) {
         m_userForcedCameraJpeg = checked;
@@ -191,7 +156,6 @@ void LoupeView::buildSidebar()
 
     auto* sep = new QFrame(m_sidebar);
     sep->setFrameShape(QFrame::HLine);
-    sep->setStyleSheet(QString("color: %1;").arg(Theme::BORDER_PANEL));
     outer->addWidget(sep);
 
     // ── Metadata table (scrollable) ───────────────────────────────────────
@@ -202,10 +166,7 @@ void LoupeView::buildSidebar()
     auto* scroll = new QScrollArea(m_sidebar);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setStyleSheet("QScrollArea { background: transparent; }");
-
     auto* table = new QWidget(scroll);
-    table->setStyleSheet("background: transparent;");
     auto* form = new QFormLayout(table);
     form->setContentsMargins(0, 0, 0, 0);
     form->setHorizontalSpacing(12);

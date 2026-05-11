@@ -14,8 +14,6 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-#include "Stylesheets.h"
-
 namespace {
 constexpr const char* kKeyDir               = "export/destinationDir";
 constexpr const char* kKeyPattern           = "export/filenamePattern";
@@ -71,7 +69,6 @@ ExportDialog::ExportDialog(QWidget* parent)
         auto* hdr = new QHBoxLayout();
         hdr->setContentsMargins(0, 0, 0, 0);
         m_subfolderToggle = new QPushButton("+");
-        m_subfolderToggle->setStyleSheet(Stylesheets::collapseButton());
         m_subfolderToggle->setToolTip("Show or hide the subfolder field.");
         m_subfolderToggle->setMaximumWidth(28);
         hdr->addStretch();

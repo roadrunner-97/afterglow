@@ -3,8 +3,6 @@
 #include "ExportPath.h"
 #include "ExportResize.h"
 #include "LoupeView.h"
-#include "Stylesheets.h"
-#include "Theme.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
 #include <QtConcurrent/QtConcurrent>
@@ -137,8 +135,6 @@ void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) 
 void PhotoEditorApp::setupToolBar() {
     QToolBar* toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
-    toolbar->setStyleSheet(Stylesheets::toolbar());
-
     // Mode switcher: Gallery (grid) / Loupe (preview) / Develop (editor).
     // Mirrors Lightroom's module picker — user double-clicks a thumbnail to
     // step through to Loupe, then Enter (or another double-click) to Develop.
@@ -171,7 +167,6 @@ void PhotoEditorApp::setupToolBar() {
     toolbar->addWidget(spacer);
 
     m_processingLabel = new QLabel("Processing…");
-    m_processingLabel->setStyleSheet(Stylesheets::processingLabel());
     m_processingLabel->setVisible(false);
     toolbar->addWidget(m_processingLabel);
 }
@@ -184,7 +179,6 @@ void PhotoEditorApp::setupUI() {
     //   1 = Loupe   (full-size single-image preview, no GPU pipeline)
     //   2 = Develop (existing viewport + right panel — the editor)
     m_stack = new QStackedWidget();
-    m_stack->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
     setCentralWidget(m_stack);
 
     // ── Gallery page ────────────────────────────────────────────────────────
@@ -219,7 +213,6 @@ void PhotoEditorApp::setupUI() {
 
     // ── Develop page (existing editor: viewport + right panel) ─────────────
     QWidget* develop = new QWidget();
-    develop->setStyleSheet(QString("background: %1;").arg(Theme::BG_MAIN));
     QHBoxLayout* mainLayout = new QHBoxLayout(develop);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
@@ -230,7 +223,6 @@ void PhotoEditorApp::setupUI() {
     mainLayout->addWidget(m_viewport, 3);
 
     QWidget* rightPanel = new QWidget();
-    rightPanel->setStyleSheet(QString("background-color: %1;").arg(Theme::BG_RIGHT_PANEL));
     // Width scales with the user's font / DPI: ParamSlider rows need room for
     // a label, slider track, and spinbox without wrapping.  Empirically ~36
     // characters of the body font fits the widest control we ship.
@@ -243,15 +235,12 @@ void PhotoEditorApp::setupUI() {
 
     QFrame* sep = new QFrame();
     sep->setFrameShape(QFrame::HLine);
-    sep->setStyleSheet(Stylesheets::panelSeparator());
     rightLayout->addWidget(sep);
 
     QScrollArea* effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
-    effectsScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
 
     QWidget* effectsContainer = new QWidget();
-    effectsContainer->setStyleSheet("background: transparent;");
     QVBoxLayout* effectsLayout = new QVBoxLayout(effectsContainer);
     effectsLayout->setContentsMargins(0, 0, 0, 0);
     effectsLayout->setSpacing(4);
@@ -269,8 +258,6 @@ void PhotoEditorApp::setupUI() {
 }
 
 void PhotoEditorApp::setupMenuBar() {
-    menuBar()->setStyleSheet(Stylesheets::menuBar());
-
     QMenu* fileMenu = menuBar()->addMenu("File");
 
     QAction* openAct = fileMenu->addAction("Open Image…");
@@ -327,12 +314,10 @@ void PhotoEditorApp::setupMenuBar() {
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
     QLabel* label = new QLabel("GPU Device");
-    label->setStyleSheet(Stylesheets::gpuSelectorLabel());
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
     m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
-    m_gpuSelector->setStyleSheet(Stylesheets::gpuSelector());
 
     const auto& devs = GpuDeviceRegistry::instance().devices();
     if (devs.empty()) {
@@ -359,23 +344,19 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
 
         // Container
         QWidget* panel = new QWidget();
-        panel->setStyleSheet(Stylesheets::effectPanel());
         QVBoxLayout* panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
 
         // Title bar
         QWidget* titleBar = new QWidget();
-        titleBar->setStyleSheet("background: transparent;");
         QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
         titleLayout->setContentsMargins(0, 0, 0, 0);
 
         QLabel* title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
-        title->setStyleSheet(Stylesheets::effectTitle());
         titleLayout->addWidget(title, 1);
 
         QPushButton* collapseBtn = new QPushButton("−");
-        collapseBtn->setStyleSheet(Stylesheets::collapseButton());
         collapseBtn->setToolTip("Collapse or expand this effect's controls.");
         collapseBtn->setMaximumWidth(28);
         titleLayout->addWidget(collapseBtn);

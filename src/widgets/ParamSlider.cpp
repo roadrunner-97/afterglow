@@ -1,5 +1,4 @@
 #include "ParamSlider.h"
-#include "Theme.h"
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -40,7 +39,6 @@ void ParamSlider::buildUi(const QString& label, const Setup& s) {
     outer->setSpacing(4);
 
     m_label = new QLabel();
-    m_label->setStyleSheet(QString("color: %1;").arg(Theme::TEXT_PRIMARY));
     outer->addWidget(m_label);
 
     QHBoxLayout* row = new QHBoxLayout();
@@ -49,13 +47,6 @@ void ParamSlider::buildUi(const QString& label, const Setup& s) {
     m_slider = new QSlider(Qt::Horizontal);
     m_slider->setRange(s.sliderMin, s.sliderMax);
     m_slider->setValue(0);
-    m_slider->setStyleSheet(
-        QString("QSlider::groove:horizontal { height: 4px; background: %1; border-radius: 2px; }"
-                "QSlider::sub-page:horizontal { background: %2; border-radius: 2px; }"
-                "QSlider::handle:horizontal { width: 14px; height: 14px; margin: -5px 0;"
-                "  background: %2; border-radius: 7px; }"
-                "QSlider::handle:horizontal:hover { background: %3; }")
-        .arg(Theme::BORDER, Theme::ACCENT_STEEL, Theme::ACCENT_AMBER));
     m_slider->installEventFilter(this);
     row->addWidget(m_slider);
 
@@ -64,11 +55,6 @@ void ParamSlider::buildUi(const QString& label, const Setup& s) {
     m_spinBox->setSingleStep(s.spinStep);
     m_spinBox->setDecimals(s.spinDecimals);
     m_spinBox->setValue(0.0);
-    m_spinBox->setStyleSheet(
-        QString("QDoubleSpinBox { color: %1; background-color: %2;"
-                "  border: 1px solid %3; border-radius: 3px; padding: 1px 3px; }"
-                "QDoubleSpinBox:focus { border-color: %4; }")
-        .arg(Theme::TEXT_PRIMARY, Theme::BG_SPINBOX, Theme::BORDER, Theme::ACCENT_STEEL));
     row->addWidget(m_spinBox);
 
     outer->addLayout(row);
