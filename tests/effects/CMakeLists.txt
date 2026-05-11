@@ -34,6 +34,7 @@ macro(add_effect_test name src effect_lib)
     add_test(NAME ${ARGV3} COMMAND ${name})
     set_tests_properties(${ARGV3} PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        RESOURCE_LOCK opencl_jit
     )
 endmacro()
 

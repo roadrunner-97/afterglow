@@ -61,6 +61,7 @@ set_target_properties(test_gpu_pipeline PROPERTIES
 add_test(NAME GpuPipeline COMMAND test_gpu_pipeline)
 set_tests_properties(GpuPipeline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    RESOURCE_LOCK opencl_jit
 )
 target_link_libraries(test_effect_manager
     PRIVATE
