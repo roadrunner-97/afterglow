@@ -11,6 +11,7 @@
 
 class ParamSlider;
 class QPushButton;
+class QCheckBox;
 
 class CropRotateEffect : public PhotoEditorEffect,
                          public IGpuEffect,
@@ -56,8 +57,11 @@ public:
     QCursor cursorFor    (QPointF screenPx,   const ViewportTransform& vt) override;
 
     // Accessors for testing
-    SubTool subTool()      const { return m_subTool; }
-    int     quarterTurns() const { return m_quarterTurns; }
+    SubTool subTool()       const { return m_subTool; }
+    int     quarterTurns()  const { return m_quarterTurns; }
+    bool    lockAspect()    const { return m_lockAspect; }
+    double  lockedAspect()  const { return m_lockedAspectPx; }
+    void    setLockAspect(bool on);
 
 private:
     // ── State ──────────────────────────────────────────────────────────────
@@ -77,10 +81,17 @@ private:
     // respect the user's choice and only clamp to keep them in-bounds.
     bool    m_userManualCrop = false;
 
+    // Aspect-ratio lock: when on, corner/edge drags preserve m_lockedAspectPx
+    // (W/H in source pixels — captured at the moment the user enables the
+    // lock from the current crop rect and image size).
+    bool    m_lockAspect      = false;
+    double  m_lockedAspectPx  = 1.0;
+
     // ── UI ─────────────────────────────────────────────────────────────────
     QWidget*    m_controlsWidget    = nullptr;
     ParamSlider* m_angleSlider      = nullptr;
     QPushButton* m_straightenButton = nullptr;
+    QCheckBox*   m_lockAspectCheck  = nullptr;
 
     // ── Drag state ─────────────────────────────────────────────────────────
     enum class DragKind {

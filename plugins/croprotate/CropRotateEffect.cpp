@@ -1,6 +1,7 @@
 #include "CropRotateEffect.h"
 #include "ParamSlider.h"
 
+#include <QCheckBox>
 #include <QFont>
 #include <QFontMetrics>
 #include <QMouseEvent>
@@ -72,6 +73,15 @@ QWidget* CropRotateEffect::createControlsWidget() {
         emit parametersChanged();
     });
 
+    // ── Lock aspect ratio ────────────────────────────────────────────────────
+    m_lockAspectCheck = new QCheckBox("Lock aspect ratio");
+    m_lockAspectCheck->setToolTip(
+        "Constrain handle drags to preserve the current crop's aspect ratio");
+    connect(m_lockAspectCheck, &QCheckBox::toggled, this, [this](bool on) {
+        setLockAspect(on);
+    });
+    layout->addWidget(m_lockAspectCheck);
+
     // ── Reset Crop ───────────────────────────────────────────────────────────
     auto* btnReset = new QPushButton("Reset Crop");
     connect(btnReset, &QPushButton::clicked, this, [this]() {
@@ -79,10 +89,16 @@ QWidget* CropRotateEffect::createControlsWidget() {
         m_angleDeg       = 0.0f;
         m_quarterTurns   = 0;
         m_userManualCrop = false;
+        m_lockAspect     = false;
         if (m_angleSlider) {
             m_angleSlider->blockSignals(true);
             m_angleSlider->setValue(0.0);
             m_angleSlider->blockSignals(false);
+        }
+        if (m_lockAspectCheck) {
+            m_lockAspectCheck->blockSignals(true);
+            m_lockAspectCheck->setChecked(false);
+            m_lockAspectCheck->blockSignals(false);
         }
         emit parametersChanged();
     });
@@ -241,6 +257,16 @@ void CropRotateEffect::reFitOrClamp() {
                                     m_crop.width(), m_crop.height());
     } else {
         m_crop = largestInscribedCrop(userCropAngle());
+    }
+}
+
+void CropRotateEffect::setLockAspect(bool on) {
+    m_lockAspect = on;
+    if (on && m_imageSize.width() > 0 && m_imageSize.height() > 0 &&
+        m_crop.height() > 0.0) {
+        const double wpx = m_crop.width()  * m_imageSize.width();
+        const double hpx = m_crop.height() * m_imageSize.height();
+        if (hpx > 0.0) m_lockedAspectPx = wpx / hpx;
     }
 }
 
@@ -666,15 +692,46 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
         case 3: x0 += dnx; y1 += dny; break;
         default: break; // GCOVR_EXCL_LINE
         }
-        // Min size enforcement around the FIXED corner (so the dragged corner
-        // can't cross the opposite one).
-        if (x1 - x0 < MIN_CROP_SIZE) {
-            if (m_dragIndex == 0 || m_dragIndex == 3) x0 = x1 - MIN_CROP_SIZE;
-            else                                       x1 = x0 + MIN_CROP_SIZE;
-        }
-        if (y1 - y0 < MIN_CROP_SIZE) {
-            if (m_dragIndex == 0 || m_dragIndex == 1) y0 = y1 - MIN_CROP_SIZE;
-            else                                       y1 = y0 + MIN_CROP_SIZE;
+        const bool lockOk = m_lockAspect && m_imageSize.width() > 0 &&
+                            m_imageSize.height() > 0;
+        if (lockOk) {
+            // Normalised aspect = (wpx/hpx) * (H/W) since wn=wpx/W, hn=hpx/H.
+            const double aspectN = m_lockedAspectPx *
+                static_cast<double>(m_imageSize.height()) /
+                static_cast<double>(m_imageSize.width());
+            double wn = x1 - x0;
+            double hn = y1 - y0;
+            // Pick the axis the user moved further (in aspect-normalised units)
+            // and let it drive the other.
+            const double dwAbs = std::abs(wn - m_dragCropStart.width());
+            const double dhAbs = std::abs(hn - m_dragCropStart.height());
+            if (dwAbs / aspectN >= dhAbs) hn = wn / aspectN;
+            else                          wn = hn * aspectN;
+            // Min size — scale both axes uniformly so aspect survives.
+            if (wn < MIN_CROP_SIZE || hn < MIN_CROP_SIZE) {
+                const double s = std::max(MIN_CROP_SIZE / wn,
+                                          MIN_CROP_SIZE / hn);
+                wn *= s; hn *= s;
+            }
+            // Re-anchor the opposite corner.
+            switch (m_dragIndex) {
+            case 0: x0 = x1 - wn; y0 = y1 - hn; break;
+            case 1: x1 = x0 + wn; y0 = y1 - hn; break;
+            case 2: x1 = x0 + wn; y1 = y0 + hn; break;
+            case 3: x0 = x1 - wn; y1 = y0 + hn; break;
+            default: break; // GCOVR_EXCL_LINE
+            }
+        } else {
+            // Min size enforcement around the FIXED corner (so the dragged
+            // corner can't cross the opposite one).
+            if (x1 - x0 < MIN_CROP_SIZE) {
+                if (m_dragIndex == 0 || m_dragIndex == 3) x0 = x1 - MIN_CROP_SIZE;
+                else                                       x1 = x0 + MIN_CROP_SIZE;
+            }
+            if (y1 - y0 < MIN_CROP_SIZE) {
+                if (m_dragIndex == 0 || m_dragIndex == 1) y0 = y1 - MIN_CROP_SIZE;
+                else                                       y1 = y0 + MIN_CROP_SIZE;
+            }
         }
         m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5,
                                     x1 - x0, y1 - y0);
@@ -686,6 +743,25 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
             y1 += dny;
             if (y1 - y0 < MIN_CROP_SIZE) y1 = y0 + MIN_CROP_SIZE;
         }
+        if (m_lockAspect && m_imageSize.width() > 0 && m_imageSize.height() > 0) {
+            // Height changed → set width to match, centred horizontally on the
+            // crop's original x-centre so the perpendicular edges grow evenly.
+            const double aspectN = m_lockedAspectPx *
+                static_cast<double>(m_imageSize.height()) /
+                static_cast<double>(m_imageSize.width());
+            double hn = y1 - y0;
+            double wn = hn * aspectN;
+            if (wn < MIN_CROP_SIZE) {
+                const double s = MIN_CROP_SIZE / wn;
+                wn *= s; hn *= s;
+                // Push the moved edge so the new height is consistent.
+                if (m_dragIndex == 0) y0 = y1 - hn;
+                else                  y1 = y0 + hn;
+            }
+            const double cxn = m_dragCropStart.x() + m_dragCropStart.width() * 0.5;
+            x0 = cxn - wn * 0.5;
+            x1 = cxn + wn * 0.5;
+        }
         m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5,
                                     x1 - x0, y1 - y0);
     } else if (m_dragKind == DragKind::EdgeV) {
@@ -695,6 +771,22 @@ bool CropRotateEffect::mouseMove(QMouseEvent* event, const ViewportTransform& vt
         } else {
             x1 += dnx;
             if (x1 - x0 < MIN_CROP_SIZE) x1 = x0 + MIN_CROP_SIZE;
+        }
+        if (m_lockAspect && m_imageSize.width() > 0 && m_imageSize.height() > 0) {
+            const double aspectN = m_lockedAspectPx *
+                static_cast<double>(m_imageSize.height()) /
+                static_cast<double>(m_imageSize.width());
+            double wn = x1 - x0;
+            double hn = wn / aspectN;
+            if (hn < MIN_CROP_SIZE) {
+                const double s = MIN_CROP_SIZE / hn;
+                wn *= s; hn *= s;
+                if (m_dragIndex == 0) x0 = x1 - wn;
+                else                  x1 = x0 + wn;
+            }
+            const double cyn = m_dragCropStart.y() + m_dragCropStart.height() * 0.5;
+            y0 = cyn - hn * 0.5;
+            y1 = cyn + hn * 0.5;
         }
         m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5,
                                     x1 - x0, y1 - y0);

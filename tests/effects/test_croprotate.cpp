@@ -1353,6 +1353,96 @@ private slots:
         QVERIFY(std::abs(squareSize - wideSize) > 1e-3);
     }
 
+    // ── Aspect ratio lock ─────────────────────────────────────────────────────
+
+    // Enabling the lock captures the current crop's pixel-space aspect ratio.
+    void lockAspect_enable_capturesCurrentRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({1600, 900});       // 16:9 image
+        e.setLockAspect(true);
+        QVERIFY(e.lockAspect());
+        QVERIFY(std::abs(e.lockedAspect() - 16.0 / 9.0) < 1e-6);
+    }
+
+    // Corner drag with lock on: aspect ratio of the resulting crop matches
+    // the locked one regardless of which axis the user dragged further.
+    void lockAspect_cornerDrag_preservesRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt = makeVT();
+        // Shrink crop slightly so the locked aspect isn't 1:1 trivially.
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove,         { 80.0,  60.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease,{ 80.0,  60.0});
+        e.mousePress(&p1, vt); e.mouseMove(&m1, vt); e.mouseRelease(&r1, vt);
+        const QRectF base = e.userCropRect();
+        const double startAspect = (base.width()  * 100.0) /
+                                   (base.height() * 100.0);
+
+        e.setLockAspect(true);
+
+        // Drag BR corner inward — mostly along X to verify the Y axis follows.
+        const QPointF br(base.right() * 100.0, base.bottom() * 100.0);
+        auto p2 = makeMouseEvent(QEvent::MouseButtonPress,  br);
+        auto m2 = makeMouseEvent(QEvent::MouseMove,         br - QPointF(30, 2));
+        auto r2 = makeMouseEvent(QEvent::MouseButtonRelease,br - QPointF(30, 2));
+        e.mousePress(&p2, vt); e.mouseMove(&m2, vt); e.mouseRelease(&r2, vt);
+
+        const QRectF after = e.userCropRect();
+        const double newAspect = (after.width()  * 100.0) /
+                                 (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("aspect drifted: %1 vs %2")
+                            .arg(newAspect).arg(startAspect)));
+    }
+
+    // Edge drag with lock on: the perpendicular dimension scales to maintain
+    // the locked aspect ratio.
+    void lockAspect_edgeDrag_scalesPerpendicular() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt = makeVT();
+        // Shrink to a 2:1 rect via a corner drag first.
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove,         { 80.0,  60.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease,{ 80.0,  60.0});
+        e.mousePress(&p1, vt); e.mouseMove(&m1, vt); e.mouseRelease(&r1, vt);
+
+        e.setLockAspect(true);
+        const double aspect = e.lockedAspect();
+
+        // Drag the right edge inward.
+        const QRectF base = e.userCropRect();
+        const QPointF rm(base.right() * 100.0,
+                        (base.top() + base.bottom()) * 50.0);
+        auto p2 = makeMouseEvent(QEvent::MouseButtonPress,  rm);
+        auto m2 = makeMouseEvent(QEvent::MouseMove,         rm - QPointF(20, 0));
+        auto r2 = makeMouseEvent(QEvent::MouseButtonRelease,rm - QPointF(20, 0));
+        e.mousePress(&p2, vt); e.mouseMove(&m2, vt); e.mouseRelease(&r2, vt);
+
+        const QRectF after = e.userCropRect();
+        const double newAspect = (after.width()  * 100.0) /
+                                 (after.height() * 100.0);
+        QVERIFY(std::abs(newAspect - aspect) < 1e-3);
+    }
+
+    // Reset Crop clears the aspect lock as part of restoring defaults.
+    void lockAspect_resetCrop_clearsLock() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        QWidget* w = e.createControlsWidget();
+        e.setLockAspect(true);
+        QVERIFY(e.lockAspect());
+
+        QPushButton* resetBtn = nullptr;
+        for (auto* b : w->findChildren<QPushButton*>())
+            if (b->text().contains("Reset")) { resetBtn = b; break; }
+        resetBtn->click();
+        QVERIFY(!e.lockAspect());
+    }
+
     // ── Destructor ────────────────────────────────────────────────────────────
 
     void destructor_heapAllocated_doesNotCrash() {
