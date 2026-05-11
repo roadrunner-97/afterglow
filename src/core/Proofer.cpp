@@ -142,7 +142,7 @@ void Proofer::dispatchNext() {
                 img = reader.read();
             }
             if (img.isNull()) return {};
-            QImage result = pipeline->run(img, calls, {}, RunMode::Commit);
+            QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
             if (result.isNull()) return {};
             return scaleProof(result);
         }

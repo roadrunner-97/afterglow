@@ -64,18 +64,20 @@ void ImageProcessor::processImageAsync(const QImage &originalImage,
 
     emit processingStarted();
 
-    auto *watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this,
+    auto *watcher = new QFutureWatcher<GpuPipelineResult>(this);
+    connect(watcher, &QFutureWatcher<GpuPipelineResult>::finished, this,
             [this, watcher, myGen, genPtr]() {
-        if (myGen == genPtr->load(std::memory_order_relaxed))
-            emit processingComplete(watcher->result());
+        if (myGen == genPtr->load(std::memory_order_relaxed)) {
+            const GpuPipelineResult r = watcher->result();
+            emit processingComplete(r.image, r.offset);
+        }
         watcher->deleteLater();
     });
 
     auto pipeline = m_pipeline;
     watcher->setFuture(QtConcurrent::run(
         [image = originalImage, calls = std::move(calls),
-         genPtr, myGen, pipeline, viewport, mode]() -> QImage {
+         genPtr, myGen, pipeline, viewport, mode]() -> GpuPipelineResult {
             if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
             return pipeline->run(image, calls, viewport, mode);
         }
@@ -97,7 +99,10 @@ void ImageProcessor::exportImageAsync(const QImage& originalImage,
     auto pipeline = m_pipeline;
     watcher->setFuture(QtConcurrent::run(
         [image = originalImage, calls = std::move(calls), pipeline]() -> QImage {
-            return pipeline->run(image, calls, {}, RunMode::Commit);
+            // Export has no viewport, so the pipeline returns the full-resolution
+            // image with offset (0, 0).  Strip the offset; exportComplete only
+            // needs the pixels.
+            return pipeline->run(image, calls, {}, RunMode::Commit).image;
         }
     ));
 }

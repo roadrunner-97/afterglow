@@ -20,10 +20,10 @@ static const float QUAD_VERTS[] = {
      1.f,  1.f,  1.f, 0.f,
 };
 
-// Vertex shader rotates NDC around an arbitrary pivot in pixel-correct
-// space (aspect-corrected via uViewport), so a 90° rotation looks like a
-// real 90° rotation regardless of widget aspect.  Screen-CCW uses the
-// NDC-Y-up rotation (c, -s) / (s, c).
+// The quad VBO is fullscreen NDC.  uRectNdc remaps it to the image's sub-rect
+// of the widget (so the surrounding viewport stays at the GL clear colour),
+// then the rotation is applied around the pivot in pixel-correct space.
+// uRectNdc = (cx, cy, halfW, halfH) of the image rect in NDC.
 static const char* VERT_SRC =
     "#version 330 core\n"
     "layout(location=0) in vec2 aPos;\n"
@@ -31,9 +31,11 @@ static const char* VERT_SRC =
     "uniform float uAngleRad;\n"
     "uniform vec2  uPivotNdc;\n"
     "uniform vec2  uViewport;\n"
+    "uniform vec4  uRectNdc;\n"
     "out vec2 vUv;\n"
     "void main() {\n"
-    "    vec2 delta = aPos - uPivotNdc;\n"
+    "    vec2 imgNdc = uRectNdc.xy + aPos * uRectNdc.zw;\n"
+    "    vec2 delta = imgNdc - uPivotNdc;\n"
     "    vec2 px = delta * uViewport * 0.5;\n"
     "    float c = cos(uAngleRad);\n"
     "    float s = sin(uAngleRad);\n"
@@ -101,19 +103,29 @@ void ViewportWidget::initializeGL() {
         qWarning() << "[ViewportWidget] shader error:" << m_shader->log();
     }
 
-    createOrResizeTexture(width(), height());
+    // Texture is allocated lazily in setImage() — its size tracks the image,
+    // not the widget, so there's nothing to do here until we have content.
+    glGenTextures(1, &m_glTexture);
+    glBindTexture(GL_TEXTURE_2D, m_glTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // Apply any image that arrived while we were still hidden (e.g. async
     // processor result delivered before the develop page was first shown).
     if (!m_pendingImage.isNull()) {
         QImage pending = std::move(m_pendingImage);
+        QPoint offset  = m_pendingOffset;
         m_pendingImage = QImage();
-        setImage(pending);
+        m_pendingOffset = {};
+        setImage(pending, offset);
     }
 }
 
-void ViewportWidget::resizeGL(int w, int h) {
-    createOrResizeTexture(w, h);
+void ViewportWidget::resizeGL(int, int) {
+    // Widget resize doesn't change the texture — only setImage() does.
 }
 
 void ViewportWidget::paintGL() {
@@ -139,9 +151,27 @@ void ViewportWidget::paintGL() {
     const float angleRad = m_imgAngleDeg * static_cast<float>(M_PI) / 180.0f;
     const QVector2D pivotNdc(2.0f * static_cast<float>(pivotScreen.x()) / Vw - 1.0f,
                              1.0f - 2.0f * static_cast<float>(pivotScreen.y()) / Vh);
+
+    // Image rect in NDC.  The image occupies widget pixels
+    // [imageOffset.x, imageOffset.x + renderedSize.w] × [...].  Top row in NDC
+    // is +1, so the y axis is flipped relative to widget pixels.
+    const float x0 = static_cast<float>(m_imageOffset.x());
+    const float y0 = static_cast<float>(m_imageOffset.y());
+    const float x1 = x0 + static_cast<float>(m_renderedSize.width());
+    const float y1 = y0 + static_cast<float>(m_renderedSize.height());
+    const float ndcX0 = 2.0f * x0 / Vw - 1.0f;
+    const float ndcX1 = 2.0f * x1 / Vw - 1.0f;
+    const float ndcYTop    = 1.0f - 2.0f * y0 / Vh;  // smaller y → higher NDC
+    const float ndcYBottom = 1.0f - 2.0f * y1 / Vh;
+    const QVector4D rectNdc((ndcX0 + ndcX1) * 0.5f,
+                            (ndcYTop + ndcYBottom) * 0.5f,
+                            (ndcX1 - ndcX0) * 0.5f,
+                            (ndcYTop - ndcYBottom) * 0.5f);
+
     m_shader->setUniformValue("uAngleRad", angleRad);
     m_shader->setUniformValue("uPivotNdc", pivotNdc);
     m_shader->setUniformValue("uViewport", QVector2D(Vw, Vh));
+    m_shader->setUniformValue("uRectNdc", rectNdc);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_glTexture);
@@ -157,17 +187,12 @@ void ViewportWidget::paintGL() {
 }
 
 void ViewportWidget::createOrResizeTexture(int w, int h) {
-    if (!m_glTexture)
-        glGenTextures(1, &m_glTexture);
-
+    if (m_textureSize == QSize(w, h)) return;
     glBindTexture(GL_TEXTURE_2D, m_glTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h,
                  0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
+    m_textureSize = QSize(w, h);
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -177,29 +202,32 @@ void ViewportWidget::setImageSize(QSize size) {
     setCursor(size.isEmpty() ? Qt::ArrowCursor : Qt::OpenHandCursor);
 }
 
-void ViewportWidget::setImage(QImage image) {
+void ViewportWidget::setImage(QImage image, QPoint offset) {
     if (image.isNull()) return;
 
     // GL context may not exist yet if the widget has never been shown
     // (Loupe → Develop with the develop page hidden inside QStackedWidget).
     // Defer the upload to initializeGL().
     if (m_glTexture == 0) {
-        m_pendingImage = std::move(image);
+        m_pendingImage  = std::move(image);
+        m_pendingOffset = offset;
         return;
     }
 
     // Upload CPU image to GL texture on the GL thread (we're on the main thread here).
     makeCurrent();
     QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
+    createOrResizeTexture(rgba.width(), rgba.height());
     glBindTexture(GL_TEXTURE_2D, m_glTexture);
-    // Upload into the top-left corner; texture was sized to the full viewport.
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
                     rgba.width(), rgba.height(),
                     GL_RGBA, GL_UNSIGNED_BYTE, rgba.constBits());
     glBindTexture(GL_TEXTURE_2D, 0);
     doneCurrent();
 
-    m_hasContent = true;
+    m_imageOffset  = offset;
+    m_renderedSize = rgba.size();
+    m_hasContent   = true;
     update();
 }
 

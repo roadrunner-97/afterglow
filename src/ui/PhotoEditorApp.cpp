@@ -801,12 +801,12 @@ void PhotoEditorApp::onProcessingStarted() {
     m_processingLabel->setVisible(true);
 }
 
-void PhotoEditorApp::onProcessingComplete(QImage result) {
+void PhotoEditorApp::onProcessingComplete(QImage result, QPoint offset) {
     m_processingLabel->setVisible(false);
     if (result.isNull()) {
         m_viewport->update();
     } else {
-        m_viewport->setImage(result);
+        m_viewport->setImage(result, offset);
     }
 }
 

@@ -293,7 +293,7 @@ private slots:
         }
 
         // Same call shape as ImageProcessor::exportImageAsync.
-        QImage out = m_pipeline.run(src, calls, {}, RunMode::Commit);
+        QImage out = m_pipeline.run(src, calls, {}, RunMode::Commit).image;
         QVERIFY2(!out.isNull(), "pipeline returned null image");
 
         // Bake crop + rotate, mirroring PhotoEditorApp::onExportComplete.

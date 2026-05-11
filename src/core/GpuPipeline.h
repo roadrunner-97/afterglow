@@ -30,6 +30,16 @@ struct ViewportRequest {
     QPointF center = {0.5, 0.5};
 };
 
+// Result of a pipeline run.  `image` contains only the visible image pixels —
+// never letterbox padding — so effects can't corrupt empty viewport space.
+// `offset` is where the top-left of `image` belongs within the displaySize
+// from the originating ViewportRequest.  When `image` fills the viewport
+// (or for export, where displaySize is empty), `offset` is (0, 0).
+struct GpuPipelineResult {
+    QImage image;
+    QPoint offset;
+};
+
 // Run mode selects how the pipeline handles the full-res post-effect cache.
 //
 //  Commit    Image load or slider-release: run effects on the full-res buffer,
@@ -64,10 +74,12 @@ class GpuPipeline {
 public:
     GpuPipeline() = default;
 
-    // Run the pipeline.  Returns {} on failure.  Default mode is Commit so
-    // callers like exportImageAsync() get a full-fidelity pass without opt-in.
-    QImage run(const QImage& image, const QVector<GpuPipelineCall>& calls,
-               const ViewportRequest& viewport, RunMode mode = RunMode::Commit);
+    // Run the pipeline.  Returns {} (null image) on failure.  Default mode is
+    // Commit so callers like exportImageAsync() get a full-fidelity pass
+    // without opt-in.  The returned image contains only visible image pixels;
+    // letterbox padding is the viewport widget's responsibility.
+    GpuPipelineResult run(const QImage& image, const QVector<GpuPipelineCall>& calls,
+                          const ViewportRequest& viewport, RunMode mode = RunMode::Commit);
 
 private:
     // All must be called with m_mutex held.
@@ -101,7 +113,6 @@ private:
     cl::Kernel m_decodeKernel16Srgb;        // 1:1 decode: 16-bit sRGB ushort → float4 linear
     cl::Kernel m_decodeKernel16Linear;      // 1:1 decode: 16-bit linear ushort → float4 linear
     cl::Kernel m_packKernel;                // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
-    cl::Kernel m_clearLetterboxKernel;     // zero pixels that map outside the source image (letterbox mask)
 
     int        m_previewW = 0;
     int        m_previewH = 0;

@@ -48,7 +48,7 @@ private slots:
     void saveTestCase();
     void onParametersChanged();
     void onLiveParametersChanged();
-    void onProcessingComplete(QImage result);
+    void onProcessingComplete(QImage result, QPoint offset);
     void onProcessingStarted();
     void onExportComplete(QImage result, QString destinationPath);
     void onPhotoActivated(const QString& path);

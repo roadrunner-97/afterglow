@@ -187,28 +187,6 @@ __kernel void preview_downsample_float4_linear(
     dst[dy*dstW + dx] = (float4)(r * inv, g * inv, b * inv, 1.0f);
 }
 
-// After effects have run on the full preview buffer (which includes black
-// letterbox pixels for images that don't fill the viewport), some effects
-// (e.g. brightness +offset, contrast midpoint shift) corrupt those black
-// pixels.  This kernel restores them: any preview pixel whose source
-// coordinate falls outside [0, srcW) × [0, srcH) is clamped back to black.
-__kernel void clear_letterbox(__global float4* buf,
-                              int previewW, int previewH,
-                              float cropX0, float cropY0,
-                              float cropX1, float cropY1,
-                              int srcW,    int srcH)
-{
-    int x = get_global_id(0), y = get_global_id(1);
-    if (x >= previewW || y >= previewH) return;
-
-    float rgnW = cropX1 - cropX0, rgnH = cropY1 - cropY0;
-    float sx = cropX0 + ((float)x + 0.5f) * rgnW / (float)previewW;
-    float sy = cropY0 + ((float)y + 0.5f) * rgnH / (float)previewH;
-
-    if (sx < 0.0f || sx >= (float)srcW || sy < 0.0f || sy >= (float)srcH)
-        buf[y * previewW + x] = (float4)(0.0f, 0.0f, 0.0f, 1.0f);
-}
-
 // Final stage: clamp each channel to [0, 1], apply the sRGB OETF, round to
 // 8-bit, pack into 0xFFRRGGBB (QImage::Format_RGB32 byte order).
 __kernel void pack_linear_to_srgb_rgb32(
@@ -229,8 +207,8 @@ __kernel void pack_linear_to_srgb_rgb32(
 
 // ── run ──────────────────────────────────────────────────────────────────────
 
-QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& calls,
-                        const ViewportRequest& viewport, RunMode mode) {
+GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& calls,
+                                   const ViewportRequest& viewport, RunMode mode) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     const int rev = GpuDeviceRegistry::instance().revision();
@@ -260,7 +238,12 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         }
     }
 
-    if (image.constBits() != m_lastBits)
+    // Also compare dimensions, because freed-then-reallocated QImage buffers
+    // can land at the same address.  The bits pointer alone isn't a reliable
+    // identity for the source image.
+    if (image.constBits() != m_lastBits ||
+        image.width()     != m_width    ||
+        image.height()    != m_height)
         uploadImageLocked(image);
 
     if (!m_available) return {};
@@ -271,7 +254,9 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         const int previewH = viewport.displaySize.isValid() ? viewport.displaySize.height() : m_height;
 
         // Compute the visible crop region in source image pixels.
-        // Mirrors the pan/zoom math in ViewportWidget exactly.
+        // Mirrors the pan/zoom math in ViewportWidget exactly.  Letterbox
+        // padding shows up here as cropX0<0 / cropX1>srcW (the visible region
+        // extends past the image into empty viewport space).
         const float W  = m_width,  H  = m_height;
         const float Vw = previewW, Vh = previewH;
         const float fitScale     = std::min(Vw / W, Vh / H);
@@ -280,19 +265,41 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         const float regionH = Vh / displayScale;
         const float cropX0 = (float)viewport.center.x() * W - regionW * 0.5f;
         const float cropY0 = (float)viewport.center.y() * H - regionH * 0.5f;
-        const float cropX1 = cropX0 + regionW;
-        const float cropY1 = cropY0 + regionH;
 
-        // Reallocate preview-sized work/aux/packed buffers when dimensions change.
-        if (m_previewW != previewW || m_previewH != previewH) {
-            const size_t f4Bytes     = static_cast<size_t>(previewW) * previewH * sizeof(cl_float4);
-            const size_t packedBytes = static_cast<size_t>(previewW) * previewH * sizeof(cl_uint);
+        // Clip the crop region to the actual image bounds.  Effects only run
+        // on real image pixels; the viewport widget renders the result inside
+        // a sub-rect of the viewport, leaving the surrounding letterbox to
+        // the GL clear colour.  This is the root-cause fix for the original
+        // bug where additive effects (brightness offset, contrast midpoint,
+        // colour balance) painted onto the black letterbox pixels.
+        const float clipX0 = std::max(0.0f, cropX0);
+        const float clipY0 = std::max(0.0f, cropY0);
+        const float clipX1 = std::min(W,    cropX0 + regionW);
+        const float clipY1 = std::min(H,    cropY0 + regionH);
+        if (clipX0 >= clipX1 || clipY0 >= clipY1) return {};
+
+        // Preview-pixel range that covers the clipped source region.  Round
+        // to nearest pixel so the boundary lands consistently across runs.
+        const int imgX0 = (int)std::lround((clipX0 - cropX0) / regionW * Vw);
+        const int imgY0 = (int)std::lround((clipY0 - cropY0) / regionH * Vh);
+        const int imgX1 = (int)std::lround((clipX1 - cropX0) / regionW * Vw);
+        const int imgY1 = (int)std::lround((clipY1 - cropY0) / regionH * Vh);
+        const int imgW  = imgX1 - imgX0;
+        const int imgH  = imgY1 - imgY0;
+        if (imgW <= 0 || imgH <= 0) return {}; // GCOVR_EXCL_LINE
+
+        // Reallocate work/aux/packed buffers when the visible region size changes.
+        if (m_previewW != imgW || m_previewH != imgH) {
+            const size_t f4Bytes     = static_cast<size_t>(imgW) * imgH * sizeof(cl_float4);
+            const size_t packedBytes = static_cast<size_t>(imgW) * imgH * sizeof(cl_uint);
             m_workBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
             m_auxBuf    = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
             m_packedBuf = cl::Buffer(m_context, CL_MEM_READ_WRITE, packedBytes);
-            m_previewW  = previewW;
-            m_previewH  = previewH;
+            m_previewW  = imgW;
+            m_previewH  = imgH;
         }
+
+        const QPoint offset(imgX0, imgY0);
 
         // ── PanZoom fast path ─────────────────────────────────────────────────
         // If the cache is valid the visible preview can be produced with a
@@ -304,15 +311,15 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             ds.setArg(2, m_width);
             ds.setArg(3, m_height);
             ds.setArg(4, m_width);   // m_processedBuf is tightly packed
-            ds.setArg(5, previewW);
-            ds.setArg(6, previewH);
-            ds.setArg(7, cropX0);
-            ds.setArg(8, cropY0);
-            ds.setArg(9, cropX1);
-            ds.setArg(10, cropY1);
+            ds.setArg(5, imgW);
+            ds.setArg(6, imgH);
+            ds.setArg(7, clipX0);
+            ds.setArg(8, clipY0);
+            ds.setArg(9, clipX1);
+            ds.setArg(10, clipY1);
             m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
-                                         cl::NDRange(previewW, previewH));
-            return packAndReadbackLocked(m_workBuf, previewW, previewH);
+                                         cl::NDRange(imgW, imgH));
+            return { packAndReadbackLocked(m_workBuf, imgW, imgH), offset };
         }
 
         // ── Commit path ───────────────────────────────────────────────────────
@@ -342,28 +349,28 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
             m_queue.finish();
             m_processedValid = true;
 
-            // Downsample cache → workBuf at the requested preview dimensions.
+            // Downsample cache → workBuf at the visible-region dimensions.
             cl::Kernel& ds = m_downsampleKernelFloat4;
             ds.setArg(0, m_processedBuf);
             ds.setArg(1, m_workBuf);
             ds.setArg(2, m_width);
             ds.setArg(3, m_height);
             ds.setArg(4, m_width);
-            ds.setArg(5, previewW);
-            ds.setArg(6, previewH);
-            ds.setArg(7, cropX0);
-            ds.setArg(8, cropY0);
-            ds.setArg(9, cropX1);
-            ds.setArg(10, cropY1);
+            ds.setArg(5, imgW);
+            ds.setArg(6, imgH);
+            ds.setArg(7, clipX0);
+            ds.setArg(8, clipY0);
+            ds.setArg(9, clipX1);
+            ds.setArg(10, clipY1);
             m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
-                                         cl::NDRange(previewW, previewH));
+                                         cl::NDRange(imgW, imgH));
 
-            return packAndReadbackLocked(m_workBuf, previewW, previewH);
+            return { packAndReadbackLocked(m_workBuf, imgW, imgH), offset };
         }
 
         // ── LiveDrag / PanZoom fallback ───────────────────────────────────────
-        // Legacy preview-sized pipeline: decode+downsample srcBuf → workBuf,
-        // run effects on the preview buffer with radius scaling so perceptual
+        // Preview-sized pipeline: decode+downsample srcBuf → workBuf, run
+        // effects on the preview buffer with radius scaling so perceptual
         // strength stays constant across zoom levels.  Invalidates the cache
         // since a new drag-state overrides the last committed frame.
         m_processedValid = false;
@@ -380,28 +387,28 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         dsKernel->setArg(2, m_width);
         dsKernel->setArg(3, m_height);
         dsKernel->setArg(4, m_stride);
-        dsKernel->setArg(5, previewW);
-        dsKernel->setArg(6, previewH);
-        dsKernel->setArg(7, cropX0);
-        dsKernel->setArg(8, cropY0);
-        dsKernel->setArg(9, cropX1);
-        dsKernel->setArg(10, cropY1);
+        dsKernel->setArg(5, imgW);
+        dsKernel->setArg(6, imgH);
+        dsKernel->setArg(7, clipX0);
+        dsKernel->setArg(8, clipY0);
+        dsKernel->setArg(9, clipX1);
+        dsKernel->setArg(10, clipY1);
         m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange,
-                                     cl::NDRange(previewW, previewH));
+                                     cl::NDRange(imgW, imgH));
         m_queue.finish();
 
-        const float srcPixelsPerPreviewPixel = regionW / static_cast<float>(previewW);
+        const float srcPixelsPerPreviewPixel = (clipX1 - clipX0) / static_cast<float>(imgW);
         for (const auto& call : calls) {
             IGpuEffect* g = call.gpu;
             QMap<QString, QVariant> scaledParams = call.params;
             scaledParams.insert("_srcPixelsPerPreviewPixel",
                                 static_cast<double>(srcPixelsPerPreviewPixel));
-            scaledParams.insert("_cropX0", static_cast<double>(cropX0));
-            scaledParams.insert("_cropY0", static_cast<double>(cropY0));
+            scaledParams.insert("_cropX0", static_cast<double>(clipX0));
+            scaledParams.insert("_cropY0", static_cast<double>(clipY0));
             scaledParams.insert("_srcW", m_width);
             scaledParams.insert("_srcH", m_height);
             if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
-                               previewW, previewH, scaledParams)) {
+                               imgW, imgH, scaledParams)) {
                 // GCOVR_EXCL_START — every shipped IGpuEffect returns true
                 // unless it threw, in which case the surrounding catch fires.
                 qWarning() << "[GpuPipeline]" << call.effect->getName()
@@ -412,20 +419,7 @@ QImage GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& cal
         }
         m_queue.finish();
 
-        // Restore letterbox pixels that effects may have corrupted.
-        m_clearLetterboxKernel.setArg(0, m_workBuf);
-        m_clearLetterboxKernel.setArg(1, previewW);
-        m_clearLetterboxKernel.setArg(2, previewH);
-        m_clearLetterboxKernel.setArg(3, cropX0);
-        m_clearLetterboxKernel.setArg(4, cropY0);
-        m_clearLetterboxKernel.setArg(5, cropX1);
-        m_clearLetterboxKernel.setArg(6, cropY1);
-        m_clearLetterboxKernel.setArg(7, m_width);
-        m_clearLetterboxKernel.setArg(8, m_height);
-        m_queue.enqueueNDRangeKernel(m_clearLetterboxKernel, cl::NullRange,
-                                     cl::NDRange(previewW, previewH));
-
-        return packAndReadbackLocked(m_workBuf, previewW, previewH);
+        return { packAndReadbackLocked(m_workBuf, imgW, imgH), offset };
     }
     // GCOVR_EXCL_START
     catch (const cl::Error& e) {
@@ -525,7 +519,6 @@ bool GpuPipeline::initDownsampleKernels() {
         m_decodeKernel16Srgb        = cl::Kernel(prog, "fullres_decode_16bit_srgb_to_linear");
         m_decodeKernel16Linear      = cl::Kernel(prog, "fullres_decode_16bit_linear");
         m_packKernel                = cl::Kernel(prog, "pack_linear_to_srgb_rgb32");
-        m_clearLetterboxKernel      = cl::Kernel(prog, "clear_letterbox");
         return true;
     }
     // GCOVR_EXCL_START

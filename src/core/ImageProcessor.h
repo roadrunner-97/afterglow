@@ -37,7 +37,11 @@ public:
 
 signals:
     void processingStarted();
-    void processingComplete(QImage result);
+    // `offset` is the top-left position of `result` within the requested
+    // viewport.  When the image fills the viewport (or for export, where no
+    // viewport is requested), offset is (0, 0).  Receivers blit `result` at
+    // `offset` and leave the surrounding letterbox to the viewport's clear.
+    void processingComplete(QImage result, QPoint offset);
     void exportComplete(QImage result, QString destinationPath);
 
 private:

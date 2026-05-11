@@ -317,7 +317,7 @@ private slots:
 
         QImage out = m_pipeline.run(input,
                                     {{&m_pipelineVignette, &m_pipelineVignette, p}},
-                                    fullViewport(input));
+                                    fullViewport(input)).image;
         QVERIFY(!out.isNull());
 
         // The crop corners (at 25%/75% of image dimensions) should be

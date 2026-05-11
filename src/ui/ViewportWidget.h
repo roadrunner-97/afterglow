@@ -30,8 +30,10 @@ public:
     // Called by PhotoEditorApp when a new image is opened (before first render).
     void setImageSize(QSize size);
 
-    // Fallback: upload a CPU QImage to the GL texture and repaint.
-    void setImage(QImage image);
+    // Upload a CPU QImage to the GL texture and repaint.  `offset` places
+    // the image at that top-left position within the widget; the surrounding
+    // viewport is the GL clear colour (i.e. proper letterbox).
+    void setImage(QImage image, QPoint offset = {});
 
     // Reset to fit-zoom, centred.
     void resetView();
@@ -70,16 +72,24 @@ private:
 
     // GL resources
     GLuint                    m_glTexture = 0;
+    QSize                     m_textureSize;   // current texture allocation
     QOpenGLVertexArrayObject  m_vao;
     QOpenGLBuffer             m_vbo{QOpenGLBuffer::VertexBuffer};
     QOpenGLShaderProgram*     m_shader    = nullptr;
     bool                  m_hasContent = false;
+
+    // Position of the image within the widget (top-left, widget pixels).
+    // Drives the quad-rect uniform so the image lands at the correct sub-rect
+    // and the GL clear shows through as letterbox.
+    QPoint                m_imageOffset;
+    QSize                 m_renderedSize;
 
     // setImage() can be called before the widget has ever been shown — for
     // example when the user goes Loupe → Develop and the develop page's GL
     // context hasn't been created yet.  Stash the image here and apply it
     // from initializeGL() once the context is up.
     QImage                m_pendingImage;
+    QPoint                m_pendingOffset;
 
     // Pan/zoom state
     QSize   m_imageSize;

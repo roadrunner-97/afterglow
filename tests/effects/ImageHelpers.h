@@ -31,7 +31,7 @@ inline QImage runEffect(PhotoEditorEffect& effect,
     // effect under an old pointer.
     GpuPipeline pipeline;
     QVector<GpuPipelineCall> calls{{&effect, gpu, params}};
-    return pipeline.run(input, calls, ViewportRequest{}, RunMode::Commit);
+    return pipeline.run(input, calls, ViewportRequest{}, RunMode::Commit).image;
 }
 
 // ============================================================================
