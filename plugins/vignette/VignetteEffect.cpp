@@ -71,19 +71,23 @@ __kernel void applyVignetteLinear(__global float4* pixels,
                                    float feather,
                                    float p,
                                    float cornerD,
-                                   float srcX0,
-                                   float srcY0,
-                                   float srcPPP)
+                                   float cosA,
+                                   float sinA)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
     if (x >= w || y >= h) return;
 
-    float sx = srcX0 + ((float)x + 0.5f) * srcPPP;
-    float sy = srcY0 + ((float)y + 0.5f) * srcPPP;
+    // Work in buffer-pixel coords; cx/cy are pre-converted to buffer coords by
+    // the host.  Rotate the offset into the crop-aligned frame before taking
+    // the L^p norm so the vignette shape follows any crop rotation.
+    float dx =  ((float)x + 0.5f) - cx;
+    float dy =  ((float)y + 0.5f) - cy;
+    float u  =  dx * cosA + dy * sinA;
+    float v  = -dx * sinA + dy * cosA;
 
-    float nx = fabs((sx - cx) / halfW);
-    float ny = fabs((sy - cy) / halfH);
+    float nx = fabs(u / halfW);
+    float ny = fabs(v / halfH);
     float d  = native_powr(native_powr(nx, p) + native_powr(ny, p), 1.0f / p);
     float dn = d / cornerD;
 
@@ -241,14 +245,14 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     const float cropHalfWSrc = static_cast<float>((uX1 - uX0) * 0.5 * srcW);
     const float cropHalfHSrc = static_cast<float>((uY1 - uY0) * 0.5 * srcH);
 
-    // TODO: _userCropAngle is not yet applied to the vignette falloff.  The
-    // full rotation-aware math rotates the nx/ny axes by the crop angle before
-    // taking the L^p norm; this can be added later without changing the param
-    // schema.
+    const double cropAngleDeg = params.value("_userCropAngle", 0.0).toDouble();
+    const float  cropAngleRad = static_cast<float>(cropAngleDeg * M_PI / 180.0);
+    const float  cosA         = std::cos(cropAngleRad);
+    const float  sinA         = std::sin(cropAngleRad);
 
     // Transform crop centre and extents from source-pixel coords to
-    // current-buffer coords using the same srcX0/srcPPP translation the kernel
-    // already uses for each pixel.
+    // buffer-pixel coords.  cx/cy are the vignette centre in the current
+    // preview buffer; halfW/halfH are the crop half-extents in buffer pixels.
     const float cx    = (cropCxSrc - srcX0) / srcPPP;
     const float cy    = (cropCySrc - srcY0) / srcPPP;
     const float halfW = std::max(cropHalfWSrc / srcPPP, 1.0f);
@@ -265,18 +269,17 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelLinear.setArg(0,  buf);
     m_kernelLinear.setArg(1,  w);
     m_kernelLinear.setArg(2,  h);
-    m_kernelLinear.setArg(3,  cx);     // cx (crop centre in buffer coords)
-    m_kernelLinear.setArg(4,  cy);     // cy (crop centre in buffer coords)
-    m_kernelLinear.setArg(5,  halfD);  // halfW scale (isotropic, crop-relative)
-    m_kernelLinear.setArg(6,  halfD);  // halfH scale (isotropic, crop-relative)
+    m_kernelLinear.setArg(3,  cx);
+    m_kernelLinear.setArg(4,  cy);
+    m_kernelLinear.setArg(5,  halfD);  // isotropic scale (same for both axes)
+    m_kernelLinear.setArg(6,  halfD);
     m_kernelLinear.setArg(7,  a.amount);
     m_kernelLinear.setArg(8,  a.midpoint);
     m_kernelLinear.setArg(9,  a.feather);
     m_kernelLinear.setArg(10, a.p);
     m_kernelLinear.setArg(11, cornerD);
-    m_kernelLinear.setArg(12, srcX0);
-    m_kernelLinear.setArg(13, srcY0);
-    m_kernelLinear.setArg(14, srcPPP);
+    m_kernelLinear.setArg(12, cosA);
+    m_kernelLinear.setArg(13, sinA);
 
     queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
                                cl::NDRange(w, h), cl::NullRange);

@@ -347,6 +347,110 @@ private slots:
         QVERIFY2(cropCentreR > 120,
                  qPrintable(QString("cropCentreR=%1 (expected > 120)").arg(cropCentreR)));
     }
+
+    // LiveDrag coordinate fix: when srcPPP=2 the vignette centre must land at
+    // the buffer centre, not offset by srcX0/srcPPP confusion.  The bug caused
+    // the kernel to compare source-pixel sx against buffer-pixel cx, which
+    // produced heavy darkening at the buffer centre even for a full-image crop.
+    void pipeline_liveDrag_vignetteStaysCentredAtSrcPPP2() {
+        if (!m_hasGpu) QSKIP("No GPU");
+
+        // 64×64 buffer representing a 128×128 source downsampled by srcPPP=2.
+        const int W = 64, H = 64;
+        QImage input = makeSolid(W, H, 128, 128, 128);
+
+        QMap<QString, QVariant> p;
+        p["amount"]    = -100;
+        p["midpoint"]  = 50;   // transition centred at crop half-diagonal
+        p["feather"]   = 20;
+        p["roundness"] = 0;
+
+        // Full-image crop on a 128×128 "virtual" source.
+        p["_userCropX0"] = 0.0;
+        p["_userCropY0"] = 0.0;
+        p["_userCropX1"] = 1.0;
+        p["_userCropY1"] = 1.0;
+
+        // LiveDrag keys: buffer is downscaled by 2 from a 128×128 source.
+        p["_srcPixelsPerPreviewPixel"] = 2.0;
+        p["_cropX0"] = 0.0;
+        p["_cropY0"] = 0.0;
+        p["_srcW"] = 128;
+        p["_srcH"] = 128;
+
+        QImage out = m_pipeline.run(input,
+                                    {{&m_pipelineVignette, &m_pipelineVignette, p}},
+                                    fullViewport(input)).image;
+        QVERIFY(!out.isNull());
+
+        // Buffer centre (32, 32) maps to source centre (64, 64): should be in
+        // the bright inner zone regardless of srcPPP.
+        const int centreR = pixelR(out, W / 2, H / 2);
+        QVERIFY2(centreR > 110,
+                 qPrintable(QString("centreR=%1 at srcPPP=2 (expected > 110, bug would give ~0)").arg(centreR)));
+
+        // Corners should be darkened (far from centre).
+        const int cornerR = pixelR(out, 0, 0);
+        QVERIFY2(cornerR < 30,
+                 qPrintable(QString("cornerR=%1 (expected < 30)").arg(cornerR)));
+    }
+
+    // Rotation fix: with a rectangular vignette (roundness=-50, p≈5.66) and a
+    // 45° crop angle, the L^p level curves rotate 45°.  At 0° the axis-aligned
+    // pixel (48,32) — directly right of centre — is darker than the equidistant
+    // diagonal pixel (43,43); at 45° rotation the ordering flips.
+    void pipeline_cropRotation_vignetteFollowsCropAngle() {
+        if (!m_hasGpu) QSKIP("No GPU");
+
+        const int W = 64, H = 64;
+        QImage input = makeSolid(W, H, 128, 128, 128);
+
+        // Pixel A: 16px directly right of centre (axis-aligned).
+        // Pixel B: approx same distance diagonally (11px right + 11px down).
+        const int axisX = 48, axisY = 32;   // (32+16, 32)
+        const int diagX = 43, diagY = 43;   // (32+11, 32+11) ≈ same radius
+
+        auto runAngle = [&](double angleDeg) {
+            QMap<QString, QVariant> p;
+            p["amount"]    = -100;
+            p["midpoint"]  = 40;
+            p["feather"]   = 20;
+            p["roundness"] = -50;   // rectangular shape (p≈5.66)
+            p["_userCropX0"]             = 0.0;
+            p["_userCropY0"]             = 0.0;
+            p["_userCropX1"]             = 1.0;
+            p["_userCropY1"]             = 1.0;
+            p["_userCropAngle"]          = angleDeg;
+            p["_srcPixelsPerPreviewPixel"] = 1.0;
+            p["_cropX0"] = 0.0;
+            p["_cropY0"] = 0.0;
+            p["_srcW"] = W;
+            p["_srcH"] = H;
+            return m_pipeline.run(input,
+                                  {{&m_pipelineVignette, &m_pipelineVignette, p}},
+                                  fullViewport(input)).image;
+        };
+
+        QImage out0  = runAngle(0.0);
+        QImage out45 = runAngle(45.0);
+        QVERIFY(!out0.isNull());
+        QVERIFY(!out45.isNull());
+
+        const int axis0  = pixelR(out0,  axisX, axisY);
+        const int diag0  = pixelR(out0,  diagX, diagY);
+        const int axis45 = pixelR(out45, axisX, axisY);
+        const int diag45 = pixelR(out45, diagX, diagY);
+
+        // At 0°: axis pixel is darker than diagonal (rectangular vignette
+        // extends further along the crop axes for L^p with p>2).
+        QVERIFY2(axis0 < diag0,
+                 qPrintable(QString("0°: axis=%1 diag=%2 (expected axis < diag)").arg(axis0).arg(diag0)));
+
+        // At 45°: rotation flips the ordering — the diagonal direction is now
+        // aligned with the crop axis, so it becomes the darker pixel.
+        QVERIFY2(axis45 > diag45,
+                 qPrintable(QString("45°: axis=%1 diag=%2 (expected axis > diag)").arg(axis45).arg(diag45)));
+    }
 };
 
 QTEST_MAIN(TestVignette)
