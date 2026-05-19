@@ -327,6 +327,84 @@ private slots:
         QCOMPARE(h.cursor(), h.entries().size());  // no new entry beyond cursor
     }
 
+    void historyChangedOnSeed() {
+        UndoHistory h;
+        int count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        QVector<SettingsImporter::EffectSettings> snap;
+        snap << makeEff("b", true, {{"v", 0}});
+        h.seed(snap);
+        QCOMPARE(count, 1);
+    }
+
+    void historyChangedOnRecord() {
+        UndoHistory h;
+        QVector<SettingsImporter::EffectSettings> snap;
+        snap << makeEff("b", true, {{"v", 0}});
+        h.seed(snap);
+
+        int count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        snap[0].parameters["v"] = 5;
+        h.recordFromCurrent(snap);
+        QCOMPARE(count, 1);
+    }
+
+    void historyChangedNotOnNoOpRecord() {
+        UndoHistory h;
+        QVector<SettingsImporter::EffectSettings> snap;
+        snap << makeEff("b", true, {{"v", 0}});
+        h.seed(snap);
+
+        int count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        h.recordFromCurrent(snap);   // no change
+        QCOMPARE(count, 0);
+    }
+
+    void historyChangedOnUndo() {
+        UndoHistory h;
+        QVector<SettingsImporter::EffectSettings> snap;
+        snap << makeEff("b", true, {{"v", 0}});
+        h.seed(snap);
+        snap[0].parameters["v"] = 5;
+        h.recordFromCurrent(snap);
+
+        int count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        h.undo();
+        QCOMPARE(count, 1);
+    }
+
+    void historyChangedOnRedo() {
+        UndoHistory h;
+        QVector<SettingsImporter::EffectSettings> snap;
+        snap << makeEff("b", true, {{"v", 0}});
+        h.seed(snap);
+        snap[0].parameters["v"] = 5;
+        h.recordFromCurrent(snap);
+        h.undo();
+
+        int count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        h.redo();
+        QCOMPARE(count, 1);
+    }
+
+    void historyChangedOnLoad() {
+        UndoHistory h;
+        int count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+
+        QVector<UndoHistory::Entry> entries;
+        UndoHistory::Entry e;
+        e.effectId = "b";
+        e.params["v"] = {QVariant(0), QVariant(1)};
+        entries.append(e);
+        h.load(entries, 1, {});
+        QCOMPARE(count, 1);
+    }
+
     void canRedoChangedSignalFires() {
         UndoHistory h;
         QVector<SettingsImporter::EffectSettings> snap;

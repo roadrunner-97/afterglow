@@ -275,6 +275,26 @@ set_target_properties(test_history_serializer PROPERTIES
 add_test(NAME HistorySerializer COMMAND test_history_serializer)
 
 # ---------------------------------------------------------------------------
+# HistoryTray tests — widget tests, need offscreen QApplication
+# ---------------------------------------------------------------------------
+add_executable(test_history_tray
+    widgets/test_history_tray.cpp
+)
+target_link_libraries(test_history_tray
+    PRIVATE
+        photoeditor_widgets
+        Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets
+)
+set_target_properties(test_history_tray PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME HistoryTray COMMAND test_history_tray)
+set_tests_properties(HistoryTray PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+# ---------------------------------------------------------------------------
 # Effect integration tests — GPU (OpenCL) required; skip gracefully if absent
 # ---------------------------------------------------------------------------
 add_subdirectory(effects)

@@ -50,6 +50,35 @@
 #include <QDebug>
 #include <memory>
 
+namespace {
+// Build a human-readable label for a history entry given the effect's display name.
+QString entryLabel(const UndoHistory::Entry& e, const QString& effectName)
+{
+    QString result;
+
+    if (e.enabled.has_value())
+        result = effectName + (e.enabled->second ? " on" : " off");
+
+    if (!e.params.isEmpty()) {
+        QString paramPart;
+        if (e.params.size() == 1) {
+            const auto it = e.params.cbegin();
+            const QString f = it.value().from.isValid() ? it.value().from.toString() : "set";
+            const QString t = it.value().to.isValid()   ? it.value().to.toString()   : "removed";
+            paramPart = it.key() + " " + f + " → " + t;
+        } else {
+            paramPart = "(" + QString::number(e.params.size()) + " changes)";
+        }
+        if (result.isEmpty())
+            result = effectName + " " + paramPart;
+        else
+            result += " · " + paramPart;
+    }
+
+    return result.isEmpty() ? effectName : result;
+}
+} // namespace
+
 // Decode a non-RAW image with EXIF auto-orientation applied. QImage(path)
 // honours no orientation tag, so portrait-shot JPEGs come out sideways
 // without this. RAW files go through RawLoader, which handles flip itself.
@@ -223,6 +252,33 @@ void PhotoEditorApp::setupUI() {
     connect(m_viewport, &ViewportWidget::viewportChanged,
             this, &PhotoEditorApp::triggerViewportUpdate);
     mainLayout->addWidget(m_viewport, 3);
+
+    // History tray — child of viewport so it overlays the GL surface
+    m_historyTray = new HistoryTray(m_viewport);
+    m_historyTray->hide();
+    m_historyTray->raise();
+    connect(m_history, &UndoHistory::historyChanged,
+            this, &PhotoEditorApp::refreshHistoryTray);
+    connect(m_viewport, &ViewportWidget::viewportResized,
+            this, &PhotoEditorApp::repositionHistoryTray);
+    connect(m_historyTray, &HistoryTray::rowActivated, this, [this](int index) {
+        const int target = index;   // 0 = Original (cursor 0), k = cursor k
+        m_history->setApplying(true);
+        while (m_history->cursor() > target) {
+            if (auto e = m_history->undo())
+                applyHistoryEntry(*e, /*applyFrom=*/true);
+            else break;
+        }
+        while (m_history->cursor() < target) {
+            if (auto e = m_history->redo())
+                applyHistoryEntry(*e, /*applyFrom=*/false);
+            else break;
+        }
+        m_history->setApplying(false);
+        syncViewportRotation();
+        triggerReprocess();
+        writeSidecar();
+    });
 
     QWidget* rightPanel = new QWidget();
     // Width scales with the user's font / DPI: ParamSlider rows need room for
@@ -528,6 +584,9 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
     } else {
         m_history->seed(currentSnapshot());
     }
+
+    m_historyTray->show();
+    repositionHistoryTray();
 
     syncViewportRotation();
     triggerReprocess();
@@ -1080,6 +1139,36 @@ void PhotoEditorApp::onMarkChanged(const QString& path, GridView::Mark mark) {
 QString PhotoEditorApp::sidecarPathFor(const QString& imagePath) const {
     const QFileInfo fi(imagePath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
+}
+
+void PhotoEditorApp::refreshHistoryTray()
+{
+    if (!m_historyTray) return;
+    const auto& entries = m_history->entries();
+    QVector<HistoryTray::Row> rows;
+    rows.reserve(entries.size());
+    for (const auto& e : entries) {
+        QString effectName = e.effectId;
+        for (const auto& eff : m_effects->entries()) {
+            if (eff.effect && eff.effect->getId() == e.effectId) {
+                effectName = eff.effect->getName();
+                break;
+            }
+        }
+        rows.append({entryLabel(e, effectName)});
+    }
+    m_historyTray->setHistory(rows, m_history->cursor());
+    repositionHistoryTray();
+}
+
+void PhotoEditorApp::repositionHistoryTray()
+{
+    if (!m_historyTray || !m_viewport) return;
+    constexpr int margin = 8;
+    const QSize ts = m_historyTray->sizeHint();
+    const int x = margin;
+    const int y = qMax(0, m_viewport->height() - ts.height() - margin);
+    m_historyTray->move(x, qBound(0, y, m_viewport->height() - 1));
 }
 
 QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() const {

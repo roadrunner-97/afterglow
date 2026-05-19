@@ -23,6 +23,7 @@ void UndoHistory::seed(const QVector<SettingsImporter::EffectSettings>& current)
     m_cursor = 0;
     if (prevUndo) emit canUndoChanged(false);
     if (prevRedo) emit canRedoChanged(false);
+    emit historyChanged();
 }
 
 void UndoHistory::recordFromCurrent(
@@ -80,6 +81,7 @@ void UndoHistory::recordFromCurrent(
 
     if (canUndo() != prevUndo) emit canUndoChanged(canUndo());
     if (canRedo() != prevRedo) emit canRedoChanged(canRedo());
+    emit historyChanged();
 }
 
 bool UndoHistory::canUndo() const { return m_cursor > 0; }
@@ -97,6 +99,7 @@ std::optional<UndoHistory::Entry> UndoHistory::undo() {
 
     if (canUndo() != prevUndo) emit canUndoChanged(canUndo());
     if (canRedo() != prevRedo) emit canRedoChanged(canRedo());
+    emit historyChanged();
     return result;
 }
 
@@ -112,6 +115,7 @@ std::optional<UndoHistory::Entry> UndoHistory::redo() {
 
     if (canUndo() != prevUndo) emit canUndoChanged(canUndo());
     if (canRedo() != prevRedo) emit canRedoChanged(canRedo());
+    emit historyChanged();
     return result;
 }
 
@@ -157,4 +161,5 @@ void UndoHistory::load(QVector<Entry> entries, int cursor,
 
     if (canUndo() != prevUndo) emit canUndoChanged(canUndo());
     if (canRedo() != prevRedo) emit canRedoChanged(canRedo());
+    emit historyChanged();
 }

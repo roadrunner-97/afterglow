@@ -14,6 +14,7 @@
 #include "ProofCache.h"
 #include "Proofer.h"
 #include "SettingsImporter.h"
+#include "HistoryTray.h"
 #include "UndoHistory.h"
 #include "ViewportWidget.h"
 
@@ -75,6 +76,9 @@ private:
     void dispatchViewportUpdate();  // actual PanZoom dispatch — fires from throttle
     void syncViewportRotation();    // push the user's crop angle/centre to the viewport
 
+    void refreshHistoryTray();
+    void repositionHistoryTray();
+
     void setMode(Mode m);
     // Backslash-held "before edits" preview: bypass the pipeline in Develop
     // and fall back to the camera JPEG in Loupe; restore on key release.
@@ -94,6 +98,7 @@ private:
     void writeSidecar();
     void snapshotDefaults();
 
+    HistoryTray*    m_historyTray      = nullptr;
     UndoHistory*    m_history          = nullptr;
     QAction*        m_undoAct          = nullptr;
     QAction*        m_redoAct          = nullptr;

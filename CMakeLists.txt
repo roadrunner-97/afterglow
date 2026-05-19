@@ -67,6 +67,8 @@ add_library(photoeditor_widgets STATIC
     src/widgets/ParamSlider.h
     src/widgets/LogarithmParamSlider.cpp
     src/widgets/LogarithmParamSlider.h
+    src/widgets/HistoryTray.cpp
+    src/widgets/HistoryTray.h
 )
 
 target_link_libraries(photoeditor_widgets
@@ -163,6 +165,7 @@ add_library(photoeditor_ui STATIC
 target_link_libraries(photoeditor_ui
     PRIVATE
         photoeditor_core
+        photoeditor_widgets
         Qt6::Widgets
         Qt6::Gui
         Qt6::OpenGLWidgets

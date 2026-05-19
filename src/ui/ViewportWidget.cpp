@@ -126,6 +126,7 @@ void ViewportWidget::initializeGL() {
 
 void ViewportWidget::resizeGL(int, int) {
     // Widget resize doesn't change the texture — only setImage() does.
+    emit viewportResized();
 }
 
 void ViewportWidget::paintGL() {

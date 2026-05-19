@@ -53,6 +53,7 @@ public:
 signals:
     void canUndoChanged(bool);
     void canRedoChanged(bool);
+    void historyChanged();
 
 private:
     using Shadow = QHash<QString, SettingsImporter::EffectSettings>;
