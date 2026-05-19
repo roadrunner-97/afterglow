@@ -27,8 +27,7 @@ static QMap<QString, QVariant> buildCropInjection(ICropSource *src) {
 }
 
 static void mergeInto(QMap<QString, QVariant> &dst, const QMap<QString, QVariant> &src) {
-    for (auto it = src.constBegin(); it != src.constEnd(); ++it)
-        dst.insert(it.key(), it.value());
+    for (auto it = src.constBegin(); it != src.constEnd(); ++it) dst.insert(it.key(), it.value());
 }
 
 static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager &effects) {
@@ -98,10 +97,8 @@ void Proofer::dispatchNext() {
     if (QFile::exists(sidecar)) {
         SettingsImporter::Settings parsed;
         QString                    err;
-        if (SettingsImporter::readYaml(sidecar, &parsed, &err))
-            SettingsImporter::applyToManager(parsed, *m_effects);
-        else
-            qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
+        if (SettingsImporter::readYaml(sidecar, &parsed, &err)) SettingsImporter::applyToManager(parsed, *m_effects);
+        else qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
     }
 
     QVector<GpuPipelineCall> calls = buildGpuCalls(*m_effects);

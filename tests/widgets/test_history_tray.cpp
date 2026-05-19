@@ -5,8 +5,7 @@
 
 static QVector<HistoryTray::Row> makeRows(const QStringList &labels) {
     QVector<HistoryTray::Row> rows;
-    for (const auto &l : labels)
-        rows.append({l});
+    for (const auto &l : labels) rows.append({l});
     return rows;
 }
 

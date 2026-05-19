@@ -35,8 +35,7 @@ QString quoteString(const QString &s) {
             if (ch.unicode() < 0x20)                                     // GCOVR_EXCL_LINE
                 out.append(QString("\\x%1").arg(                         // GCOVR_EXCL_LINE
                     static_cast<int>(ch.unicode()), 2, 16, QChar('0'))); // GCOVR_EXCL_LINE
-            else
-                out.append(ch);
+            else out.append(ch);
             break;
         }
     }
@@ -108,8 +107,8 @@ QString unquoteStr(const QString &token) {
             break;
         }
         // GCOVR_EXCL_STOP
-        default:
-            out.append(n);
+        default: // GCOVR_EXCL_LINE
+            out.append(n); // GCOVR_EXCL_LINE
             break; // GCOVR_EXCL_LINE
         }
     }
@@ -145,8 +144,7 @@ bool splitKV(const QString &s, QString *k, QString *v) {
 
 int leadingSpaces(const QString &line) {
     int i = 0;
-    while (i < line.size() && line[i] == ' ')
-        ++i;
+    while (i < line.size() && line[i] == ' ') ++i;
     return i;
 }
 
@@ -257,8 +255,7 @@ bool fromYaml(const QString &yaml, HistoryData *out, QString *error) {
     const QStringList lines = yaml.split('\n');
     for (const QString &raw : lines) {
         QString line = raw;
-        while (!line.isEmpty() && line.back().isSpace())
-            line.chop(1);
+        while (!line.isEmpty() && line.back().isSpace()) line.chop(1);
         if (line.isEmpty()) continue;
 
         const int     indent = leadingSpaces(line);
@@ -307,12 +304,9 @@ bool fromYaml(const QString &yaml, HistoryData *out, QString *error) {
             if (!splitKV(rest, &k, &v)) continue;
 
             if (curShadow) {
-                if (k == QStringLiteral("enabled"))
-                    curShadow->enabled = parseScalarV(v).toBool();
-                else if (k == QStringLiteral("id"))
-                    curShadow->id = parseScalarV(v).toString();
-                else if (k == QStringLiteral("parameters"))
-                    inParams = true;
+                if (k == QStringLiteral("enabled")) curShadow->enabled = parseScalarV(v).toBool();
+                else if (k == QStringLiteral("id")) curShadow->id = parseScalarV(v).toString();
+                else if (k == QStringLiteral("parameters")) inParams = true;
             } else if (curEntry) {
                 if (k == QStringLiteral("enabled")) {
                     QVariant from, to;

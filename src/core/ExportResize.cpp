@@ -13,8 +13,8 @@ QSize targetSize(const QSize &src, const Params &p) {
     double       scale = 1.0;
 
     switch (p.mode) {
-    case Mode::None:
-        return src;
+    case Mode::None: // GCOVR_EXCL_LINE — unreachable: early return at line 9
+        return src;  // GCOVR_EXCL_LINE
     case Mode::LongEdge:
         scale = double(std::max(1, p.pixels)) / std::max(sw, sh);
         break;

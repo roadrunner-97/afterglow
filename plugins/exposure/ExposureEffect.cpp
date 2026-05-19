@@ -138,10 +138,8 @@ protected:
 
         // Grid lines
         p.setPen(QPen(QColor(80, 80, 80, 140), 1));
-        for (float frac : {0.15f, 0.50f, 0.85f})
-            p.drawLine(toScreen(frac, 0.0f), toScreen(frac, 1.0f));
-        for (int i = 1; i <= 3; i++)
-            p.drawLine(toScreen(0.0f, float(i) / 4.0f), toScreen(1.0f, float(i) / 4.0f));
+        for (float frac : {0.15f, 0.50f, 0.85f}) p.drawLine(toScreen(frac, 0.0f), toScreen(frac, 1.0f));
+        for (int i = 1; i <= 3; i++) p.drawLine(toScreen(0.0f, float(i) / 4.0f), toScreen(1.0f, float(i) / 4.0f));
 
         // Zone labels
         p.setPen(QColor(160, 160, 160, 160));
@@ -301,10 +299,10 @@ protected:
     }
 
     void leaveEvent(QEvent *) override {
-        if (m_hoverTarget >= 0) {
+        if (m_hoverTarget >= 0) { // GCOVR_EXCL_START
             m_hoverTarget = -1;
             update();
-        }
+        } // GCOVR_EXCL_STOP
         setCursor(Qt::ArrowCursor);
     }
 

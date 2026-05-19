@@ -82,8 +82,7 @@ QVariant parseScalar(const QString &s) {
 
 int leadingSpaces(const QString &line) {
     int i = 0;
-    while (i < line.size() && line[i] == ' ')
-        ++i;
+    while (i < line.size() && line[i] == ' ') ++i;
     return i;
 }
 
@@ -111,8 +110,7 @@ bool fromYaml(const QString &yaml, Settings *out, QString *error) {
     for (const QString &raw : lines) {
         ++lineNo;
         QString line = raw;
-        while (!line.isEmpty() && line.back().isSpace())
-            line.chop(1);
+        while (!line.isEmpty() && line.back().isSpace()) line.chop(1);
         if (line.isEmpty()) continue;
 
         // Tabs in leading whitespace silently confused the indent-based
@@ -141,21 +139,16 @@ bool fromYaml(const QString &yaml, Settings *out, QString *error) {
             const QString afterDash = rest.mid(2).trimmed();
             if (!splitKeyValue(afterDash, &k, &v)) continue;
             EffectSettings entry;
-            if (k == QStringLiteral("id"))
-                entry.id = parseScalar(v).toString();
-            else if (k == QStringLiteral("name"))
-                entry.name = parseScalar(v).toString();
+            if (k == QStringLiteral("id")) entry.id = parseScalar(v).toString();
+            else if (k == QStringLiteral("name")) entry.name = parseScalar(v).toString();
             out->effects.append(entry);
             current = &out->effects.last();
         } else if (indent == 4) {
             if (!current) continue;
             if (!splitKeyValue(rest, &k, &v)) continue;
-            if (k == QStringLiteral("enabled"))
-                current->enabled = parseScalar(v).toBool();
-            else if (k == QStringLiteral("id"))
-                current->id = parseScalar(v).toString();
-            else if (k == QStringLiteral("name"))
-                current->name = parseScalar(v).toString();
+            if (k == QStringLiteral("enabled")) current->enabled = parseScalar(v).toBool();
+            else if (k == QStringLiteral("id")) current->id = parseScalar(v).toString();
+            else if (k == QStringLiteral("name")) current->name = parseScalar(v).toString();
             // "parameters:" is implicit — child entries follow at indent 6
         } else if (indent == 6) {
             if (!current) continue;

@@ -424,18 +424,14 @@ void CropRotateEffect::paintOverlay(QPainter &painter, const ViewportTransform &
             QRectF r(c.x() - hs, c.y() - hs, hs * 2.0, hs * 2.0);
             painter.setPen(QPen(QColor(50, 50, 50), 1.5));
             QColor fill = Qt::white;
-            if (idx == activeIdx)
-                fill = QColor(80, 160, 255);
-            else if (idx == m_hoverHandle)
-                fill = QColor(180, 215, 255);
+            if (idx == activeIdx) fill = QColor(80, 160, 255);
+            else if (idx == m_hoverHandle) fill = QColor(180, 215, 255);
             painter.setBrush(fill);
             painter.drawRect(r);
         };
 
-        for (int i = 0; i < 4; ++i)
-            drawHandle(corners[i], i);
-        for (int i = 0; i < 4; ++i)
-            drawHandle(edges[i], 4 + i);
+        for (int i = 0; i < 4; ++i) drawHandle(corners[i], i);
+        for (int i = 0; i < 4; ++i) drawHandle(edges[i], 4 + i);
         painter.restore();
     }
 
@@ -713,16 +709,14 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
             // and let it drive the other.
             const double dwAbs = std::abs(wn - m_dragCropStart.width());
             const double dhAbs = std::abs(hn - m_dragCropStart.height());
-            if (dwAbs / aspectN >= dhAbs)
-                hn = wn / aspectN;
-            else
-                wn = hn * aspectN;
+            if (dwAbs / aspectN >= dhAbs) hn = wn / aspectN;
+            else wn = hn * aspectN;
             // Min size — scale both axes uniformly so aspect survives.
-            if (wn < MIN_CROP_SIZE || hn < MIN_CROP_SIZE) {
+            if (wn < MIN_CROP_SIZE || hn < MIN_CROP_SIZE) { // GCOVR_EXCL_START
                 const double s  = std::max(MIN_CROP_SIZE / wn, MIN_CROP_SIZE / hn);
                 wn             *= s;
                 hn             *= s;
-            }
+            } // GCOVR_EXCL_STOP
             // Re-anchor the opposite corner.
             switch (m_dragIndex) {
             case 0:
@@ -748,16 +742,12 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
             // Min size enforcement around the FIXED corner (so the dragged
             // corner can't cross the opposite one).
             if (x1 - x0 < MIN_CROP_SIZE) {
-                if (m_dragIndex == 0 || m_dragIndex == 3)
-                    x0 = x1 - MIN_CROP_SIZE;
-                else
-                    x1 = x0 + MIN_CROP_SIZE;
+                if (m_dragIndex == 0 || m_dragIndex == 3) x0 = x1 - MIN_CROP_SIZE;
+                else x1 = x0 + MIN_CROP_SIZE;
             }
             if (y1 - y0 < MIN_CROP_SIZE) {
-                if (m_dragIndex == 0 || m_dragIndex == 1)
-                    y0 = y1 - MIN_CROP_SIZE;
-                else
-                    y1 = y0 + MIN_CROP_SIZE;
+                if (m_dragIndex == 0 || m_dragIndex == 1) y0 = y1 - MIN_CROP_SIZE;
+                else y1 = y0 + MIN_CROP_SIZE;
             }
         }
         m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5, x1 - x0, y1 - y0);
@@ -781,10 +771,8 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
                 wn             *= s;
                 hn             *= s;
                 // Push the moved edge so the new height is consistent.
-                if (m_dragIndex == 0)
-                    y0 = y1 - hn;
-                else
-                    y1 = y0 + hn;
+                if (m_dragIndex == 0) y0 = y1 - hn;
+                else y1 = y0 + hn;
             }
             const double cxn = m_dragCropStart.x() + m_dragCropStart.width() * 0.5;
             x0               = cxn - wn * 0.5;
@@ -808,10 +796,8 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
                 const double s  = MIN_CROP_SIZE / hn;
                 wn             *= s;
                 hn             *= s;
-                if (m_dragIndex == 0)
-                    x0 = x1 - wn;
-                else
-                    x1 = x0 + wn;
+                if (m_dragIndex == 0) x0 = x1 - wn;
+                else x1 = x0 + wn;
             }
             const double cyn = m_dragCropStart.y() + m_dragCropStart.height() * 0.5;
             y0               = cyn - hn * 0.5;

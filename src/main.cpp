@@ -38,8 +38,7 @@ static std::unique_ptr<EffectManager> makeEffects() {
     mgr->addEffect(std::make_unique<SplitToningEffect>());
     mgr->addEffect(std::make_unique<ClarityEffect>());
     mgr->addEffect(std::make_unique<ColorBalanceEffect>());
-    for (const auto &e : mgr->entries())
-        e.effect->initialize();
+    for (const auto &e : mgr->entries()) e.effect->initialize();
     return mgr;
 }
 

@@ -55,28 +55,25 @@ void GpuDeviceRegistry::enumerate() {
             std::string pname;
             try {
                 pname = p.getInfo<CL_PLATFORM_NAME>();
-            } catch (...) {
-            } // GCOVR_EXCL_LINE
+            } catch (...) {} // GCOVR_EXCL_LINE
 
             std::vector<cl::Device> devs;
             try {
                 p.getDevices(CL_DEVICE_TYPE_ALL, &devs);
-            } catch (...) {
-            } // GCOVR_EXCL_LINE
+            } catch (...) {} // GCOVR_EXCL_LINE
 
             for (auto &d : devs) {
                 cl_device_type t = 0;
                 try {
                     t = d.getInfo<CL_DEVICE_TYPE>();
-                } catch (...) {
-                } // GCOVR_EXCL_LINE
+                } catch (...) {} // GCOVR_EXCL_LINE
 
                 GpuDeviceInfo info;
                 try {
                     info.name = QString::fromStdString(d.getInfo<CL_DEVICE_NAME>()).trimmed();
-                } catch (...) {
+                } catch (...) { // GCOVR_EXCL_START
                     info.name = "Unknown Device";
-                } // GCOVR_EXCL_LINE
+                } // GCOVR_EXCL_STOP
                 info.platformName = QString::fromStdString(pname).trimmed();
                 info.typeName     = deviceTypeName(t);
                 entries.push_back({info, deviceTypeRank(t)});
@@ -123,9 +120,9 @@ static std::vector<std::pair<cl::Platform, cl::Device>> enumerateAllOCLDevices()
     std::vector<cl::Platform>                        platforms;
     try {
         cl::Platform::get(&platforms);
-    } catch (...) {
+    } catch (...) { // GCOVR_EXCL_START
         return result;
-    } // GCOVR_EXCL_LINE
+    } // GCOVR_EXCL_STOP
 
     struct Entry {
         cl::Platform p;
@@ -137,21 +134,18 @@ static std::vector<std::pair<cl::Platform, cl::Device>> enumerateAllOCLDevices()
         std::vector<cl::Device> devs;
         try {
             p.getDevices(CL_DEVICE_TYPE_ALL, &devs);
-        } catch (...) {
-        } // GCOVR_EXCL_LINE
+        } catch (...) {} // GCOVR_EXCL_LINE
         for (auto &d : devs) {
             cl_device_type t = 0;
             try {
                 t = d.getInfo<CL_DEVICE_TYPE>();
-            } catch (...) {
-            } // GCOVR_EXCL_LINE
+            } catch (...) {} // GCOVR_EXCL_LINE
             entries.push_back({p, d, deviceTypeRank(t)});
         }
     }
     std::stable_sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) { return a.rank < b.rank; });
     result.reserve(entries.size());
-    for (auto &e : entries)
-        result.push_back({e.p, e.d});
+    for (auto &e : entries) result.push_back({e.p, e.d});
     return result;
 }
 

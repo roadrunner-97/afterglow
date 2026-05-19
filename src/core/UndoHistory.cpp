@@ -5,8 +5,7 @@ UndoHistory::UndoHistory(int capacity, QObject *parent) : QObject(parent), m_cap
 UndoHistory::Shadow UndoHistory::buildShadow(const QVector<SettingsImporter::EffectSettings> &v) {
     Shadow s;
     s.reserve(v.size());
-    for (const auto &e : v)
-        s.insert(e.id, e);
+    for (const auto &e : v) s.insert(e.id, e);
     return s;
 }
 
@@ -55,8 +54,7 @@ void UndoHistory::recordFromCurrent(const QVector<SettingsImporter::EffectSettin
     // Truncate redo tail
     if (m_cursor < m_entries.size()) m_entries.resize(m_cursor);
 
-    for (auto &e : newEntries)
-        m_entries.append(std::move(e));
+    for (auto &e : newEntries) m_entries.append(std::move(e));
     m_cursor = m_entries.size();
 
     // Enforce capacity — drop from front, keep cursor in bounds
@@ -116,10 +114,8 @@ void UndoHistory::updateShadowFrom(const Entry &e) {
     if (it == m_shadow.end()) return;
     if (e.enabled) it->enabled = e.enabled->first;
     for (auto pit = e.params.cbegin(); pit != e.params.cend(); ++pit) {
-        if (pit.value().from.isValid())
-            it->parameters.insert(pit.key(), pit.value().from);
-        else
-            it->parameters.remove(pit.key());
+        if (pit.value().from.isValid()) it->parameters.insert(pit.key(), pit.value().from);
+        else it->parameters.remove(pit.key());
     }
 }
 
@@ -128,10 +124,8 @@ void UndoHistory::updateShadowTo(const Entry &e) {
     if (it == m_shadow.end()) return;
     if (e.enabled) it->enabled = e.enabled->second;
     for (auto pit = e.params.cbegin(); pit != e.params.cend(); ++pit) {
-        if (pit.value().to.isValid())
-            it->parameters.insert(pit.key(), pit.value().to);
-        else
-            it->parameters.remove(pit.key());
+        if (pit.value().to.isValid()) it->parameters.insert(pit.key(), pit.value().to);
+        else it->parameters.remove(pit.key());
     }
 }
 

@@ -94,10 +94,8 @@ static float findTempFromRBRatio(float targetRB) {
         float mid = (lo + hi) * 0.5f;
         float r, g, b;
         kangToRGB(mid, r, g, b);
-        if (r / b > targetRB)
-            lo = mid; // too warm  → search higher K (cooler)
-        else
-            hi = mid; // too cool  → search lower K (warmer)
+        if (r / b > targetRB) lo = mid; // too warm  → search higher K (cooler)
+        else hi = mid;                  // too cool  → search lower K (warmer)
     }
     return (lo + hi) * 0.5f;
 }

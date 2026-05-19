@@ -281,8 +281,7 @@ private slots:
         for (const auto &e : m_effects.entries()) {
             if (!e.enabled) continue;
             QMap<QString, QVariant> p = e.effect->getParameters();
-            for (auto it = cropInjected.cbegin(); it != cropInjected.cend(); ++it)
-                p.insert(it.key(), it.value());
+            for (auto it = cropInjected.cbegin(); it != cropInjected.cend(); ++it) p.insert(it.key(), it.value());
             calls.append({e.effect, e.gpu, p});
         }
 

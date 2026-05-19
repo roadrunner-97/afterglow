@@ -67,10 +67,8 @@ QString entryLabel(const UndoHistory::Entry &e, const QString &effectName) {
         } else {
             paramPart = "(" + QString::number(e.params.size()) + " changes)";
         }
-        if (result.isEmpty())
-            result = effectName + " " + paramPart;
-        else
-            result += " · " + paramPart;
+        if (result.isEmpty()) result = effectName + " " + paramPart;
+        else result += " · " + paramPart;
     }
 
     return result.isEmpty() ? effectName : result;
@@ -112,10 +110,8 @@ PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
 
     // Restore geometry and last-used directory from previous session
     QSettings settings("Afterglow", "Afterglow");
-    if (settings.contains("geometry"))
-        restoreGeometry(settings.value("geometry").toByteArray());
-    else
-        setGeometry(100, 100, 1400, 900);
+    if (settings.contains("geometry")) restoreGeometry(settings.value("geometry").toByteArray());
+    else setGeometry(100, 100, 1400, 900);
     m_lastDir = settings.value("lastDir", QDir::homePath()).toString();
 
     // Global \-key "before edits" preview.  Filter on qApp so the binding
@@ -246,16 +242,12 @@ void PhotoEditorApp::setupUI() {
             const int target = index;
             m_history->setApplying(true);
             while (m_history->cursor() > target) {
-                if (auto e = m_history->undo())
-                    applyHistoryEntry(*e, /*applyFrom=*/true);
-                else
-                    break;
+                if (auto e = m_history->undo()) applyHistoryEntry(*e, /*applyFrom=*/true);
+                else break;
             }
             while (m_history->cursor() < target) {
-                if (auto e = m_history->redo())
-                    applyHistoryEntry(*e, /*applyFrom=*/false);
-                else
-                    break;
+                if (auto e = m_history->redo()) applyHistoryEntry(*e, /*applyFrom=*/false);
+                else break;
             }
             m_history->setApplying(false);
             syncViewportRotation();
@@ -403,8 +395,7 @@ void PhotoEditorApp::setupGpuSelector(QVBoxLayout *rightLayout) {
         m_gpuSelector->addItem("No OpenCL devices found");
         m_gpuSelector->setEnabled(false);
     } else {
-        for (const auto &d : devs)
-            m_gpuSelector->addItem(d.name + " [" + d.platformName + " · " + d.typeName + "]");
+        for (const auto &d : devs) m_gpuSelector->addItem(d.name + " [" + d.platformName + " · " + d.typeName + "]");
         m_gpuSelector->setCurrentIndex(GpuDeviceRegistry::instance().currentIndex());
     }
 
@@ -527,18 +518,15 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     // (RAW colorTempK from LibRaw); the luminance histogram follows from
     // a worker thread because computing it on a 60MP RAW would otherwise
     // freeze the UI for hundreds of milliseconds.
-    for (const auto &e : m_effects->entries())
-        e.effect->onImageLoaded(meta);
+    for (const auto &e : m_effects->entries()) e.effect->onImageLoaded(meta);
     if (auto *cs = m_effects->cropSource()) cs->setSourceImageSize(img.size());
 
     const QString sidecar = sidecarPathFor(path);
     if (QFile::exists(sidecar)) {
         SettingsImporter::Settings parsed;
         QString                    error;
-        if (SettingsImporter::readYaml(sidecar, &parsed, &error))
-            SettingsImporter::applyToManager(parsed, *m_effects);
-        else
-            qWarning() << "Sidecar parse failed for" << sidecar << ":" << error;
+        if (SettingsImporter::readYaml(sidecar, &parsed, &error)) SettingsImporter::applyToManager(parsed, *m_effects);
+        else qWarning() << "Sidecar parse failed for" << sidecar << ":" << error;
     } else {
         writeSidecar();
     }
@@ -574,8 +562,7 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
                     ImageMetadata fullMeta;
                     fullMeta.colorTempK         = tempK;
                     fullMeta.luminanceHistogram = watcher->result();
-                    for (const auto &e : m_effects->entries())
-                        e.effect->onImageLoaded(fullMeta);
+                    for (const auto &e : m_effects->entries()) e.effect->onImageLoaded(fullMeta);
                 }
                 watcher->deleteLater();
             });
@@ -905,10 +892,8 @@ void PhotoEditorApp::setMode(Mode m) {
         }
     }
     if (m_proofer) {
-        if (m == Mode::Develop)
-            m_proofer->pause();
-        else
-            m_proofer->resume();
+        if (m == Mode::Develop) m_proofer->pause();
+        else m_proofer->resume();
     }
 }
 
@@ -1006,10 +991,8 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
         QThreadPool::globalInstance()->start([self, path, tag]() {
             QImage thumb = tryLoadCachedThumb(path);
             if (thumb.isNull()) {
-                if (RawLoader::isRawFile(path))
-                    thumb = RawLoader::loadThumbnail(path);
-                else
-                    thumb = decodeOriented(path);
+                if (RawLoader::isRawFile(path)) thumb = RawLoader::loadThumbnail(path);
+                else thumb = decodeOriented(path);
                 if (thumb.isNull()) return;
                 // Cap the side at 512px — saves memory when the grid is showing
                 // hundreds of thumbnails and avoids holding full-res JPEGs alive.
@@ -1164,10 +1147,8 @@ void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry &e, bool applyFr
             auto params = effect->getParameters();
             for (auto pit = e.params.cbegin(); pit != e.params.cend(); ++pit) {
                 const QVariant &val = applyFrom ? pit.value().from : pit.value().to;
-                if (val.isValid())
-                    params.insert(pit.key(), val);
-                else
-                    params.remove(pit.key());
+                if (val.isValid()) params.insert(pit.key(), val);
+                else params.remove(pit.key());
             }
             QSignalBlocker block(effect);
             effect->applyParameters(params);

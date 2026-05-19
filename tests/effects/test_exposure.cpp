@@ -197,8 +197,7 @@ private slots:
     void defaultParameters_keys() {
         ExposureEffect e;
         auto           params = e.getParameters();
-        for (const auto &key : {"exposure", "whites", "highlights", "shadows", "blacks"})
-            QVERIFY(params.contains(key));
+        for (const auto &key : {"exposure", "whites", "highlights", "shadows", "blacks"}) QVERIFY(params.contains(key));
     }
 
     void identity_16bit() {
@@ -349,8 +348,7 @@ private slots:
 
         ImageMetadata meta;
         meta.luminanceHistogram.assign(256, 0);
-        for (int i = 0; i < 256; ++i)
-            meta.luminanceHistogram[i] = uint32_t(i * 10 + 1);
+        for (int i = 0; i < 256; ++i) meta.luminanceHistogram[i] = uint32_t(i * 10 + 1);
         e.onImageLoaded(meta);
 
         w->show();

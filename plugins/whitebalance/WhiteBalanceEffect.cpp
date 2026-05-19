@@ -170,10 +170,8 @@ bool WhiteBalanceEffect::initialize() {
 
 void WhiteBalanceEffect::onImageLoaded(const ImageMetadata &meta) {
     // Use the as-shot temperature from metadata if available; keep 5500 K otherwise.
-    if (meta.colorTempK >= 1500.0f && meta.colorTempK <= 14000.0f)
-        m_shotK = meta.colorTempK;
-    else
-        m_shotK = 5500.0f;
+    if (meta.colorTempK >= 1500.0f && meta.colorTempK <= 14000.0f) m_shotK = meta.colorTempK;
+    else m_shotK = 5500.0f;
 
     // Update the slider to the new default without firing any signals
     // (ParamSlider::setValue blocks signals internally).

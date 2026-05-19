@@ -24,8 +24,7 @@ private slots:
         img.fill(qRgb(0, 0, 0));
         auto bins = computeLuminanceHistogram(img);
         QCOMPARE(bins[0], uint32_t(32 * 32));
-        for (int i = 1; i < 256; ++i)
-            QCOMPARE(bins[i], uint32_t(0));
+        for (int i = 1; i < 256; ++i) QCOMPARE(bins[i], uint32_t(0));
     }
 
     // Every pixel pure white → falls into the last bin.
@@ -35,8 +34,7 @@ private slots:
         auto bins = computeLuminanceHistogram(img);
         QCOMPARE(bins[255], uint32_t(32 * 32));
         uint32_t others = 0;
-        for (int i = 0; i < 255; ++i)
-            others += bins[i];
+        for (int i = 0; i < 255; ++i) others += bins[i];
         QCOMPARE(others, uint32_t(0));
     }
 

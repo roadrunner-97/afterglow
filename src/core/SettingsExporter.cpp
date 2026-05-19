@@ -38,8 +38,7 @@ QString quoteString(const QString &s) {
         default:
             if (ch.unicode() < 0x20)
                 out.append(QString("\\x%1").arg(static_cast<int>(ch.unicode()), 2, 16, QChar('0')));
-            else
-                out.append(ch);
+            else out.append(ch);
             break;
         }
     }

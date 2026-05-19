@@ -368,10 +368,8 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         m_processedValid = false;
 
         cl::Kernel *dsKernel = nullptr;
-        if (m_is16bit)
-            dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
-        else
-            dsKernel = &m_downsampleKernel8Srgb;
+        if (m_is16bit) dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
+        else dsKernel = &m_downsampleKernel8Srgb;
 
         dsKernel->setArg(0, m_srcBuf);
         dsKernel->setArg(1, m_workBuf);
@@ -427,10 +425,8 @@ bool GpuPipeline::decodeFullResLocked() {
     }
 
     cl::Kernel *k = nullptr;
-    if (m_is16bit)
-        k = m_inputIsLinear ? &m_decodeKernel16Linear : &m_decodeKernel16Srgb;
-    else
-        k = &m_decodeKernel8Srgb;
+    if (m_is16bit) k = m_inputIsLinear ? &m_decodeKernel16Linear : &m_decodeKernel16Srgb;
+    else k = &m_decodeKernel8Srgb;
 
     k->setArg(0, m_srcBuf);
     k->setArg(1, m_processedBuf);
@@ -510,8 +506,7 @@ bool GpuPipeline::initDownsampleKernels() {
         try {
             std::string log = prog.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
             qWarning() << "Build log:" << QString::fromStdString(log);
-        } catch (...) {
-        }
+        } catch (...) {}
         return false;
     }
     // GCOVR_EXCL_STOP

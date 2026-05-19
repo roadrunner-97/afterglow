@@ -265,8 +265,7 @@ private slots:
         QVERIFY(ccwBtn);
 
         // 4 × CCW should bring us back to 0
-        for (int i = 0; i < 4; ++i)
-            ccwBtn->click();
+        for (int i = 0; i < 4; ++i) ccwBtn->click();
         QCOMPARE(e.quarterTurns(), 0);
     }
 
@@ -284,8 +283,7 @@ private slots:
         QVERIFY(cwBtn);
 
         // 4 × CW should bring us back to 0
-        for (int i = 0; i < 4; ++i)
-            cwBtn->click();
+        for (int i = 0; i < 4; ++i) cwBtn->click();
         QCOMPARE(e.quarterTurns(), 0);
     }
 
@@ -1459,6 +1457,120 @@ private slots:
         const QRectF after     = e.userCropRect();
         const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
         QVERIFY(std::abs(newAspect - aspect) < 1e-3);
+    }
+
+    // Helper: shrink crop to base rect, enable lock, return (base, startAspect).
+    static std::pair<QRectF, double> shrinkAndLock(CropRotateEffect &e, ViewportTransform &vt) {
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove, {80.0, 60.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease, {80.0, 60.0});
+        e.mousePress(&p1, vt);
+        e.mouseMove(&m1, vt);
+        e.mouseRelease(&r1, vt);
+        const QRectF base        = e.userCropRect();
+        const double startAspect = (base.width() * 100.0) / (base.height() * 100.0);
+        e.setLockAspect(true);
+        return {base, startAspect};
+    }
+
+    // Corner drag TL (case 0) with lock on preserves aspect ratio.
+    void lockAspect_cornerDrag_tlCorner_preservesRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        const QPointF tl(base.left() * 100.0, base.top() * 100.0);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, tl);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, tl + QPointF(20, 10));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, tl + QPointF(20, 10));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("TL aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // Corner drag TR (case 1) with lock on preserves aspect ratio.
+    void lockAspect_cornerDrag_trCorner_preservesRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        const QPointF tr(base.right() * 100.0, base.top() * 100.0);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, tr);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, tr + QPointF(-20, 10));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, tr + QPointF(-20, 10));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("TR aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // Corner drag BL (case 3) with lock on preserves aspect ratio.
+    void lockAspect_cornerDrag_blCorner_preservesRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        const QPointF bl(base.left() * 100.0, base.bottom() * 100.0);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, bl);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, bl + QPointF(10, -20));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, bl + QPointF(10, -20));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("BL aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // Corner drag with Y-dominated movement: Y axis drives width (else branch).
+    void lockAspect_cornerDrag_yDominated_preservesRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        const QPointF br(base.right() * 100.0, base.bottom() * 100.0);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, br);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, br - QPointF(2, 30));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, br - QPointF(2, 30));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("Y-dom aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // EdgeH drag (top edge) with lock on: width adjusts to maintain aspect ratio.
+    void lockAspect_edgeDrag_horizontal_preservesRatio() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        const QPointF    tm((base.left() + base.right()) * 50.0, base.top() * 100.0);
+        auto             p2 = makeMouseEvent(QEvent::MouseButtonPress, tm);
+        auto             m2 = makeMouseEvent(QEvent::MouseMove, tm + QPointF(0, 10));
+        auto             r2 = makeMouseEvent(QEvent::MouseButtonRelease, tm + QPointF(0, 10));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("EdgeH aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
     }
 
     // Reset Crop clears the aspect lock as part of restoring defaults.

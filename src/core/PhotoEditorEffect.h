@@ -35,15 +35,12 @@ public:
         QString id;
         id.reserve(getName().size());
         for (QChar c : getName()) {
-            if (c.isLetterOrNumber())
-                id.append(c.toLower());
-            else if (c.isSpace())
-                id.append('_');
+            if (c.isLetterOrNumber()) id.append(c.toLower());
+            else if (c.isSpace()) id.append('_');
             // any other character (punctuation, &) is dropped
         }
         // Collapse runs of underscores left behind by dropped punctuation.
-        while (id.contains(QStringLiteral("__")))
-            id.replace(QStringLiteral("__"), QStringLiteral("_"));
+        while (id.contains(QStringLiteral("__"))) id.replace(QStringLiteral("__"), QStringLiteral("_"));
         if (id.endsWith('_')) id.chop(1);
         return id;
     }

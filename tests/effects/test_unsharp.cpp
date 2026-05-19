@@ -124,8 +124,7 @@ private slots:
         QImage input(64, 128, QImage::Format_RGB32);
         for (int y = 0; y < 128; ++y) {
             auto *row = reinterpret_cast<QRgb *>(input.scanLine(y));
-            for (int x = 0; x < 64; ++x)
-                row[x] = (y < 64) ? qRgb(100, 100, 100) : qRgb(200, 200, 200);
+            for (int x = 0; x < 64; ++x) row[x] = (y < 64) ? qRgb(100, 100, 100) : qRgb(200, 200, 200);
         }
         QMap<QString, QVariant> params;
         params["amount"]    = 2.0;

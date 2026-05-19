@@ -47,10 +47,8 @@ void fill8bit(const QImage &img, std::vector<uint32_t> &bins) {
             float lin = kRLum * lut[qRed(px)] + kGLum * lut[qGreen(px)] + kBLum * lut[qBlue(px)];
             float L   = linearToSrgb(lin);
             int   bin = int(L * 256.0f);
-            if (bin < 0)
-                bin = 0;
-            else if (bin > 255)
-                bin = 255;
+            if (bin < 0) bin = 0;
+            else if (bin > 255) bin = 255;
             ++bins[bin];
         }
     }
@@ -66,10 +64,8 @@ void fill16bit(const QImage &img, std::vector<uint32_t> &bins) {
             float lin = kRLum * srgb16ToLinear(p[0]) + kGLum * srgb16ToLinear(p[1]) + kBLum * srgb16ToLinear(p[2]);
             float L   = linearToSrgb(lin);
             int   bin = int(L * 256.0f);
-            if (bin < 0)
-                bin = 0;
-            else if (bin > 255)
-                bin = 255;
+            if (bin < 0) bin = 0;
+            else if (bin > 255) bin = 255;
             ++bins[bin];
         }
     }

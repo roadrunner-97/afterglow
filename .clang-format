@@ -37,9 +37,10 @@ AlignConsecutiveAssignments:
   AlignCompound:            true
 
 # Allow short forms
+AllowShortBlocksOnASingleLine:        Empty
 AllowShortFunctionsOnASingleLine:     Empty
-AllowShortIfStatementsOnASingleLine:  WithoutElse
-AllowShortLoopsOnASingleLine:         false
+AllowShortIfStatementsOnASingleLine:  AllIfsAndElse
+AllowShortLoopsOnASingleLine:         true
 
 # Preserve include order — some OpenCL headers depend on define ordering
 SortIncludes:            Never

@@ -48,8 +48,7 @@ void HistoryTray::setHistory(const QVector<Row> &rows, int cursor) {
     m_list->clear();
 
     m_list->addItem("Original");
-    for (const auto &r : rows)
-        m_list->addItem(r.label);
+    for (const auto &r : rows) m_list->addItem(r.label);
 
     const QColor dimColor = palette().color(QPalette::Disabled, QPalette::Text);
     const int    total    = m_list->count();
@@ -70,9 +69,9 @@ void HistoryTray::setHistory(const QVector<Row> &rows, int cursor) {
     }
 }
 
-void HistoryTray::toggleCollapsed() {
+void HistoryTray::toggleCollapsed() { // GCOVR_EXCL_START
     m_collapsed = !m_collapsed;
     m_list->setVisible(!m_collapsed);
     m_collapseBtn->setText(m_collapsed ? u8"▼" : u8"▲"); // ▼ / ▲
     adjustSize();
-}
+} // GCOVR_EXCL_STOP

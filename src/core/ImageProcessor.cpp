@@ -25,8 +25,7 @@ static QMap<QString, QVariant> buildCropInjection(ICropSource *src) {
 }
 
 static void mergeInto(QMap<QString, QVariant> &dst, const QMap<QString, QVariant> &src) {
-    for (auto it = src.constBegin(); it != src.constEnd(); ++it)
-        dst.insert(it.key(), it.value());
+    for (auto it = src.constBegin(); it != src.constEnd(); ++it) dst.insert(it.key(), it.value());
 }
 
 // Builds the per-frame GPU call list from the manager's enabled entries.
