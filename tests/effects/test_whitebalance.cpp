@@ -31,13 +31,11 @@ private slots:
     void identity_targetEqualsShot() {
         if (!m_hasGpu) QSKIP("No GPU");
         WhiteBalanceEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
-        QImage out   = runEffect(e, input, neutralParams(5500.0));
+        QImage             input = makeSolid(32, 32, 128, 128, 128);
+        QImage             out   = runEffect(e, input, neutralParams(5500.0));
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px)   - 128) <= 2
-                && qAbs(qGreen(px) - 128) <= 2
-                && qAbs(qBlue(px)  - 128) <= 2;
+            return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 128) <= 2 && qAbs(qBlue(px) - 128) <= 2;
         }));
     }
 
@@ -45,13 +43,13 @@ private slots:
     // Solid grey (128,128,128): after warming, R > original B.
     void warming_increasesRed_decreasesBlue() {
         if (!m_hasGpu) QSKIP("No GPU");
-        WhiteBalanceEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
+        WhiteBalanceEffect      e;
+        QImage                  input = makeSolid(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["shot_temp"]   = 5500.0;
-        params["temperature"] = 8000.0;   // warmer
+        params["temperature"] = 8000.0; // warmer
         params["tint"]        = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         // Warming shifts R up and B down relative to G.
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) >= qBlue(px); }));
@@ -60,13 +58,13 @@ private slots:
     // Cooling (targetK < shotK): less red, more blue.
     void cooling_increasesBlue_decreasesRed() {
         if (!m_hasGpu) QSKIP("No GPU");
-        WhiteBalanceEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
+        WhiteBalanceEffect      e;
+        QImage                  input = makeSolid(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["shot_temp"]   = 5500.0;
-        params["temperature"] = 3000.0;   // cooler
+        params["temperature"] = 3000.0; // cooler
         params["tint"]        = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qBlue(px) >= qRed(px); }));
     }
@@ -74,13 +72,13 @@ private slots:
     // Positive tint (magenta): reduces green, so G < R for a grey input.
     void tintMagenta_reducesGreen() {
         if (!m_hasGpu) QSKIP("No GPU");
-        WhiteBalanceEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
+        WhiteBalanceEffect      e;
+        QImage                  input = makeSolid(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 5500.0;
-        params["tint"]        = 80.0;   // strong magenta
-        QImage out = runEffect(e, input, params);
+        params["tint"]        = 80.0; // strong magenta
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qGreen(px) < qRed(px); }));
     }
@@ -89,21 +87,21 @@ private slots:
     void identity_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
         WhiteBalanceEffect e;
-        QImage input = makeSolid16bit(32, 32, 128, 128, 128);
-        QImage out   = runEffect(e, input, neutralParams(5500.0));
+        QImage             input = makeSolid16bit(32, 32, 128, 128, 128);
+        QImage             out   = runEffect(e, input, neutralParams(5500.0));
         QVERIFY(!out.isNull());
     }
 
     // 16-bit warming path.
     void warming_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
-        WhiteBalanceEffect e;
-        QImage input = makeSolid16bit(32, 32, 128, 128, 128);
+        WhiteBalanceEffect      e;
+        QImage                  input = makeSolid16bit(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 8000.0;
         params["tint"]        = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -112,15 +110,15 @@ private slots:
     // everywhere on a mid-grey input.
     void nonSquare_warming_increasesRed_decreasesBlue() {
         if (!m_hasGpu) QSKIP("No GPU");
-        WhiteBalanceEffect e;
-        QImage input = makeSolid(128, 64, 128, 128, 128);
+        WhiteBalanceEffect      e;
+        QImage                  input = makeSolid(128, 64, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["shot_temp"]   = 5500.0;
         params["temperature"] = 8000.0;
         params["tint"]        = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.width(), 128);
         QCOMPARE(out.height(), 64);
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) >= qBlue(px); }));
     }
@@ -135,7 +133,7 @@ private slots:
 
     void defaultParameters_keys() {
         WhiteBalanceEffect e;
-        auto params = e.getParameters();
+        auto               params = e.getParameters();
         QVERIFY(params.contains("temperature"));
         QVERIFY(params.contains("tint"));
         QVERIFY(params.contains("shot_temp"));
@@ -143,7 +141,7 @@ private slots:
 
     void createControlsWidget_constructsAndCaches() {
         WhiteBalanceEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget           *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
     }
@@ -159,7 +157,7 @@ private slots:
     // onImageLoaded: valid temperature is adopted; out-of-range falls back to 5500.
     void onImageLoaded_validTemp_adopted() {
         WhiteBalanceEffect e;
-        e.createControlsWidget();  // creates temperatureParam
+        e.createControlsWidget(); // creates temperatureParam
 
         ImageMetadata meta;
         meta.colorTempK = 3200.0f;
@@ -175,7 +173,7 @@ private slots:
         e.createControlsWidget();
 
         ImageMetadata meta;
-        meta.colorTempK = 0.0f;  // invalid
+        meta.colorTempK = 0.0f; // invalid
         e.onImageLoaded(meta);
 
         auto params = e.getParameters();
@@ -185,17 +183,17 @@ private slots:
     // Fire signal lambdas in createControlsWidget.
     void connectSlider_signals_coverLambdaBodies() {
         WhiteBalanceEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget           *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto sliders = w->findChildren<ParamSlider *>();
         QVERIFY(sliders.size() >= 2);
 
-        for (auto* ps : sliders) {
-            auto* qs = ps->findChild<QSlider*>();
+        for (auto *ps : sliders) {
+            auto *qs = ps->findChild<QSlider *>();
             QVERIFY(qs);
             qs->setValue(qs->value() + 1);
             QMetaObject::invokeMethod(qs, "sliderReleased");
@@ -206,7 +204,7 @@ private slots:
     }
 
     void destructor_heapAllocated_doesNotCrash() {
-        auto* e = new WhiteBalanceEffect();
+        auto *e = new WhiteBalanceEffect();
         e->createControlsWidget();
         delete e;
     }

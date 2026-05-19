@@ -33,7 +33,7 @@ namespace {
 // hue.  Flow: H(buf→aux) → V(aux→blurBuf) → combine(buf+blurBuf → aux) →
 // copy(aux→buf).
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
 
 inline float claritMask(float L) {
     return max(0.0f, 1.0f - 2.0f * fabs(L - 0.5f));
@@ -70,7 +70,7 @@ __kernel void clarityCombineLinear(__global const float4* original,
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool ClarityEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool ClarityEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -83,18 +83,15 @@ bool ClarityEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] Clarity initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] Clarity initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
-                                cl::Buffer& buf, cl::Buffer& aux,
-                                int w, int h,
-                                const QMap<QString, QVariant>& params) {
+bool ClarityEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
+                               const QMap<QString, QVariant> &params) {
     const float amountPct = float(params.value("amount", 0).toDouble());
     const int   radiusSrc = params.value("radius", 30).toInt();
     if (amountPct == 0.0f || radiusSrc == 0) return true;
@@ -102,8 +99,8 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
     const float amount = amountPct / 100.0f;
 
     // Scale blur radius from source pixels to preview pixels.
-    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    int radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
+    const double scale  = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    int          radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
     const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
     if (m_blurBufW != w || m_blurBufH != h) {
@@ -150,43 +147,48 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue& queue,
 // Effect implementation
 // ============================================================================
 
-ClarityEffect::ClarityEffect()
-    : controlsWidget(nullptr), amountParam(nullptr), radiusParam(nullptr) {
-}
+ClarityEffect::ClarityEffect() : controlsWidget(nullptr), amountParam(nullptr), radiusParam(nullptr) {}
 
-ClarityEffect::~ClarityEffect() {
-}
+ClarityEffect::~ClarityEffect() {}
 
-QString ClarityEffect::getName() const        { return "Clarity"; }
-QString ClarityEffect::getDescription() const { return "Local midtone contrast enhancement"; }
-QString ClarityEffect::getVersion() const     { return "1.0.0"; }
+QString ClarityEffect::getName() const {
+    return "Clarity";
+}
+QString ClarityEffect::getDescription() const {
+    return "Local midtone contrast enhancement";
+}
+QString ClarityEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool ClarityEffect::initialize() {
     qDebug() << "Clarity effect initialized";
     return true;
 }
 
-QWidget* ClarityEffect::createControlsWidget() {
+QWidget *ClarityEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto connectSlider = [&](ParamSlider* s) {
+    auto connectSlider = [&](ParamSlider *s) {
         connect(s, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-        connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+        connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
     amountParam = new ParamSlider("Amount", -100.0, 100.0, 0.1, 1);
-    amountParam->setToolTip("Midtone local-contrast strength.\nPositive values add \"pop\" to midtones; negative values soften them for a dreamy look.");
+    amountParam->setToolTip("Midtone local-contrast strength.\nPositive values add \"pop\" to midtones; negative "
+                            "values soften them for a dreamy look.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
 
     radiusParam = new ParamSlider("Radius", 10, 100);
     radiusParam->setValue(30);
-    radiusParam->setToolTip("Radius (source pixels) of the blur used to define \"local\".\nLarger values affect broader tonal regions; smaller values feel closer to sharpening.");
+    radiusParam->setToolTip("Radius (source pixels) of the blur used to define \"local\".\nLarger values affect "
+                            "broader tonal regions; smaller values feel closer to sharpening.");
     connectSlider(radiusParam);
     layout->addWidget(radiusParam);
 
@@ -201,11 +203,8 @@ QMap<QString, QVariant> ClarityEffect::getParameters() const {
     return params;
 }
 
-void ClarityEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
-    if (amountParam && parameters.contains("amount"))
-        amountParam->setValue(parameters.value("amount").toDouble());
-    if (radiusParam && parameters.contains("radius"))
-        radiusParam->setValue(parameters.value("radius").toDouble());
+void ClarityEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    if (amountParam && parameters.contains("amount")) amountParam->setValue(parameters.value("amount").toDouble());
+    if (radiusParam && parameters.contains("radius")) radiusParam->setValue(parameters.value("radius").toDouble());
     emit parametersChanged();
 }
-

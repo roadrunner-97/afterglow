@@ -13,119 +13,103 @@ private slots:
     // ── resolvePattern ──────────────────────────────────────────────────────
 
     void resolvePattern_substitutesNameToken() {
-        QCOMPARE(ExportPath::resolvePattern("{name}", "/a/b/photo.cr2", 1),
-                 QString("photo"));
+        QCOMPARE(ExportPath::resolvePattern("{name}", "/a/b/photo.cr2", 1), QString("photo"));
     }
 
     void resolvePattern_padsBatchIndexToThreeDigits() {
-        QCOMPARE(ExportPath::resolvePattern("{n}",  "/x.jpg", 7),   QString("007"));
-        QCOMPARE(ExportPath::resolvePattern("{n}",  "/x.jpg", 42),  QString("042"));
+        QCOMPARE(ExportPath::resolvePattern("{n}", "/x.jpg", 7), QString("007"));
+        QCOMPARE(ExportPath::resolvePattern("{n}", "/x.jpg", 42), QString("042"));
         // Past 999 the field grows naturally — pad is a *minimum*, not a cap.
-        QCOMPARE(ExportPath::resolvePattern("{n}",  "/x.jpg", 1234), QString("1234"));
+        QCOMPARE(ExportPath::resolvePattern("{n}", "/x.jpg", 1234), QString("1234"));
     }
 
     void resolvePattern_substitutesDateToken() {
         const QDate d(2026, 4, 29);
-        QCOMPARE(ExportPath::resolvePattern("{date}", "/x.jpg", 1, d),
-                 QString("2026-04-29"));
+        QCOMPARE(ExportPath::resolvePattern("{date}", "/x.jpg", 1, d), QString("2026-04-29"));
     }
 
     void resolvePattern_combinesTokens() {
         const QDate d(2026, 1, 2);
-        QCOMPARE(ExportPath::resolvePattern("{date}_{name}_{n}", "/sun.dng", 12, d),
-                 QString("2026-01-02_sun_012"));
+        QCOMPARE(ExportPath::resolvePattern("{date}_{name}_{n}", "/sun.dng", 12, d), QString("2026-01-02_sun_012"));
     }
 
     void resolvePattern_unknownTokensPassThroughVerbatim() {
-        QCOMPARE(ExportPath::resolvePattern("export-{name}-{whatever}", "/x.jpg", 1),
-                 QString("export-x-{whatever}"));
+        QCOMPARE(ExportPath::resolvePattern("export-{name}-{whatever}", "/x.jpg", 1), QString("export-x-{whatever}"));
     }
 
     void resolvePattern_preservesMultiDotBaseName() {
         // completeBaseName() drops only the last dot suffix.
-        QCOMPARE(ExportPath::resolvePattern("{name}", "/a/b/IMG_1234.HDR.dng", 1),
-                 QString("IMG_1234.HDR"));
+        QCOMPARE(ExportPath::resolvePattern("{name}", "/a/b/IMG_1234.HDR.dng", 1), QString("IMG_1234.HDR"));
     }
 
     void resolvePattern_handlesEmptySource() {
-        QCOMPARE(ExportPath::resolvePattern("{name}-{n}", "", 3),
-                 QString("-003"));
+        QCOMPARE(ExportPath::resolvePattern("{name}-{n}", "", 3), QString("-003"));
     }
 
     void resolvePattern_literalPatternIsPassedThrough() {
-        QCOMPARE(ExportPath::resolvePattern("plain-name", "/x.jpg", 1),
-                 QString("plain-name"));
+        QCOMPARE(ExportPath::resolvePattern("plain-name", "/x.jpg", 1), QString("plain-name"));
     }
 
     // ── chooseDestination ──────────────────────────────────────────────────
 
     void chooseDestination_overwriteReturnsCandidateEvenIfExists() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.filenamePattern  = "{name}";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return true; }),
-            QString("/out/photo.jpg"));
+        opts.destinationDir  = "/out";
+        opts.filenamePattern = "{name}";
+        opts.format          = ExportOptions::Format::JPEG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return true; }),
+                 QString("/out/photo.jpg"));
     }
 
     void chooseDestination_skipReturnsEmptyOnConflict() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.format           = ExportOptions::Format::PNG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Skip;
-        QVERIFY(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return true; }).isEmpty());
+        opts.destinationDir = "/out";
+        opts.format         = ExportOptions::Format::PNG;
+        opts.onConflict     = ExportOptions::OverwritePolicy::Skip;
+        QVERIFY(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return true; }).isEmpty());
     }
 
     void chooseDestination_skipReturnsCandidateWhenFree() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.format           = ExportOptions::Format::PNG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Skip;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return false; }),
-            QString("/out/photo.png"));
+        opts.destinationDir = "/out";
+        opts.format         = ExportOptions::Format::PNG;
+        opts.onConflict     = ExportOptions::OverwritePolicy::Skip;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return false; }),
+                 QString("/out/photo.png"));
     }
 
     void chooseDestination_appendSuffixReturnsCandidateWhenFree() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::AppendSuffix;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return false; }),
-            QString("/out/photo.jpg"));
+        opts.destinationDir = "/out";
+        opts.format         = ExportOptions::Format::JPEG;
+        opts.onConflict     = ExportOptions::OverwritePolicy::AppendSuffix;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return false; }),
+                 QString("/out/photo.jpg"));
     }
 
     void chooseDestination_appendSuffixWalksUntilFree() {
-        const QSet<QString> taken {
-            "/out/photo.tif", "/out/photo_1.tif", "/out/photo_2.tif",
+        const QSet<QString> taken{
+            "/out/photo.tif",
+            "/out/photo_1.tif",
+            "/out/photo_2.tif",
         };
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.format           = ExportOptions::Format::TIFF;
-        opts.onConflict       = ExportOptions::OverwritePolicy::AppendSuffix;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [&](const QString& q) { return taken.contains(q); }),
+        opts.destinationDir = "/out";
+        opts.format         = ExportOptions::Format::TIFF;
+        opts.onConflict     = ExportOptions::OverwritePolicy::AppendSuffix;
+        QCOMPARE(
+            ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [&](const QString &q) { return taken.contains(q); }),
             QString("/out/photo_3.tif"));
     }
 
     void chooseDestination_appendSuffixGivesUpAfter9999() {
         // Predicate that swallows everything → no free slot exists.
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::AppendSuffix;
-        QVERIFY(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return true; }).isEmpty());
+        opts.destinationDir = "/out";
+        opts.format         = ExportOptions::Format::JPEG;
+        opts.onConflict     = ExportOptions::OverwritePolicy::AppendSuffix;
+        QVERIFY(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return true; }).isEmpty());
     }
 
     void chooseDestination_defaultPredicateUsesRealFilesystem() {
@@ -133,10 +117,10 @@ private slots:
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         ExportOptions::Options opts;
-        opts.destinationDir   = tmp.path();
-        opts.filenamePattern  = "{name}";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::AppendSuffix;
+        opts.destinationDir  = tmp.path();
+        opts.filenamePattern = "{name}";
+        opts.format          = ExportOptions::Format::JPEG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::AppendSuffix;
 
         // First call: no collision → bare name.
         const QString p1 = ExportPath::chooseDestination(opts, "/x/photo.cr2", 1);
@@ -152,14 +136,12 @@ private slots:
 
     void chooseDestination_honoursDestinationDir() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/some/where/else";
-        opts.filenamePattern  = "out_{n}";
-        opts.format           = ExportOptions::Format::PNG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/src/img.dng", 5,
-            [](const QString&) { return false; }),
-            QString("/some/where/else/out_005.png"));
+        opts.destinationDir  = "/some/where/else";
+        opts.filenamePattern = "out_{n}";
+        opts.format          = ExportOptions::Format::PNG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/src/img.dng", 5, [](const QString &) { return false; }),
+                 QString("/some/where/else/out_005.png"));
     }
 
     // ── Subfolder ──────────────────────────────────────────────────────────
@@ -167,70 +149,61 @@ private slots:
     void chooseDestination_emptySubfolderWritesIntoDestination() {
         // Backward compat: existing callers that never set subfolder.
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.filenamePattern  = "{name}";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return false; }),
-            QString("/out/photo.jpg"));
+        opts.destinationDir  = "/out";
+        opts.filenamePattern = "{name}";
+        opts.format          = ExportOptions::Format::JPEG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return false; }),
+                 QString("/out/photo.jpg"));
     }
 
     void chooseDestination_subfolderJoinsBetweenDestAndStem() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.subfolder        = "exports/2026";
-        opts.filenamePattern  = "{name}";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return false; }),
-            QString("/out/exports/2026/photo.jpg"));
+        opts.destinationDir  = "/out";
+        opts.subfolder       = "exports/2026";
+        opts.filenamePattern = "{name}";
+        opts.format          = ExportOptions::Format::JPEG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return false; }),
+                 QString("/out/exports/2026/photo.jpg"));
     }
 
     void chooseDestination_subfolderResolvesTokens() {
         // {name} in subfolder, distinct from stem — proves tokens are
         // resolved on the subfolder string too, not just on the filename.
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.subfolder        = "{name}";
-        opts.filenamePattern  = "{name}_{n}";
-        opts.format           = ExportOptions::Format::PNG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/sun.dng", 4,
-            [](const QString&) { return false; }),
-            QString("/out/sun/sun_004.png"));
+        opts.destinationDir  = "/out";
+        opts.subfolder       = "{name}";
+        opts.filenamePattern = "{name}_{n}";
+        opts.format          = ExportOptions::Format::PNG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/sun.dng", 4, [](const QString &) { return false; }),
+                 QString("/out/sun/sun_004.png"));
     }
 
     void chooseDestination_subfolderTrimsWhitespace() {
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.subfolder        = "   ";  // all whitespace → treated as empty
-        opts.filenamePattern  = "{name}";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::Overwrite;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [](const QString&) { return false; }),
-            QString("/out/photo.jpg"));
+        opts.destinationDir  = "/out";
+        opts.subfolder       = "   "; // all whitespace → treated as empty
+        opts.filenamePattern = "{name}";
+        opts.format          = ExportOptions::Format::JPEG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        QCOMPARE(ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [](const QString &) { return false; }),
+                 QString("/out/photo.jpg"));
     }
 
     void chooseDestination_subfolderConflictUsesSuffixedSibling() {
         // Conflict resolution still operates on the leaf name within the
         // resolved subfolder, not in the parent destinationDir.
-        const QSet<QString> taken { "/out/sub/photo.jpg" };
+        const QSet<QString>    taken{"/out/sub/photo.jpg"};
         ExportOptions::Options opts;
-        opts.destinationDir   = "/out";
-        opts.subfolder        = "sub";
-        opts.filenamePattern  = "{name}";
-        opts.format           = ExportOptions::Format::JPEG;
-        opts.onConflict       = ExportOptions::OverwritePolicy::AppendSuffix;
-        QCOMPARE(ExportPath::chooseDestination(
-            opts, "/x/photo.cr2", 1,
-            [&](const QString& q) { return taken.contains(q); }),
+        opts.destinationDir  = "/out";
+        opts.subfolder       = "sub";
+        opts.filenamePattern = "{name}";
+        opts.format          = ExportOptions::Format::JPEG;
+        opts.onConflict      = ExportOptions::OverwritePolicy::AppendSuffix;
+        QCOMPARE(
+            ExportPath::chooseDestination(opts, "/x/photo.cr2", 1, [&](const QString &q) { return taken.contains(q); }),
             QString("/out/sub/photo_1.jpg"));
     }
 
@@ -238,23 +211,20 @@ private slots:
 
     void extensionFor_coversAllFormats() {
         QCOMPARE(ExportOptions::extensionFor(ExportOptions::Format::JPEG), QString("jpg"));
-        QCOMPARE(ExportOptions::extensionFor(ExportOptions::Format::PNG),  QString("png"));
+        QCOMPARE(ExportOptions::extensionFor(ExportOptions::Format::PNG), QString("png"));
         QCOMPARE(ExportOptions::extensionFor(ExportOptions::Format::TIFF), QString("tif"));
     }
 
     void qImageFormatHint_coversAllFormats() {
-        QCOMPARE(QString(ExportOptions::qImageFormatHint(ExportOptions::Format::JPEG)),
-                 QString("JPEG"));
-        QCOMPARE(QString(ExportOptions::qImageFormatHint(ExportOptions::Format::PNG)),
-                 QString("PNG"));
-        QCOMPARE(QString(ExportOptions::qImageFormatHint(ExportOptions::Format::TIFF)),
-                 QString("TIFF"));
+        QCOMPARE(QString(ExportOptions::qImageFormatHint(ExportOptions::Format::JPEG)), QString("JPEG"));
+        QCOMPARE(QString(ExportOptions::qImageFormatHint(ExportOptions::Format::PNG)), QString("PNG"));
+        QCOMPARE(QString(ExportOptions::qImageFormatHint(ExportOptions::Format::TIFF)), QString("TIFF"));
     }
 
     void qualityFor_onlyAppliesToJpeg() {
         ExportOptions::Options opts;
         opts.jpegQuality = 70;
-        opts.format = ExportOptions::Format::JPEG;
+        opts.format      = ExportOptions::Format::JPEG;
         QCOMPARE(ExportOptions::qualityFor(opts), 70);
         opts.format = ExportOptions::Format::PNG;
         QCOMPARE(ExportOptions::qualityFor(opts), -1);

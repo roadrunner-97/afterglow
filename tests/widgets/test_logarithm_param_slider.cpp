@@ -32,7 +32,7 @@ private slots:
     void geometricMidpoint() {
         LogarithmParamSlider s("Radius", 1.0, 100.0, 2, 1000);
         s.setValue(10.0);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QCOMPARE(slider->value(), 500);
         // round-trip back through the spinbox's 2-decimal precision
@@ -42,7 +42,7 @@ private slots:
     // Slider int 0 → min, resolution → max, half → geometric midpoint
     void sliderToValue_endpoints() {
         LogarithmParamSlider s("Radius", 1.0, 100.0, 2, 1000);
-        auto* slider = s.findChild<QSlider*>();
+        auto                *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         slider->setValue(0);
         QVERIFY(qAbs(s.value() - 1.0) < 0.01);
@@ -53,7 +53,7 @@ private slots:
     // setValue must not emit (matches ParamSlider contract)
     void setValue_doesNotEmit() {
         LogarithmParamSlider s("Radius", 0.5, 500.0);
-        QSignalSpy spy(&s, &LogarithmParamSlider::valueChanged);
+        QSignalSpy           spy(&s, &LogarithmParamSlider::valueChanged);
         s.setValue(50.0);
         QCOMPARE(spy.count(), 0);
     }
@@ -61,8 +61,8 @@ private slots:
     // Slider drag emits valueChanged with the log-mapped value
     void sliderDrag_emitsLogMappedValue() {
         LogarithmParamSlider s("Radius", 1.0, 100.0, 2, 1000);
-        QSignalSpy spy(&s, &LogarithmParamSlider::valueChanged);
-        auto* slider = s.findChild<QSlider*>();
+        QSignalSpy           spy(&s, &LogarithmParamSlider::valueChanged);
+        auto                *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         slider->setValue(500);
         QCOMPARE(spy.count(), 1);
@@ -76,7 +76,7 @@ private slots:
         s.show();
         s.setValue(50.0);
         QSignalSpy spy(&s, &LogarithmParamSlider::valueChanged);
-        auto* slider = s.findChild<QSlider*>();
+        auto      *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QTest::mouseDClick(slider, Qt::LeftButton);
         // Reset emits valueChanged(0.0) but valueToSlider(0) clamps to slider int 0,

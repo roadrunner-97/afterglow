@@ -21,8 +21,7 @@
 // PhotoEditorEffect and IGpuEffect.  Saves repeating the effect pointer
 // twice on every call site; a non-GPU effect would simply fail to
 // compile, since GpuPipelineCall::gpu cannot be null.
-template<class T>
-static GpuPipelineCall call(T* e, const QMap<QString, QVariant>& p = {}) {
+template <class T> static GpuPipelineCall call(T *e, const QMap<QString, QVariant> &p = {}) {
     return {e, e, p};
 }
 
@@ -31,13 +30,25 @@ static GpuPipelineCall call(T* e, const QMap<QString, QVariant>& p = {}) {
 class FailInitEffect : public PhotoEditorEffect, public IGpuEffect {
     Q_OBJECT
 public:
-    QString getName()        const override { return "FailInit"; }
-    QString getDescription() const override { return ""; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-    bool initGpuKernels(cl::Context&, cl::Device&) override { return false; }
-    bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
-                    int, int, const QMap<QString,QVariant>&) override { return true; }
+    QString getName() const override {
+        return "FailInit";
+    }
+    QString getDescription() const override {
+        return "";
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
+    bool initGpuKernels(cl::Context &, cl::Device &) override {
+        return false;
+    }
+    bool enqueueGpu(cl::CommandQueue &, cl::Buffer &, cl::Buffer &, int, int,
+                    const QMap<QString, QVariant> &) override {
+        return true;
+    }
 };
 
 // An IGpuEffect whose enqueueGpu() always returns false.
@@ -45,13 +56,25 @@ public:
 class FailEnqueueEffect : public PhotoEditorEffect, public IGpuEffect {
     Q_OBJECT
 public:
-    QString getName()        const override { return "FailEnqueue"; }
-    QString getDescription() const override { return ""; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-    bool initGpuKernels(cl::Context&, cl::Device&) override { return true; }
-    bool enqueueGpu(cl::CommandQueue&, cl::Buffer&, cl::Buffer&,
-                    int, int, const QMap<QString,QVariant>&) override { return false; }
+    QString getName() const override {
+        return "FailEnqueue";
+    }
+    QString getDescription() const override {
+        return "";
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
+    bool initGpuKernels(cl::Context &, cl::Device &) override {
+        return true;
+    }
+    bool enqueueGpu(cl::CommandQueue &, cl::Buffer &, cl::Buffer &, int, int,
+                    const QMap<QString, QVariant> &) override {
+        return false;
+    }
 };
 
 // Effects are class members so their addresses are stable across test methods.
@@ -64,20 +87,20 @@ class TestGpuPipeline : public QObject {
 private:
     bool m_hasGpu = false;
 
-    GpuPipeline      m_pipeline;
-    BrightnessEffect m_brightness;
-    SaturationEffect m_saturation;
-    BlurEffect       m_blur;
-    ExposureEffect   m_exposure;
-    HotPixelEffect   m_hotpixel;
-    UnsharpEffect    m_unsharp;
-    GrayscaleEffect  m_grayscale;
-    DenoiseEffect    m_denoise;
+    GpuPipeline        m_pipeline;
+    BrightnessEffect   m_brightness;
+    SaturationEffect   m_saturation;
+    BlurEffect         m_blur;
+    ExposureEffect     m_exposure;
+    HotPixelEffect     m_hotpixel;
+    UnsharpEffect      m_unsharp;
+    GrayscaleEffect    m_grayscale;
+    DenoiseEffect      m_denoise;
     WhiteBalanceEffect m_whitebalance;
-    VignetteEffect   m_vignette;
-    FilmGrainEffect  m_filmgrain;
-    SplitToningEffect m_splittoning;
-    ClarityEffect    m_clarity;
+    VignetteEffect     m_vignette;
+    FilmGrainEffect    m_filmgrain;
+    SplitToningEffect  m_splittoning;
+    ClarityEffect      m_clarity;
     ColorBalanceEffect m_colorbalance;
 
     static QImage makeSolid(int w, int h, int r, int g, int b) {
@@ -86,19 +109,18 @@ private:
         return img;
     }
 
-    static ViewportRequest fullViewport(const QImage& img) {
+    static ViewportRequest fullViewport(const QImage &img) {
         ViewportRequest vp;
         vp.displaySize = img.size();
-        vp.zoom   = 1.0f;
-        vp.center = {0.5, 0.5};
+        vp.zoom        = 1.0f;
+        vp.center      = {0.5, 0.5};
         return vp;
     }
 
 private slots:
     void initTestCase() {
         GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU pipeline tests");
+        if (GpuDeviceRegistry::instance().count() == 0) QSKIP("No OpenCL device found — skipping GPU pipeline tests");
         GpuDeviceRegistry::instance().setDevice(0);
         m_hasGpu = true;
     }
@@ -107,9 +129,9 @@ private slots:
     void emptyPipeline_justDownsamples() {
         if (!m_hasGpu) QSKIP("No GPU");
         QImage input = makeSolid(64, 64, 100, 150, 200);
-        QImage out = m_pipeline.run(input, {}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
-        QCOMPARE(out.width(),  64);
+        QCOMPARE(out.width(), 64);
         QCOMPARE(out.height(), 64);
     }
 
@@ -118,8 +140,8 @@ private slots:
         QMap<QString, QVariant> p;
         p["brightness"] = 20;
         p["contrast"]   = 0;
-        QImage input = makeSolid(64, 64, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {call(&m_brightness, p)}, fullViewport(input)).image;
+        QImage input    = makeSolid(64, 64, 100, 100, 100);
+        QImage out      = m_pipeline.run(input, {call(&m_brightness, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -128,8 +150,8 @@ private slots:
         QMap<QString, QVariant> p;
         p["saturation"] = 10.0;
         p["vibrancy"]   = 0.0;
-        QImage input = makeSolid(64, 64, 200, 100, 100);
-        QImage out = m_pipeline.run(input, {call(&m_saturation, p)}, fullViewport(input)).image;
+        QImage input    = makeSolid(64, 64, 200, 100, 100);
+        QImage out      = m_pipeline.run(input, {call(&m_saturation, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -137,9 +159,9 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
         p["radius"]   = 4;
-        p["blurType"] = 0;  // Gaussian
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_blur, p)}, fullViewport(input)).image;
+        p["blurType"] = 0; // Gaussian
+        QImage input  = makeSolid(64, 64, 128, 128, 128);
+        QImage out    = m_pipeline.run(input, {call(&m_blur, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -151,8 +173,8 @@ private slots:
         p["highlights"] = 0.0;
         p["shadows"]    = 0.0;
         p["blacks"]     = 0.0;
-        QImage input = makeSolid(64, 64, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {call(&m_exposure, p)}, fullViewport(input)).image;
+        QImage input    = makeSolid(64, 64, 100, 100, 100);
+        QImage out      = m_pipeline.run(input, {call(&m_exposure, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -166,8 +188,8 @@ private slots:
         p["highlights"] = 0.0;
         p["shadows"]    = 0.0;
         p["blacks"]     = 0.0;
-        QImage input = makeSolid(64, 64, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {call(&m_exposure, p)}, fullViewport(input)).image;
+        QImage input    = makeSolid(64, 64, 100, 100, 100);
+        QImage out      = m_pipeline.run(input, {call(&m_exposure, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -175,8 +197,8 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
         p["threshold"] = 30;
-        QImage input = makeSolid(64, 64, 80, 80, 80);
-        QImage out = m_pipeline.run(input, {call(&m_hotpixel, p)}, fullViewport(input)).image;
+        QImage input   = makeSolid(64, 64, 80, 80, 80);
+        QImage out     = m_pipeline.run(input, {call(&m_hotpixel, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -186,8 +208,8 @@ private slots:
         p["amount"]    = 1.0;
         p["radius"]    = 2;
         p["threshold"] = 3;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_unsharp, p)}, fullViewport(input)).image;
+        QImage input   = makeSolid(64, 64, 128, 128, 128);
+        QImage out     = m_pipeline.run(input, {call(&m_unsharp, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -195,23 +217,23 @@ private slots:
     void pipeline_grayscale_inactive() {
         if (!m_hasGpu) QSKIP("No GPU");
         QImage input = makeSolid(64, 64, 200, 100, 50);
-        QImage out = m_pipeline.run(input, {call(&m_grayscale)}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {call(&m_grayscale)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
     // Grayscale active: exercises enqueueGpu body (lines 167-173).
     void pipeline_grayscale_active() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QWidget* w  = m_grayscale.createControlsWidget();
-        auto*    cb = w->findChild<QCheckBox*>();
+        QWidget *w  = m_grayscale.createControlsWidget();
+        auto    *cb = w->findChild<QCheckBox *>();
         QVERIFY(cb);
         cb->setChecked(true);
 
         QImage input = makeSolid(64, 64, 200, 100, 50);
-        QImage out = m_pipeline.run(input, {call(&m_grayscale)}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {call(&m_grayscale)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
 
-        cb->setChecked(false);  // reset for subsequent tests
+        cb->setChecked(false); // reset for subsequent tests
     }
 
     void pipeline_denoise() {
@@ -220,8 +242,8 @@ private slots:
         p["strength"]       = 50;
         p["shadowPreserve"] = 30;
         p["colorNoise"]     = 50;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_denoise, p)}, fullViewport(input)).image;
+        QImage input        = makeSolid(64, 64, 128, 128, 128);
+        QImage out          = m_pipeline.run(input, {call(&m_denoise, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -231,8 +253,8 @@ private slots:
         p["shot_temp"]   = 5500.0;
         p["temperature"] = 6500.0;
         p["tint"]        = 0.0;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_whitebalance, p)}, fullViewport(input)).image;
+        QImage input     = makeSolid(64, 64, 128, 128, 128);
+        QImage out       = m_pipeline.run(input, {call(&m_whitebalance, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -244,8 +266,8 @@ private slots:
         p["midpoint"]  = 50;
         p["feather"]   = 50;
         p["roundness"] = 0;
-        QImage input = makeSolid(64, 64, 180, 180, 180);
-        QImage out = m_pipeline.run(input, {call(&m_vignette, p)}, fullViewport(input)).image;
+        QImage input   = makeSolid(64, 64, 180, 180, 180);
+        QImage out     = m_pipeline.run(input, {call(&m_vignette, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -257,8 +279,8 @@ private slots:
         p["midpoint"]  = 40;
         p["feather"]   = 40;
         p["roundness"] = 0;
-        QImage input = makeSolid(64, 64, 180, 180, 180);
-        QImage out = m_pipeline.run(input, {call(&m_vignette, p)}, fullViewport(input)).image;
+        QImage input   = makeSolid(64, 64, 180, 180, 180);
+        QImage out     = m_pipeline.run(input, {call(&m_vignette, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -269,8 +291,8 @@ private slots:
         p["amount"]    = 0;
         p["size"]      = 1;
         p["lumWeight"] = true;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_filmgrain, p)}, fullViewport(input)).image;
+        QImage input   = makeSolid(64, 64, 128, 128, 128);
+        QImage out     = m_pipeline.run(input, {call(&m_filmgrain, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -281,8 +303,8 @@ private slots:
         p["amount"]    = 50;
         p["size"]      = 2;
         p["lumWeight"] = false;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_filmgrain, p)}, fullViewport(input)).image;
+        QImage input   = makeSolid(64, 64, 128, 128, 128);
+        QImage out     = m_pipeline.run(input, {call(&m_filmgrain, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -295,8 +317,8 @@ private slots:
         p["highlightHue"] = 60;
         p["highlightSat"] = 0;
         p["balance"]      = 0;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_splittoning, p)}, fullViewport(input)).image;
+        QImage input      = makeSolid(64, 64, 128, 128, 128);
+        QImage out        = m_pipeline.run(input, {call(&m_splittoning, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -309,8 +331,8 @@ private slots:
         p["highlightHue"] = 60;
         p["highlightSat"] = 50;
         p["balance"]      = 0;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_splittoning, p)}, fullViewport(input)).image;
+        QImage input      = makeSolid(64, 64, 128, 128, 128);
+        QImage out        = m_pipeline.run(input, {call(&m_splittoning, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -318,10 +340,10 @@ private slots:
     void pipeline_clarity_inactive() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["amount"] = 0;
-        p["radius"] = 30;
+        p["amount"]  = 0;
+        p["radius"]  = 30;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_clarity, p)}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {call(&m_clarity, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -329,10 +351,10 @@ private slots:
     void pipeline_clarity_active() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["amount"] = 50;
-        p["radius"] = 20;
+        p["amount"]  = 50;
+        p["radius"]  = 20;
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_clarity, p)}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {call(&m_clarity, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -340,11 +362,17 @@ private slots:
     void pipeline_colorbalance_inactive() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["shadowR"]    = 0; p["shadowG"]    = 0; p["shadowB"]    = 0;
-        p["midtoneR"]   = 0; p["midtoneG"]   = 0; p["midtoneB"]   = 0;
-        p["highlightR"] = 0; p["highlightG"] = 0; p["highlightB"] = 0;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_colorbalance, p)}, fullViewport(input)).image;
+        p["shadowR"]    = 0;
+        p["shadowG"]    = 0;
+        p["shadowB"]    = 0;
+        p["midtoneR"]   = 0;
+        p["midtoneG"]   = 0;
+        p["midtoneB"]   = 0;
+        p["highlightR"] = 0;
+        p["highlightG"] = 0;
+        p["highlightB"] = 0;
+        QImage input    = makeSolid(64, 64, 128, 128, 128);
+        QImage out      = m_pipeline.run(input, {call(&m_colorbalance, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -352,11 +380,17 @@ private slots:
     void pipeline_colorbalance_active() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["shadowR"]    = 40; p["shadowG"]    = 0;  p["shadowB"]    = -20;
-        p["midtoneR"]   = 0;  p["midtoneG"]   = 30; p["midtoneB"]   = 0;
-        p["highlightR"] = 0;  p["highlightG"] = 0;  p["highlightB"] = 40;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_colorbalance, p)}, fullViewport(input)).image;
+        p["shadowR"]    = 40;
+        p["shadowG"]    = 0;
+        p["shadowB"]    = -20;
+        p["midtoneR"]   = 0;
+        p["midtoneG"]   = 30;
+        p["midtoneB"]   = 0;
+        p["highlightR"] = 0;
+        p["highlightG"] = 0;
+        p["highlightB"] = 40;
+        QImage input    = makeSolid(64, 64, 128, 128, 128);
+        QImage out      = m_pipeline.run(input, {call(&m_colorbalance, p)}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -366,10 +400,10 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         // devices() getter (GpuDeviceRegistry.h line 28)
         QVERIFY(!GpuDeviceRegistry::instance().devices().empty());
-        GpuDeviceRegistry::instance().setDevice(1);  // covers setDevice body (lines 77-80)
-        GpuDeviceRegistry::instance().setDevice(0);  // restore
+        GpuDeviceRegistry::instance().setDevice(1); // covers setDevice body (lines 77-80)
+        GpuDeviceRegistry::instance().setDevice(0); // restore
         QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -377,12 +411,12 @@ private slots:
     // bounds check in GpuDeviceRegistry::enumerate() (line 69).
     void enumerate_afterOutOfRangeDevice_resetsIndex() {
         if (!m_hasGpu) QSKIP("No GPU");
-        GpuDeviceRegistry::instance().setDevice(99);   // index far out of range
-        GpuDeviceRegistry::instance().enumerate();     // line 69: 99 >= devices.size() → resets to 0
+        GpuDeviceRegistry::instance().setDevice(99); // index far out of range
+        GpuDeviceRegistry::instance().enumerate();   // line 69: 99 >= devices.size() → resets to 0
         QCOMPARE(GpuDeviceRegistry::instance().currentIndex(), 0);
         // Pipeline must still work after the re-enumeration.
         QImage input = makeSolid(32, 32, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {}, fullViewport(input)).image;
+        QImage out   = m_pipeline.run(input, {}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
     }
 
@@ -391,8 +425,8 @@ private slots:
     void failInitEffect_warnsAndReturnsNull() {
         if (!m_hasGpu) QSKIP("No GPU");
         FailInitEffect fie;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {call(&fie)}, fullViewport(input)).image;
+        QImage         input = makeSolid(32, 32, 100, 100, 100);
+        QImage         out   = m_pipeline.run(input, {call(&fie)}, fullViewport(input)).image;
         QVERIFY(out.isNull());
     }
 
@@ -401,8 +435,8 @@ private slots:
     void failEnqueueEffect_warnsAndReturnsNull() {
         if (!m_hasGpu) QSKIP("No GPU");
         FailEnqueueEffect fee;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out = m_pipeline.run(input, {call(&fee)}, fullViewport(input)).image;
+        QImage            input = makeSolid(32, 32, 100, 100, 100);
+        QImage            out   = m_pipeline.run(input, {call(&fee)}, fullViewport(input)).image;
         QVERIFY(out.isNull());
     }
 
@@ -410,10 +444,10 @@ private slots:
     void panZoom_reusesCachedFrame() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["brightness"] = 10;
-        p["contrast"]   = 0;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        ViewportRequest vp = fullViewport(input);
+        p["brightness"]       = 10;
+        p["contrast"]         = 0;
+        QImage          input = makeSolid(64, 64, 128, 128, 128);
+        ViewportRequest vp    = fullViewport(input);
 
         // Commit run populates the full-res post-effect cache.
         QImage out1 = m_pipeline.run(input, {call(&m_brightness, p)}, vp, RunMode::Commit).image;
@@ -432,9 +466,8 @@ private slots:
         QMap<QString, QVariant> p;
         p["brightness"] = 10;
         p["contrast"]   = 0;
-        QImage input = makeSolid(64, 64, 128, 128, 128);
-        QImage out = m_pipeline.run(input, {call(&m_brightness, p)}, fullViewport(input),
-                                    RunMode::LiveDrag).image;
+        QImage input    = makeSolid(64, 64, 128, 128, 128);
+        QImage out      = m_pipeline.run(input, {call(&m_brightness, p)}, fullViewport(input), RunMode::LiveDrag).image;
         QVERIFY(!out.isNull());
     }
 
@@ -458,9 +491,10 @@ private slots:
     // Output spans the full viewport, offset is (0, 0).
     void letterbox_squareInSquare_noLetterbox() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QImage input = makeSolid(64, 64, 100, 150, 200);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
-        auto r = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
+        QImage          input = makeSolid(64, 64, 100, 150, 200);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
+        auto r         = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
         QCOMPARE(r.image.size(), QSize(64, 64));
         QCOMPARE(r.offset, QPoint(0, 0));
     }
@@ -470,9 +504,10 @@ private slots:
     // clipY0 = 0, clipY1 = 32 → imgH = 32, imgY0 = 16.
     void letterbox_landscapeInSquare_verticalLetterbox() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QImage input = makeSolid(64, 32, 100, 100, 100);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
-        auto r = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
+        QImage          input = makeSolid(64, 32, 100, 100, 100);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
+        auto r         = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
         QCOMPARE(r.image.size(), QSize(64, 32));
         QCOMPARE(r.offset, QPoint(0, 16));
     }
@@ -480,9 +515,10 @@ private slots:
     // Portrait 32×64 in 64×64 viewport: letterbox left + right.
     void letterbox_portraitInSquare_horizontalLetterbox() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QImage input = makeSolid(32, 64, 100, 100, 100);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
-        auto r = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
+        QImage          input = makeSolid(32, 64, 100, 100, 100);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
+        auto r         = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
         QCOMPARE(r.image.size(), QSize(32, 64));
         QCOMPARE(r.offset, QPoint(16, 0));
     }
@@ -490,9 +526,10 @@ private slots:
     // Same letterbox behaviour in Commit mode (effects-at-full-res path).
     void letterbox_commitMode_landscapeInSquare() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QImage input = makeSolid(64, 32, 100, 100, 100);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
-        auto r = m_pipeline.run(input, {}, vp, RunMode::Commit);
+        QImage          input = makeSolid(64, 32, 100, 100, 100);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
+        auto r         = m_pipeline.run(input, {}, vp, RunMode::Commit);
         QCOMPARE(r.image.size(), QSize(64, 32));
         QCOMPARE(r.offset, QPoint(0, 16));
     }
@@ -500,8 +537,9 @@ private slots:
     // Same letterbox behaviour in PanZoom cache-hit path.
     void letterbox_panZoomMode_landscapeInSquare() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QImage input = makeSolid(64, 32, 100, 100, 100);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
+        QImage          input = makeSolid(64, 32, 100, 100, 100);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
         // Populate cache first.
         (void)m_pipeline.run(input, {}, vp, RunMode::Commit);
         auto r = m_pipeline.run(input, {}, vp, RunMode::PanZoom);
@@ -517,11 +555,12 @@ private slots:
     void letterbox_brightnessOnBlackImage_outputIsImageOnly() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["brightness"] = 50;
-        p["contrast"]   = 0;
-        QImage input = makeSolid(64, 32, 0, 0, 0);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
-        auto r = m_pipeline.run(input, {call(&m_brightness, p)}, vp, RunMode::LiveDrag);
+        p["brightness"]       = 50;
+        p["contrast"]         = 0;
+        QImage          input = makeSolid(64, 32, 0, 0, 0);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
+        auto r         = m_pipeline.run(input, {call(&m_brightness, p)}, vp, RunMode::LiveDrag);
         // Output is image-sized, not viewport-sized — letterbox can't exist
         // in something that isn't there.
         QCOMPARE(r.image.size(), QSize(64, 32));
@@ -529,7 +568,7 @@ private slots:
         // And every pixel in the output got the brightness applied (because
         // every pixel in the output is a real image pixel, not letterbox).
         for (int y = 0; y < r.image.height(); ++y) {
-            const QRgb* row = reinterpret_cast<const QRgb*>(r.image.constScanLine(y));
+            const QRgb *row = reinterpret_cast<const QRgb *>(r.image.constScanLine(y));
             for (int x = 0; x < r.image.width(); ++x)
                 QVERIFY(qRed(row[x]) > 0 && qGreen(row[x]) > 0 && qBlue(row[x]) > 0);
         }
@@ -539,12 +578,19 @@ private slots:
     void letterbox_colorBalanceOnBlackImage_outputIsImageOnly() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
-        p["shadowR"]    = 40; p["shadowG"]    = 0;  p["shadowB"]    = 0;
-        p["midtoneR"]   = 0;  p["midtoneG"]   = 0;  p["midtoneB"]   = 0;
-        p["highlightR"] = 0;  p["highlightG"] = 0;  p["highlightB"] = 0;
-        QImage input = makeSolid(64, 32, 0, 0, 0);
-        ViewportRequest vp; vp.displaySize = QSize(64, 64);
-        auto r = m_pipeline.run(input, {call(&m_colorbalance, p)}, vp, RunMode::LiveDrag);
+        p["shadowR"]          = 40;
+        p["shadowG"]          = 0;
+        p["shadowB"]          = 0;
+        p["midtoneR"]         = 0;
+        p["midtoneG"]         = 0;
+        p["midtoneB"]         = 0;
+        p["highlightR"]       = 0;
+        p["highlightG"]       = 0;
+        p["highlightB"]       = 0;
+        QImage          input = makeSolid(64, 32, 0, 0, 0);
+        ViewportRequest vp;
+        vp.displaySize = QSize(64, 64);
+        auto r         = m_pipeline.run(input, {call(&m_colorbalance, p)}, vp, RunMode::LiveDrag);
         QCOMPARE(r.image.size(), QSize(64, 32));
         QCOMPARE(r.offset, QPoint(0, 16));
     }
@@ -553,11 +599,11 @@ private slots:
     // spans the full viewport with offset (0, 0).
     void letterbox_zoomedIn_noLetterbox() {
         if (!m_hasGpu) QSKIP("No GPU");
-        QImage input = makeSolid(64, 64, 100, 100, 100);
+        QImage          input = makeSolid(64, 64, 100, 100, 100);
         ViewportRequest vp;
         vp.displaySize = QSize(64, 64);
         vp.zoom        = 2.0f;
-        auto r = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
+        auto r         = m_pipeline.run(input, {}, vp, RunMode::LiveDrag);
         QCOMPARE(r.image.size(), QSize(64, 64));
         QCOMPARE(r.offset, QPoint(0, 0));
     }
@@ -567,7 +613,7 @@ private slots:
     void letterbox_emptyViewport_returnsFullImage() {
         if (!m_hasGpu) QSKIP("No GPU");
         QImage input = makeSolid(40, 60, 50, 100, 150);
-        auto r = m_pipeline.run(input, {}, {}, RunMode::Commit);
+        auto   r     = m_pipeline.run(input, {}, {}, RunMode::Commit);
         QCOMPARE(r.image.size(), QSize(40, 60));
         QCOMPARE(r.offset, QPoint(0, 0));
     }

@@ -5,7 +5,6 @@
 #include <QVBoxLayout>
 #include <cmath>
 
-
 namespace {
 
 // Distance metric: L^p norm on isotropic (pixel-space) coordinates — the
@@ -28,19 +27,19 @@ namespace {
 // multiplies RGB (amount<0 darkens corners, amount>0 lightens).
 
 struct VignetteArgs {
-    float amount;    // -1..1
-    float midpoint;  // 0..1
-    float feather;   // 0..1
-    float p;         // L^p exponent
+    float amount;   // -1..1
+    float midpoint; // 0..1
+    float feather;  // 0..1
+    float p;        // L^p exponent
 };
 
 static VignetteArgs makeArgs(float amount, float midpoint, float feather, float roundness) {
     VignetteArgs a;
-    a.amount   = amount   / 100.0f;
+    a.amount   = amount / 100.0f;
     a.midpoint = midpoint / 100.0f;
-    a.feather  = feather  / 100.0f;
-    float rn   = roundness / 100.0f;                 // [-1, 1]
-    a.p        = std::exp2(1.0f - rn * 3.0f);        // roundness=0 → p=2
+    a.feather  = feather / 100.0f;
+    float rn   = roundness / 100.0f;          // [-1, 1]
+    a.p        = std::exp2(1.0f - rn * 3.0f); // roundness=0 → p=2
     return a;
 }
 
@@ -58,7 +57,7 @@ static VignetteArgs makeArgs(float amount, float midpoint, float feather, float 
 // image regardless of zoom, pan, or aspect-mismatched fit-to-window padding.
 // In Commit mode srcPPP=1 and srcX0=srcY0=0 so the transform is the identity.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 __kernel void applyVignetteLinear(__global float4* pixels,
                                    int   w,
                                    int   h,
@@ -109,45 +108,49 @@ __kernel void applyVignetteLinear(__global float4* pixels,
 // ============================================================================
 
 VignetteEffect::VignetteEffect()
-    : controlsWidget(nullptr), amountParam(nullptr), midpointParam(nullptr),
-      featherParam(nullptr), roundnessParam(nullptr) {
-}
+    : controlsWidget(nullptr), amountParam(nullptr), midpointParam(nullptr), featherParam(nullptr),
+      roundnessParam(nullptr) {}
 
-VignetteEffect::~VignetteEffect() {
-}
+VignetteEffect::~VignetteEffect() {}
 
-QString VignetteEffect::getName() const { return "Vignette"; }
+QString VignetteEffect::getName() const {
+    return "Vignette";
+}
 QString VignetteEffect::getDescription() const {
     return "Radial darkening or lightening around the image center";
 }
-QString VignetteEffect::getVersion() const { return "1.0.0"; }
+QString VignetteEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool VignetteEffect::initialize() {
     qDebug() << "Vignette effect initialized";
     return true;
 }
 
-QWidget* VignetteEffect::createControlsWidget() {
+QWidget *VignetteEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto connectSlider = [&](ParamSlider* s) {
+    auto connectSlider = [&](ParamSlider *s) {
         connect(s, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-        connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+        connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
     amountParam = new ParamSlider("Amount", -100.0, 100.0, 0.1, 1);
-    amountParam->setToolTip("Strength and direction of the vignette.\nNegative darkens the corners; positive lightens them.");
+    amountParam->setToolTip(
+        "Strength and direction of the vignette.\nNegative darkens the corners; positive lightens them.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
 
     midpointParam = new ParamSlider("Midpoint", 0.0, 100.0, 0.1, 1);
     midpointParam->setValue(50);
-    midpointParam->setToolTip("Centre of the transition, as a fraction of the way from image centre to corner.\nLower values move the vignette inward.");
+    midpointParam->setToolTip("Centre of the transition, as a fraction of the way from image centre to corner.\nLower "
+                              "values move the vignette inward.");
     connectSlider(midpointParam);
     layout->addWidget(midpointParam);
 
@@ -158,7 +161,8 @@ QWidget* VignetteEffect::createControlsWidget() {
     layout->addWidget(featherParam);
 
     roundnessParam = new ParamSlider("Roundness", -100.0, 100.0, 0.1, 1);
-    roundnessParam->setToolTip("Shape of the vignette.\nPositive values round the falloff (heavier corner darkening);\nnegative values pull it toward the rectangular frame.");
+    roundnessParam->setToolTip("Shape of the vignette.\nPositive values round the falloff (heavier corner "
+                               "darkening);\nnegative values pull it toward the rectangular frame.");
     connectSlider(roundnessParam);
     layout->addWidget(roundnessParam);
 
@@ -168,21 +172,20 @@ QWidget* VignetteEffect::createControlsWidget() {
 
 QMap<QString, QVariant> VignetteEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["amount"]    = amountParam    ? amountParam->value()    : 0.0;
-    params["midpoint"]  = midpointParam  ? midpointParam->value()  : 50.0;
-    params["feather"]   = featherParam   ? featherParam->value()   : 50.0;
+    params["amount"]    = amountParam ? amountParam->value() : 0.0;
+    params["midpoint"]  = midpointParam ? midpointParam->value() : 50.0;
+    params["feather"]   = featherParam ? featherParam->value() : 50.0;
     params["roundness"] = roundnessParam ? roundnessParam->value() : 0.0;
     return params;
 }
 
-void VignetteEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
-    auto apply = [&](ParamSlider* p, const char* key) {
-        if (p && parameters.contains(key))
-            p->setValue(parameters.value(key).toDouble());
+void VignetteEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    auto apply = [&](ParamSlider *p, const char *key) {
+        if (p && parameters.contains(key)) p->setValue(parameters.value(key).toDouble());
     };
-    apply(amountParam,    "amount");
-    apply(midpointParam,  "midpoint");
-    apply(featherParam,   "feather");
+    apply(amountParam, "amount");
+    apply(midpointParam, "midpoint");
+    apply(featherParam, "feather");
     apply(roundnessParam, "roundness");
     emit parametersChanged();
 }
@@ -191,7 +194,7 @@ void VignetteEffect::applyParameters(const QMap<QString, QVariant>& parameters) 
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool VignetteEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool VignetteEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -199,32 +202,26 @@ bool VignetteEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] Vignette initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] Vignette initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
-                                 cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                 int w, int h,
-                                 const QMap<QString, QVariant>& params) {
+bool VignetteEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
+                                const QMap<QString, QVariant> &params) {
     const float amount = float(params.value("amount", 0).toDouble());
-    if (amount == 0.0f) return true;  // no-op
+    if (amount == 0.0f) return true; // no-op
 
-    const VignetteArgs a = makeArgs(
-        amount,
-        float(params.value("midpoint",  50).toDouble()),
-        float(params.value("feather",   50).toDouble()),
-        float(params.value("roundness",  0).toDouble()));
+    const VignetteArgs a =
+        makeArgs(amount, float(params.value("midpoint", 50).toDouble()), float(params.value("feather", 50).toDouble()),
+                 float(params.value("roundness", 0).toDouble()));
 
     // Compute geometry in source-image coordinates so the vignette stays
     // anchored to the source centre regardless of preview crop / aspect.
     // In Commit mode srcW=w, srcH=h, srcPPP=1, srcX0=srcY0=0 — same as before.
-    const float srcPPP = static_cast<float>(
-        params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
+    const float srcPPP = static_cast<float>(params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
     const float srcX0  = static_cast<float>(params.value("_cropX0", 0.0).toDouble());
     const float srcY0  = static_cast<float>(params.value("_cropY0", 0.0).toDouble());
     const int   srcW   = params.value("_srcW", w).toInt();
@@ -263,26 +260,23 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue& queue,
     // circle regardless of aspect.  cornerD normalises dn to 1 at the corner.
     const float nxCorner = halfW / halfD;
     const float nyCorner = halfH / halfD;
-    const float cornerD  = std::pow(std::pow(nxCorner, a.p) +
-                                    std::pow(nyCorner, a.p), 1.0f / a.p);
+    const float cornerD  = std::pow(std::pow(nxCorner, a.p) + std::pow(nyCorner, a.p), 1.0f / a.p);
 
-    m_kernelLinear.setArg(0,  buf);
-    m_kernelLinear.setArg(1,  w);
-    m_kernelLinear.setArg(2,  h);
-    m_kernelLinear.setArg(3,  cx);
-    m_kernelLinear.setArg(4,  cy);
-    m_kernelLinear.setArg(5,  halfD);  // isotropic scale (same for both axes)
-    m_kernelLinear.setArg(6,  halfD);
-    m_kernelLinear.setArg(7,  a.amount);
-    m_kernelLinear.setArg(8,  a.midpoint);
-    m_kernelLinear.setArg(9,  a.feather);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, cx);
+    m_kernelLinear.setArg(4, cy);
+    m_kernelLinear.setArg(5, halfD); // isotropic scale (same for both axes)
+    m_kernelLinear.setArg(6, halfD);
+    m_kernelLinear.setArg(7, a.amount);
+    m_kernelLinear.setArg(8, a.midpoint);
+    m_kernelLinear.setArg(9, a.feather);
     m_kernelLinear.setArg(10, a.p);
     m_kernelLinear.setArg(11, cornerD);
     m_kernelLinear.setArg(12, cosA);
     m_kernelLinear.setArg(13, sinA);
 
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
-                               cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }
-

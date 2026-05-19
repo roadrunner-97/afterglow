@@ -8,7 +8,7 @@
 // Brightness and contrast are defined as slider offsets in sRGB-gamma space,
 // so the linear-light pipeline kernel gamma-encodes, applies the offsets, then
 // decodes back to linear.  Don't clamp here — the final pack kernel clamps.
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 __kernel void adjustBrightnessLinear(__global float4* pixels,
                                      int   w,
                                      int   h,
@@ -41,7 +41,7 @@ __kernel void adjustBrightnessLinear(__global float4* pixels,
 }
 )CL";
 
-BrightnessEffect::BrightnessEffect() = default;
+BrightnessEffect::BrightnessEffect()  = default;
 BrightnessEffect::~BrightnessEffect() = default;
 
 QString BrightnessEffect::getName() const {
@@ -61,32 +61,24 @@ bool BrightnessEffect::initialize() {
     return true;
 }
 
-QWidget* BrightnessEffect::createControlsWidget() {
+QWidget *BrightnessEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
     brightnessParam = new ParamSlider("Brightness", -100.0, 100.0, 0.1, 1);
     brightnessParam->setToolTip("Shifts all pixel values brighter (positive) or darker (negative).");
-    connect(brightnessParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(brightnessParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    connect(brightnessParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(brightnessParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(brightnessParam);
 
     contrastParam = new ParamSlider("Contrast", -50.0, 50.0, 0.1, 1);
     contrastParam->setToolTip("Expands (positive) or compresses (negative) the tonal range around the midpoint (128).");
-    connect(contrastParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(contrastParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    connect(contrastParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(contrastParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(contrastParam);
 
     layout->addStretch();
@@ -96,11 +88,11 @@ QWidget* BrightnessEffect::createControlsWidget() {
 QMap<QString, QVariant> BrightnessEffect::getParameters() const {
     QMap<QString, QVariant> params;
     params["brightness"] = brightnessParam ? brightnessParam->value() : 0.0;
-    params["contrast"]   = contrastParam   ? contrastParam->value()   : 0.0;
+    params["contrast"]   = contrastParam ? contrastParam->value() : 0.0;
     return params;
 }
 
-void BrightnessEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+void BrightnessEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
     if (brightnessParam && parameters.contains("brightness"))
         brightnessParam->setValue(parameters.value("brightness").toDouble());
     if (contrastParam && parameters.contains("contrast"))
@@ -108,7 +100,7 @@ void BrightnessEffect::applyParameters(const QMap<QString, QVariant>& parameters
     emit parametersChanged();
 }
 
-bool BrightnessEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool BrightnessEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -116,20 +108,17 @@ bool BrightnessEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] Brightness initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] Brightness initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,
-                                   cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                   int w, int h,
-                                   const QMap<QString, QVariant>& params) {
+bool BrightnessEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
+                                  const QMap<QString, QVariant> &params) {
     const float brightnessFactor = float(params.value("brightness", 0).toDouble());
-    const float contrastValue    = float(params.value("contrast",   0).toDouble());
+    const float contrastValue    = float(params.value("contrast", 0).toDouble());
     if (brightnessFactor == 0.0f && contrastValue == 0.0f) return true;
 
     const float contrastFactor = (contrastValue + 100.0f) / 100.0f;
@@ -139,7 +128,6 @@ bool BrightnessEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelLinear.setArg(2, h);
     m_kernelLinear.setArg(3, brightnessFactor);
     m_kernelLinear.setArg(4, contrastFactor);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
-                               cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }

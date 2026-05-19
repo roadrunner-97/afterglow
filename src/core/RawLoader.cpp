@@ -14,10 +14,10 @@
 // single open_file() populates everything the sidebar needs.  Strings are
 // copied from LibRaw's fixed-size char buffers; trimmed because cameras
 // pad with spaces (Canon notably).
-static void fillExifFields(LibRaw& raw, ImageMetadata& meta) {
-    const auto& idata = raw.imgdata.idata;
-    const auto& other = raw.imgdata.other;
-    const auto& lens  = raw.imgdata.lens;
+static void fillExifFields(LibRaw &raw, ImageMetadata &meta) {
+    const auto &idata = raw.imgdata.idata;
+    const auto &other = raw.imgdata.other;
+    const auto &lens  = raw.imgdata.lens;
 
     meta.cameraMake  = QString::fromLatin1(idata.make).trimmed();
     meta.cameraModel = QString::fromLatin1(idata.model).trimmed();
@@ -25,8 +25,7 @@ static void fillExifFields(LibRaw& raw, ImageMetadata& meta) {
     // libraw_lensinfo.Lens is the resolved human-readable lens string;
     // fall back to LensMake + makernotes Lens when it's blank.
     QString lensName = QString::fromLatin1(lens.Lens).trimmed();
-    if (lensName.isEmpty())
-        lensName = QString::fromLatin1(lens.makernotes.Lens).trimmed();
+    if (lensName.isEmpty()) lensName = QString::fromLatin1(lens.makernotes.Lens).trimmed();
     meta.lens = lensName;
 
     meta.isoSpeed   = other.iso_speed;
@@ -34,18 +33,21 @@ static void fillExifFields(LibRaw& raw, ImageMetadata& meta) {
     meta.aperture   = other.aperture;
     meta.focalLenMm = other.focal_len;
 
-    if (other.timestamp > 0)
-        meta.captureTime = QDateTime::fromSecsSinceEpoch(other.timestamp);
+    if (other.timestamp > 0) meta.captureTime = QDateTime::fromSecsSinceEpoch(other.timestamp);
 }
 
 // Convert LibRaw's `imgdata.sizes.flip` (the rotation it applies to the
 // demosaiced sensor data) into a standard EXIF orientation tag (1..8).
 static int librawFlipToExifOrientation(int flip) {
     switch (flip) {
-        case 3: return 3;  // 180°
-        case 5: return 8;  // 90° CCW
-        case 6: return 6;  // 90° CW
-        default: return 1; // 0 or anything else → no rotation
+    case 3:
+        return 3; // 180°
+    case 5:
+        return 8; // 90° CCW
+    case 6:
+        return 6; // 90° CW
+    default:
+        return 1; // 0 or anything else → no rotation
     }
 }
 
@@ -63,26 +65,25 @@ static int librawFlipToExifOrientation(int flip) {
 // ---------------------------------------------------------------------------
 
 // Kang et al. (2002) Planckian locus → linear sRGB (D65 reference).
-static void kangToRGB(float T, float& r, float& g, float& b) {
+static void kangToRGB(float T, float &r, float &g, float &b) {
     T = std::max(1000.0f, std::min(15000.0f, T));
 
     float x, y;
     if (T <= 4000.0f) {
-        x = -0.2661239e9f/(T*T*T) - 0.2343580e6f/(T*T) + 0.8776956e3f/T + 0.179910f;
-        y = (T <= 2222.0f)
-            ? (-1.1063814f*(x*x*x) - 1.34811020f*(x*x) + 2.18555832f*x - 0.20219683f)
-            : (-0.9549476f*(x*x*x) - 1.37418593f*(x*x) + 2.09137015f*x - 0.16748867f);
+        x = -0.2661239e9f / (T * T * T) - 0.2343580e6f / (T * T) + 0.8776956e3f / T + 0.179910f;
+        y = (T <= 2222.0f) ? (-1.1063814f * (x * x * x) - 1.34811020f * (x * x) + 2.18555832f * x - 0.20219683f)
+                           : (-0.9549476f * (x * x * x) - 1.37418593f * (x * x) + 2.09137015f * x - 0.16748867f);
     } else {
-        x = -3.0258469e9f/(T*T*T) + 2.1070379e6f/(T*T) + 0.2226347e3f/T + 0.240390f;
-        y = 3.0817580f*(x*x*x) - 5.8733867f*(x*x) + 3.75112997f*x - 0.37001483f;
+        x = -3.0258469e9f / (T * T * T) + 2.1070379e6f / (T * T) + 0.2226347e3f / T + 0.240390f;
+        y = 3.0817580f * (x * x * x) - 5.8733867f * (x * x) + 3.75112997f * x - 0.37001483f;
     }
 
     float X = x / y;
     float Z = (1.0f - x - y) / y;
     // XYZ → linear sRGB (D65)
-    r = std::max(1e-6f,  3.2406f*X - 1.5372f       - 0.4986f*Z);
-    g = std::max(1e-6f, -0.9689f*X + 1.8758f        + 0.0415f*Z);
-    b = std::max(1e-6f,  0.0557f*X - 0.2040f        + 1.0570f*Z);
+    r = std::max(1e-6f, 3.2406f * X - 1.5372f - 0.4986f * Z);
+    g = std::max(1e-6f, -0.9689f * X + 1.8758f + 0.0415f * Z);
+    b = std::max(1e-6f, 0.0557f * X - 0.2040f + 1.0570f * Z);
 }
 
 // Binary search for temperature K where R(K)/B(K) == targetRB.
@@ -94,9 +95,9 @@ static float findTempFromRBRatio(float targetRB) {
         float r, g, b;
         kangToRGB(mid, r, g, b);
         if (r / b > targetRB)
-            lo = mid;   // too warm  → search higher K (cooler)
+            lo = mid; // too warm  → search higher K (cooler)
         else
-            hi = mid;   // too cool  → search lower K (warmer)
+            hi = mid; // too cool  → search lower K (warmer)
     }
     return (lo + hi) * 0.5f;
 }
@@ -105,39 +106,39 @@ static float findTempFromRBRatio(float targetRB) {
 // Returns 0 if the coefficients are unusable.
 static float camMulToTemp(const float cam_mul[4]) {
     // Use G1 (index 1) as the green reference; fall back to G2 (index 3).
-    float g = cam_mul[1] > 0.0f ? cam_mul[1] : cam_mul[3];
-    float r = cam_mul[0];
+    float g  = cam_mul[1] > 0.0f ? cam_mul[1] : cam_mul[3];
+    float r  = cam_mul[0];
     float bl = cam_mul[2];
     if (g <= 0.0f || r <= 0.0f || bl <= 0.0f) return 0.0f;
 
     // R(K)/B(K)  =  (G_illum/B_illum) / (G_illum/R_illum)
     //            =  cam_mul[2]/cam_mul[0]   (B WB multiplier / R WB multiplier)
-    float targetRB = bl / r;   // = R(K)/B(K) on the Planckian locus
+    float targetRB = bl / r; // = R(K)/B(K) on the Planckian locus
     return findTempFromRBRatio(targetRB);
 }
 
-bool RawLoader::isRawFile(const QString& filePath) {
+bool RawLoader::isRawFile(const QString &filePath) {
     static const QStringList rawExts = {
-        "cr2", "cr3",               // Canon
-        "nef", "nrw",               // Nikon
-        "arw", "sr2", "srf",        // Sony
-        "dng",                      // Adobe / universal
-        "raf",                      // Fujifilm
-        "orf",                      // Olympus
-        "rw2",                      // Panasonic
-        "pef",                      // Pentax
-        "srw",                      // Samsung
-        "x3f",                      // Sigma / Foveon
-        "rwl",                      // Leica
-        "mrw",                      // Minolta
-        "3fr",                      // Hasselblad
-        "kdc", "dcr",               // Kodak
-        "erf",                      // Epson
+        "cr2", "cr3",        // Canon
+        "nef", "nrw",        // Nikon
+        "arw", "sr2", "srf", // Sony
+        "dng",               // Adobe / universal
+        "raf",               // Fujifilm
+        "orf",               // Olympus
+        "rw2",               // Panasonic
+        "pef",               // Pentax
+        "srw",               // Samsung
+        "x3f",               // Sigma / Foveon
+        "rwl",               // Leica
+        "mrw",               // Minolta
+        "3fr",               // Hasselblad
+        "kdc", "dcr",        // Kodak
+        "erf",               // Epson
     };
     return rawExts.contains(QFileInfo(filePath).suffix().toLower());
 }
 
-QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
+QImage RawLoader::load(const QString &filePath, ImageMetadata *meta) {
     LibRaw rawProcessor;
 
     // 16-bit linear sRGB output (sRGB primaries, NO gamma curve).
@@ -145,32 +146,28 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
     // pipeline receives scene-linear data with the full sensor dynamic range
     // available for exposure/white-balance/zone adjustments.
     rawProcessor.imgdata.params.output_bps     = 16;
-    rawProcessor.imgdata.params.output_color   = 1;  // sRGB primaries
+    rawProcessor.imgdata.params.output_color   = 1; // sRGB primaries
     rawProcessor.imgdata.params.gamm[0]        = 1.0;
     rawProcessor.imgdata.params.gamm[1]        = 1.0;
     rawProcessor.imgdata.params.use_camera_wb  = 1;
     rawProcessor.imgdata.params.no_auto_bright = 1;
-    rawProcessor.imgdata.params.fbdd_noiserd   = 1;  // basic noise reduction
+    rawProcessor.imgdata.params.fbdd_noiserd   = 1; // basic noise reduction
 
-    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS)
-        return {};
-    if (rawProcessor.unpack() != LIBRAW_SUCCESS)
-        return {};
+    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS) return {};
+    if (rawProcessor.unpack() != LIBRAW_SUCCESS) return {};
 
     // cam_mul[] is populated after unpack() — read before dcraw_process() discards it.
     if (meta) {
-        float tempK = camMulToTemp(rawProcessor.imgdata.color.cam_mul);
-        meta->colorTempK = (tempK >= 1500.0f && tempK <= 15000.0f) ? tempK : 0.0f;
+        float tempK       = camMulToTemp(rawProcessor.imgdata.color.cam_mul);
+        meta->colorTempK  = (tempK >= 1500.0f && tempK <= 15000.0f) ? tempK : 0.0f;
         meta->orientation = librawFlipToExifOrientation(rawProcessor.imgdata.sizes.flip);
         fillExifFields(rawProcessor, *meta);
     }
-    if (rawProcessor.dcraw_process() != LIBRAW_SUCCESS)
-        return {};
+    if (rawProcessor.dcraw_process() != LIBRAW_SUCCESS) return {};
 
-    int errorCode = 0;
-    libraw_processed_image_t* img = rawProcessor.dcraw_make_mem_image(&errorCode);
-    if (!img || errorCode != LIBRAW_SUCCESS)
-        return {};
+    int                       errorCode = 0;
+    libraw_processed_image_t *img       = rawProcessor.dcraw_make_mem_image(&errorCode);
+    if (!img || errorCode != LIBRAW_SUCCESS) return {};
 
     // Sanity check: must be a bitmap with 3 colour channels at 16 bpc
     if (img->type != LIBRAW_IMAGE_BITMAP || img->bits != 16 || img->colors != 3) {
@@ -182,19 +179,19 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
     // Format_RGBX64 is ushort4 interleaved (R, G, B, A) in memory — swizzle
     // with a tight inner loop so the compiler can vectorise the 3-in / 4-out
     // widening.  Constant 0xFFFF alpha lets the store be a straight blit.
-    const uint16_t* src = reinterpret_cast<const uint16_t*>(img->data);
-    QImage result(img->width, img->height, QImage::Format_RGBX64);
+    const uint16_t *src = reinterpret_cast<const uint16_t *>(img->data);
+    QImage          result(img->width, img->height, QImage::Format_RGBX64);
 
     const int width  = static_cast<int>(img->width);
     const int height = static_cast<int>(img->height);
     for (int y = 0; y < height; ++y) {
-        uint16_t*       dst    = reinterpret_cast<uint16_t*>(result.scanLine(y));
-        const uint16_t* srcRow = src + static_cast<size_t>(y) * width * 3;
+        uint16_t       *dst    = reinterpret_cast<uint16_t *>(result.scanLine(y));
+        const uint16_t *srcRow = src + static_cast<size_t>(y) * width * 3;
         for (int x = 0; x < width; ++x) {
-            dst[4*x + 0] = srcRow[3*x + 0];
-            dst[4*x + 1] = srcRow[3*x + 1];
-            dst[4*x + 2] = srcRow[3*x + 2];
-            dst[4*x + 3] = 0xFFFF;
+            dst[4 * x + 0] = srcRow[3 * x + 0];
+            dst[4 * x + 1] = srcRow[3 * x + 1];
+            dst[4 * x + 2] = srcRow[3 * x + 2];
+            dst[4 * x + 3] = 0xFFFF;
         }
     }
 
@@ -208,37 +205,32 @@ QImage RawLoader::load(const QString& filePath, ImageMetadata* meta) {
 // Decode the camera-embedded preview JPEG. Most modern bodies bundle a
 // full-resolution JPEG; we hand the bytes straight to QImage::fromData().
 // Some older cameras embed bitmaps instead — those are handled too.
-QImage RawLoader::loadThumbnail(const QString& filePath, ImageMetadata* meta) {
+QImage RawLoader::loadThumbnail(const QString &filePath, ImageMetadata *meta) {
     LibRaw rawProcessor;
-    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS)
-        return {};
+    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS) return {};
     // EXIF fields are populated by open_file() — read them here so the Loupe
     // sidebar gets the camera/lens/shutter/etc. for free off the same call.
     if (meta) fillExifFields(rawProcessor, *meta);
-    if (rawProcessor.unpack_thumb() != LIBRAW_SUCCESS)
-        return {};
+    if (rawProcessor.unpack_thumb() != LIBRAW_SUCCESS) return {};
 
-    int errorCode = 0;
-    libraw_processed_image_t* thumb = rawProcessor.dcraw_make_mem_thumb(&errorCode);
-    if (!thumb || errorCode != LIBRAW_SUCCESS)
-        return {};
+    int                       errorCode = 0;
+    libraw_processed_image_t *thumb     = rawProcessor.dcraw_make_mem_thumb(&errorCode);
+    if (!thumb || errorCode != LIBRAW_SUCCESS) return {};
 
     QImage result;
     if (thumb->type == LIBRAW_IMAGE_JPEG) {
         // Route through QImageReader so the embedded JPEG's own EXIF
         // orientation tag is honoured — most cameras embed the preview in
         // sensor orientation and rely on the tag to display upright.
-        QByteArray bytes(reinterpret_cast<const char*>(thumb->data),
-                         static_cast<int>(thumb->data_size));
-        QBuffer buf(&bytes);
+        QByteArray bytes(reinterpret_cast<const char *>(thumb->data), static_cast<int>(thumb->data_size));
+        QBuffer    buf(&bytes);
         buf.open(QIODevice::ReadOnly);
         QImageReader reader(&buf, "JPEG");
         reader.setAutoTransform(true);
         result = reader.read();
     } else if (thumb->type == LIBRAW_IMAGE_BITMAP && thumb->colors == 3 && thumb->bits == 8) {
         // Interleaved RGB888 → QImage (copied so the buffer can be freed).
-        QImage tmp(thumb->data, thumb->width, thumb->height,
-                   thumb->width * 3, QImage::Format_RGB888);
+        QImage tmp(thumb->data, thumb->width, thumb->height, thumb->width * 3, QImage::Format_RGB888);
         result = tmp.copy();
     }
 
@@ -246,11 +238,10 @@ QImage RawLoader::loadThumbnail(const QString& filePath, ImageMetadata* meta) {
     return result;
 }
 
-bool RawLoader::loadMetadata(const QString& filePath, ImageMetadata* meta) {
+bool RawLoader::loadMetadata(const QString &filePath, ImageMetadata *meta) {
     if (!meta) return false;
     LibRaw rawProcessor;
-    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS)
-        return false;
+    if (rawProcessor.open_file(filePath.toLocal8Bit().data()) != LIBRAW_SUCCESS) return false;
     fillExifFields(rawProcessor, *meta);
     return true;
 }

@@ -52,20 +52,18 @@
 
 namespace {
 // Build a human-readable label for a history entry given the effect's display name.
-QString entryLabel(const UndoHistory::Entry& e, const QString& effectName)
-{
+QString entryLabel(const UndoHistory::Entry &e, const QString &effectName) {
     QString result;
 
-    if (e.enabled.has_value())
-        result = effectName + (e.enabled->second ? " on" : " off");
+    if (e.enabled.has_value()) result = effectName + (e.enabled->second ? " on" : " off");
 
     if (!e.params.isEmpty()) {
         QString paramPart;
         if (e.params.size() == 1) {
-            const auto it = e.params.cbegin();
-            const QString f = it.value().from.isValid() ? it.value().from.toString() : "set";
-            const QString t = it.value().to.isValid()   ? it.value().to.toString()   : "removed";
-            paramPart = f + " → " + t;
+            const auto    it = e.params.cbegin();
+            const QString f  = it.value().from.isValid() ? it.value().from.toString() : "set";
+            const QString t  = it.value().to.isValid() ? it.value().to.toString() : "removed";
+            paramPart        = f + " → " + t;
         } else {
             paramPart = "(" + QString::number(e.params.size()) + " changes)";
         }
@@ -82,25 +80,19 @@ QString entryLabel(const UndoHistory::Entry& e, const QString& effectName)
 // Decode a non-RAW image with EXIF auto-orientation applied. QImage(path)
 // honours no orientation tag, so portrait-shot JPEGs come out sideways
 // without this. RAW files go through RawLoader, which handles flip itself.
-static QImage decodeOriented(const QString& path) {
+static QImage decodeOriented(const QString &path) {
     QImageReader reader(path);
     reader.setAutoTransform(true);
     return reader.read();
 }
 
-PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
-    : QMainWindow(parent)
-    , m_effects(effectManager)
-    , m_processor(new ImageProcessor(this))
-    , m_resizeDebounce(new QTimer(this))
-{
+PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
+    : QMainWindow(parent), m_effects(effectManager), m_processor(new ImageProcessor(this)),
+      m_resizeDebounce(new QTimer(this)) {
     m_history = new UndoHistory(200, this);
-    connect(m_processor, &ImageProcessor::processingComplete,
-            this, &PhotoEditorApp::onProcessingComplete);
-    connect(m_processor, &ImageProcessor::processingStarted,
-            this, &PhotoEditorApp::onProcessingStarted);
-    connect(m_processor, &ImageProcessor::exportComplete,
-            this, &PhotoEditorApp::onExportComplete);
+    connect(m_processor, &ImageProcessor::processingComplete, this, &PhotoEditorApp::onProcessingComplete);
+    connect(m_processor, &ImageProcessor::processingStarted, this, &PhotoEditorApp::onProcessingStarted);
+    connect(m_processor, &ImageProcessor::exportComplete, this, &PhotoEditorApp::onExportComplete);
 
     m_resizeDebounce->setSingleShot(true);
     m_resizeDebounce->setInterval(150);
@@ -136,18 +128,14 @@ PhotoEditorApp::~PhotoEditorApp() = default;
 
 void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) {
     m_proofCache = new ProofCache(this);
-    m_proofer    = new Proofer(std::move(prooferEffects), m_defaults,
-                               m_proofCache, this);
+    m_proofer    = new Proofer(std::move(prooferEffects), m_defaults, m_proofCache, this);
 
-    connect(m_proofer, &Proofer::proofStarted, this,
-            [this](const QString& path) {
+    connect(m_proofer, &Proofer::proofStarted, this, [this](const QString &path) {
         m_gridView->setProofStatus(path, GridView::ProofStatus::Proofing);
-        if (m_currentImagePath == path)
-            m_loupeView->setProofingState(true);
+        if (m_currentImagePath == path) m_loupeView->setProofingState(true);
     });
 
-    connect(m_proofer, &Proofer::proofFinished, this,
-            [this](const QString& path, const QImage& proof) {
+    connect(m_proofer, &Proofer::proofFinished, this, [this](const QString &path, const QImage &proof) {
         m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
         if (m_currentImagePath == path) {
             m_loupeView->setProofingState(false);
@@ -155,24 +143,22 @@ void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) 
         }
     });
 
-    connect(m_proofer, &Proofer::proofFailed, this,
-            [this](const QString& path, const QString& /*error*/) {
+    connect(m_proofer, &Proofer::proofFailed, this, [this](const QString &path, const QString & /*error*/) {
         m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
-        if (m_currentImagePath == path)
-            m_loupeView->setProofingState(false);
+        if (m_currentImagePath == path) m_loupeView->setProofingState(false);
     });
 }
 
 void PhotoEditorApp::setupToolBar() {
-    QToolBar* toolbar = addToolBar("Preview");
+    QToolBar *toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
     // Mode switcher: Gallery (grid) / Loupe (preview) / Develop (editor).
     // Mirrors Lightroom's module picker — user double-clicks a thumbnail to
     // step through to Loupe, then Enter (or another double-click) to Develop.
     m_modeGroup = new QActionGroup(this);
     m_modeGroup->setExclusive(true);
-    auto addModeAction = [&](const QString& label, Mode m) {
-        QAction* act = new QAction(label, this);
+    auto addModeAction = [&](const QString &label, Mode m) {
+        QAction *act = new QAction(label, this);
         act->setCheckable(true);
         act->setData(static_cast<int>(m));
         m_modeGroup->addAction(act);
@@ -181,19 +167,18 @@ void PhotoEditorApp::setupToolBar() {
         return act;
     };
     addModeAction("Gallery", Mode::Gallery)->setChecked(true);
-    addModeAction("Loupe",   Mode::Loupe);
-    QAction* developAct = addModeAction("Develop", Mode::Develop);
+    addModeAction("Loupe", Mode::Loupe);
+    QAction *developAct = addModeAction("Develop", Mode::Develop);
     // The default addModeAction handler only switches the page, which leaves
     // the editor empty when the user clicks Develop after browsing in
     // Loupe.  Run the full develop flow (load + reprocess) on top so the
     // toolbar button matches what double-click or Enter does in Loupe.
     connect(developAct, &QAction::triggered, this, [this]() {
-        if (!m_currentImagePath.isEmpty() && m_currentImagePath != m_developedPath)
-            loadFullImage(m_currentImagePath);
+        if (!m_currentImagePath.isEmpty() && m_currentImagePath != m_developedPath) loadFullImage(m_currentImagePath);
     });
 
     // Spacer + processing indicator label on the right side of the toolbar
-    QWidget* spacer = new QWidget();
+    QWidget *spacer = new QWidget();
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolbar->addWidget(spacer);
 
@@ -214,53 +199,43 @@ void PhotoEditorApp::setupUI() {
 
     // ── Gallery page ────────────────────────────────────────────────────────
     m_gridView = new GridView();
-    connect(m_gridView, &GridView::photoActivated,
-            this, &PhotoEditorApp::onPhotoActivated);
-    connect(m_gridView, &GridView::markChanged,
-            this, &PhotoEditorApp::onMarkChanged);
+    connect(m_gridView, &GridView::photoActivated, this, &PhotoEditorApp::onPhotoActivated);
+    connect(m_gridView, &GridView::markChanged, this, &PhotoEditorApp::onMarkChanged);
     // Single-click / arrow keys in the grid track m_currentImagePath so
     // the toolbar Develop / Loupe buttons act on the highlighted photo.
-    connect(m_gridView, &GridView::currentPathChanged,
-            this, [this](const QString& path) { m_currentImagePath = path; });
+    connect(m_gridView, &GridView::currentPathChanged, this,
+            [this](const QString &path) { m_currentImagePath = path; });
     m_stack->addWidget(m_gridView);
 
     // ── Loupe page ──────────────────────────────────────────────────────────
     m_loupeView = new LoupeView();
-    connect(m_loupeView, &LoupeView::developRequested,
-            this, &PhotoEditorApp::onDevelopRequested);
-    connect(m_loupeView, &LoupeView::previousRequested,
-            this, [this]() { onLoupeNavigate(-1); });
-    connect(m_loupeView, &LoupeView::nextRequested,
-            this, [this]() { onLoupeNavigate(+1); });
+    connect(m_loupeView, &LoupeView::developRequested, this, &PhotoEditorApp::onDevelopRequested);
+    connect(m_loupeView, &LoupeView::previousRequested, this, [this]() { onLoupeNavigate(-1); });
+    connect(m_loupeView, &LoupeView::nextRequested, this, [this]() { onLoupeNavigate(+1); });
     // Marks set from the Loupe sidebar / A-R-D keys flow through the same
     // catalog-write path as marks set from the grid.  LoupeView doesn't
     // know the path; we inject the currently-displayed one here.
-    connect(m_loupeView, &LoupeView::markChanged, this,
-            [this](GridView::Mark m) {
-                if (!m_currentImagePath.isEmpty())
-                    onMarkChanged(m_currentImagePath, m);
-            });
+    connect(m_loupeView, &LoupeView::markChanged, this, [this](GridView::Mark m) {
+        if (!m_currentImagePath.isEmpty()) onMarkChanged(m_currentImagePath, m);
+    });
     m_stack->addWidget(m_loupeView);
 
     // ── Develop page (existing editor: viewport + right panel) ─────────────
-    QWidget* develop = new QWidget();
-    QHBoxLayout* mainLayout = new QHBoxLayout(develop);
+    QWidget     *develop    = new QWidget();
+    QHBoxLayout *mainLayout = new QHBoxLayout(develop);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
     m_viewport = new ViewportWidget();
-    connect(m_viewport, &ViewportWidget::viewportChanged,
-            this, &PhotoEditorApp::triggerViewportUpdate);
+    connect(m_viewport, &ViewportWidget::viewportChanged, this, &PhotoEditorApp::triggerViewportUpdate);
     mainLayout->addWidget(m_viewport, 3);
 
     // History tray — child of viewport so it overlays the GL surface
     m_historyTray = new HistoryTray(m_viewport);
     m_historyTray->hide();
     m_historyTray->raise();
-    connect(m_history, &UndoHistory::historyChanged,
-            this, &PhotoEditorApp::refreshHistoryTray);
-    connect(m_viewport, &ViewportWidget::viewportResized,
-            this, &PhotoEditorApp::repositionHistoryTray);
+    connect(m_history, &UndoHistory::historyChanged, this, &PhotoEditorApp::refreshHistoryTray);
+    connect(m_viewport, &ViewportWidget::viewportResized, this, &PhotoEditorApp::repositionHistoryTray);
     connect(m_historyTray, &HistoryTray::rowActivated, this, [this](int index) {
         // Defer the jump to the next event-loop iteration.  itemClicked fires
         // inside QListWidget's mouseReleaseEvent; if we call m_list->clear()
@@ -273,12 +248,14 @@ void PhotoEditorApp::setupUI() {
             while (m_history->cursor() > target) {
                 if (auto e = m_history->undo())
                     applyHistoryEntry(*e, /*applyFrom=*/true);
-                else break;
+                else
+                    break;
             }
             while (m_history->cursor() < target) {
                 if (auto e = m_history->redo())
                     applyHistoryEntry(*e, /*applyFrom=*/false);
-                else break;
+                else
+                    break;
             }
             m_history->setApplying(false);
             syncViewportRotation();
@@ -287,26 +264,26 @@ void PhotoEditorApp::setupUI() {
         });
     });
 
-    QWidget* rightPanel = new QWidget();
+    QWidget *rightPanel = new QWidget();
     // Width scales with the user's font / DPI: ParamSlider rows need room for
     // a label, slider track, and spinbox without wrapping.  Empirically ~36
     // characters of the body font fits the widest control we ship.
     rightPanel->setFixedWidth(fontMetrics().averageCharWidth() * 36);
-    QVBoxLayout* rightLayout = new QVBoxLayout(rightPanel);
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(8, 8, 8, 8);
     rightLayout->setSpacing(6);
 
     setupGpuSelector(rightLayout);
 
-    QFrame* sep = new QFrame();
+    QFrame *sep = new QFrame();
     sep->setFrameShape(QFrame::HLine);
     rightLayout->addWidget(sep);
 
-    QScrollArea* effectsScroll = new QScrollArea();
+    QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
 
-    QWidget* effectsContainer = new QWidget();
-    QVBoxLayout* effectsLayout = new QVBoxLayout(effectsContainer);
+    QWidget     *effectsContainer = new QWidget();
+    QVBoxLayout *effectsLayout    = new QVBoxLayout(effectsContainer);
     effectsLayout->setContentsMargins(0, 0, 0, 0);
     effectsLayout->setSpacing(4);
 
@@ -323,28 +300,28 @@ void PhotoEditorApp::setupUI() {
 }
 
 void PhotoEditorApp::setupMenuBar() {
-    QMenu* fileMenu = menuBar()->addMenu("File");
+    QMenu *fileMenu = menuBar()->addMenu("File");
 
-    QAction* openAct = fileMenu->addAction("Open Image…");
+    QAction *openAct = fileMenu->addAction("Open Image…");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &PhotoEditorApp::openImage);
 
-    QAction* openFolderAct = fileMenu->addAction("Open Folder…");
+    QAction *openFolderAct = fileMenu->addAction("Open Folder…");
     openFolderAct->setShortcut(QKeySequence("Ctrl+Shift+O"));
     connect(openFolderAct, &QAction::triggered, this, &PhotoEditorApp::openFolder);
 
-    QAction* saveAct = fileMenu->addAction("Save Image…");
+    QAction *saveAct = fileMenu->addAction("Save Image…");
     saveAct->setShortcut(QKeySequence::Save);
     connect(saveAct, &QAction::triggered, this, &PhotoEditorApp::saveImage);
 
     fileMenu->addSeparator();
 
-    QAction* exitAct = fileMenu->addAction("Exit");
+    QAction *exitAct = fileMenu->addAction("Exit");
     exitAct->setShortcut(QKeySequence("Ctrl+Q"));
     connect(exitAct, &QAction::triggered, this, &QWidget::close);
 
     // Edit → Undo / Redo
-    QMenu* editMenu = menuBar()->addMenu("Edit");
+    QMenu *editMenu = menuBar()->addMenu("Edit");
 
     m_undoAct = editMenu->addAction("Undo");
     m_undoAct->setShortcut(QKeySequence::Undo);
@@ -377,13 +354,13 @@ void PhotoEditorApp::setupMenuBar() {
     connect(m_history, &UndoHistory::canRedoChanged, m_redoAct, &QAction::setEnabled);
 
     // View → Effects — enable/disable individual effects
-    QMenu* viewMenu = menuBar()->addMenu("View");
-    QMenu* effectsMenu = viewMenu->addMenu("Effects");
+    QMenu *viewMenu    = menuBar()->addMenu("View");
+    QMenu *effectsMenu = viewMenu->addMenu("Effects");
 
-    const auto& entries = m_effects->entries();
+    const auto &entries = m_effects->entries();
     m_effectMenuActions.clear();
     for (int i = 0; i < entries.size(); ++i) {
-        QAction* act = effectsMenu->addAction(entries[i].effect->getName());
+        QAction *act = effectsMenu->addAction(entries[i].effect->getName());
         act->setCheckable(true);
         act->setChecked(entries[i].enabled);
         m_effectMenuActions.append(act);
@@ -399,33 +376,34 @@ void PhotoEditorApp::setupMenuBar() {
     // it stays out of the way of the everyday File workflow but is also the
     // foundation for end-to-end tests and the future per-image edit-history
     // library system (sidecar YAMLs detected on image load).
-    QMenu* debugMenu = menuBar()->addMenu("Debug");
+    QMenu *debugMenu = menuBar()->addMenu("Debug");
 
-    QAction* importAct = debugMenu->addAction("Load Settings…");
+    QAction *importAct = debugMenu->addAction("Load Settings…");
     connect(importAct, &QAction::triggered, this, &PhotoEditorApp::importSettings);
 
-    QAction* exportAct = debugMenu->addAction("Save Settings…");
+    QAction *exportAct = debugMenu->addAction("Save Settings…");
     connect(exportAct, &QAction::triggered, this, &PhotoEditorApp::exportSettings);
 
     debugMenu->addSeparator();
 
-    QAction* testCaseAct = debugMenu->addAction("Save Test Case…");
+    QAction *testCaseAct = debugMenu->addAction("Save Test Case…");
     connect(testCaseAct, &QAction::triggered, this, &PhotoEditorApp::saveTestCase);
 }
 
-void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
-    QLabel* label = new QLabel("GPU Device");
+void PhotoEditorApp::setupGpuSelector(QVBoxLayout *rightLayout) {
+    QLabel *label = new QLabel("GPU Device");
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
-    m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
+    m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing "
+                              "effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
 
-    const auto& devs = GpuDeviceRegistry::instance().devices();
+    const auto &devs = GpuDeviceRegistry::instance().devices();
     if (devs.empty()) {
         m_gpuSelector->addItem("No OpenCL devices found");
         m_gpuSelector->setEnabled(false);
     } else {
-        for (const auto& d : devs)
+        for (const auto &d : devs)
             m_gpuSelector->addItem(d.name + " [" + d.platformName + " · " + d.typeName + "]");
         m_gpuSelector->setCurrentIndex(GpuDeviceRegistry::instance().currentIndex());
     }
@@ -438,101 +416,91 @@ void PhotoEditorApp::setupGpuSelector(QVBoxLayout* rightLayout) {
     rightLayout->addWidget(m_gpuSelector);
 }
 
-void PhotoEditorApp::setupEffectPanels(QVBoxLayout* effectsLayout) {
-    const auto& entries = m_effects->entries();
+void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
+    const auto &entries = m_effects->entries();
     for (int i = 0; i < entries.size(); ++i) {
-        PhotoEditorEffect* effect = entries[i].effect;
+        PhotoEditorEffect *effect = entries[i].effect;
 
         // Container
-        QWidget* panel = new QWidget();
-        QVBoxLayout* panelLayout = new QVBoxLayout(panel);
+        QWidget     *panel       = new QWidget();
+        QVBoxLayout *panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
 
         // Title bar
-        QWidget* titleBar = new QWidget();
-        QHBoxLayout* titleLayout = new QHBoxLayout(titleBar);
+        QWidget     *titleBar    = new QWidget();
+        QHBoxLayout *titleLayout = new QHBoxLayout(titleBar);
         titleLayout->setContentsMargins(0, 0, 0, 0);
 
-        QLabel* title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
+        QLabel *title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
         titleLayout->addWidget(title, 1);
 
-        QPushButton* collapseBtn = new QPushButton("−");
+        QPushButton *collapseBtn = new QPushButton("−");
         collapseBtn->setToolTip("Collapse or expand this effect's controls.");
         collapseBtn->setMaximumWidth(28);
         titleLayout->addWidget(collapseBtn);
         panelLayout->addWidget(titleBar);
 
         // Controls
-        QWidget* controls = effect->createControlsWidget();
+        QWidget *controls = effect->createControlsWidget();
         if (controls) {
             panelLayout->addWidget(controls);
         }
 
         // If this effect owns an on-canvas tool (crop handles, etc.), track it so
         // expanding/collapsing the panel activates/deactivates the overlay.
-        IInteractiveEffect* interactive = entries[i].interactive;
+        IInteractiveEffect *interactive = entries[i].interactive;
 
         // Collapse toggle — shared_ptr so the lambda stays valid after panel is reparented
         auto expanded = std::make_shared<bool>(true);
-        connect(collapseBtn, &QPushButton::clicked, this,
-                [this, controls, collapseBtn, expanded, interactive]() {
+        connect(collapseBtn, &QPushButton::clicked, this, [this, controls, collapseBtn, expanded, interactive]() {
             *expanded = !*expanded;
             if (controls) controls->setVisible(*expanded);
             collapseBtn->setText(*expanded ? "−" : "+");
-            if (interactive)
-                m_viewport->setActiveInteractiveEffect(*expanded ? interactive : nullptr);
+            if (interactive) m_viewport->setActiveInteractiveEffect(*expanded ? interactive : nullptr);
         });
 
         // Show/hide panel when effect is toggled from the View menu
         panel->setVisible(entries[i].enabled);
-        connect(m_effects, &EffectManager::effectToggled, panel,
-                [this, panel, i, interactive](int idx, bool on) {
+        connect(m_effects, &EffectManager::effectToggled, panel, [this, panel, i, interactive](int idx, bool on) {
             if (idx != i) return;
             panel->setVisible(on);
-            if (interactive && !on)
-                m_viewport->setActiveInteractiveEffect(nullptr);
+            if (interactive && !on) m_viewport->setActiveInteractiveEffect(nullptr);
         });
 
         // Initial activation: if an interactive effect starts enabled + expanded,
         // attach it to the viewport so the overlay shows up on first image load.
-        if (interactive && entries[i].enabled)
-            m_viewport->setActiveInteractiveEffect(interactive);
+        if (interactive && entries[i].enabled) m_viewport->setActiveInteractiveEffect(interactive);
 
         // Wire parametersChanged (committed) and liveParametersChanged (drag)
-        connect(effect, &PhotoEditorEffect::parametersChanged,
-                this, &PhotoEditorApp::onParametersChanged);
-        connect(effect, &PhotoEditorEffect::liveParametersChanged,
-                this, &PhotoEditorApp::onLiveParametersChanged);
+        connect(effect, &PhotoEditorEffect::parametersChanged, this, &PhotoEditorApp::onParametersChanged);
+        connect(effect, &PhotoEditorEffect::liveParametersChanged, this, &PhotoEditorApp::onLiveParametersChanged);
 
         effectsLayout->addWidget(panel);
     }
 }
 
 void PhotoEditorApp::openImage() {
-    QString fileName = QFileDialog::getOpenFileName(
-        this, "Open Image", m_lastDir,
-        "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
-        "*.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
-        "All Files (*)");
+    QString fileName = QFileDialog::getOpenFileName(this, "Open Image", m_lastDir,
+                                                    "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
+                                                    "*.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
+                                                    "All Files (*)");
 
     if (fileName.isEmpty()) return;
     setMode(Mode::Develop);
     loadFullImage(fileName);
 }
 
-void PhotoEditorApp::loadFullImage(const QString& path) {
+void PhotoEditorApp::loadFullImage(const QString &path) {
     m_lastDir = QFileInfo(path).absolutePath();
 
-    QImage img;
+    QImage        img;
     ImageMetadata meta;
     if (RawLoader::isRawFile(path)) {
         img = RawLoader::load(path, &meta);
-        if (img.isNull())
-            qWarning() << "RawLoader failed for" << path << "— trying QImage::load";
+        if (img.isNull()) qWarning() << "RawLoader failed for" << path << "— trying QImage::load";
     }
-    if (img.isNull())
-        img = decodeOriented(path);
+    if (img.isNull()) img = decodeOriented(path);
 
     if (img.isNull()) {
         qWarning() << "Failed to load image:" << path;
@@ -542,9 +510,9 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
     // Flush history for the outgoing image before we replace m_developedPath.
     flushHistorySidecar();
 
-    m_originalImage = img;
+    m_originalImage    = img;
     m_currentImagePath = path;
-    m_developedPath = path;
+    m_developedPath    = path;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
 
@@ -559,15 +527,14 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
     // (RAW colorTempK from LibRaw); the luminance histogram follows from
     // a worker thread because computing it on a 60MP RAW would otherwise
     // freeze the UI for hundreds of milliseconds.
-    for (const auto& e : m_effects->entries())
+    for (const auto &e : m_effects->entries())
         e.effect->onImageLoaded(meta);
-    if (auto* cs = m_effects->cropSource())
-        cs->setSourceImageSize(img.size());
+    if (auto *cs = m_effects->cropSource()) cs->setSourceImageSize(img.size());
 
     const QString sidecar = sidecarPathFor(path);
     if (QFile::exists(sidecar)) {
         SettingsImporter::Settings parsed;
-        QString error;
+        QString                    error;
         if (SettingsImporter::readYaml(sidecar, &parsed, &error))
             SettingsImporter::applyToManager(parsed, *m_effects);
         else
@@ -580,10 +547,9 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
     const QString histPath = historySidecarPathFor(path);
     if (QFile::exists(histPath)) {
         HistorySerializer::HistoryData hdata;
-        QString hErr;
+        QString                        hErr;
         if (HistorySerializer::readYaml(histPath, &hdata, &hErr))
-            m_history->load(std::move(hdata.entries), hdata.cursor,
-                            std::move(hdata.shadow));
+            m_history->load(std::move(hdata.entries), hdata.cursor, std::move(hdata.shadow));
         else {
             qWarning() << "History parse failed for" << histPath << ":" << hErr;
             m_history->seed(currentSnapshot());
@@ -598,24 +564,22 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
     syncViewportRotation();
     triggerReprocess();
 
-    auto* watcher = new QFutureWatcher<std::vector<uint32_t>>(this);
+    auto *watcher = new QFutureWatcher<std::vector<uint32_t>>(this);
     connect(watcher, &QFutureWatcher<std::vector<uint32_t>>::finished, this,
             [this, watcher, expectedBits = img.constBits(), tempK = meta.colorTempK]() {
-        // Drop the result if the user opened a different image while we
-        // were computing.  constBits() identity is stable for the
-        // lifetime of m_originalImage's underlying data buffer.
-        if (m_originalImage.constBits() == expectedBits) {
-            ImageMetadata fullMeta;
-            fullMeta.colorTempK         = tempK;
-            fullMeta.luminanceHistogram = watcher->result();
-            for (const auto& e : m_effects->entries())
-                e.effect->onImageLoaded(fullMeta);
-        }
-        watcher->deleteLater();
-    });
-    watcher->setFuture(QtConcurrent::run(
-        [image = img]() { return computeLuminanceHistogram(image); }
-    ));
+                // Drop the result if the user opened a different image while we
+                // were computing.  constBits() identity is stable for the
+                // lifetime of m_originalImage's underlying data buffer.
+                if (m_originalImage.constBits() == expectedBits) {
+                    ImageMetadata fullMeta;
+                    fullMeta.colorTempK         = tempK;
+                    fullMeta.luminanceHistogram = watcher->result();
+                    for (const auto &e : m_effects->entries())
+                        e.effect->onImageLoaded(fullMeta);
+                }
+                watcher->deleteLater();
+            });
+    watcher->setFuture(QtConcurrent::run([image = img]() { return computeLuminanceHistogram(image); }));
 }
 
 void PhotoEditorApp::saveImage() {
@@ -627,25 +591,23 @@ void PhotoEditorApp::saveImage() {
 
     const ExportOptions::Options opts = dlg.options();
     if (opts.destinationDir.isEmpty()) {
-        QMessageBox::warning(this, "Export",
-            "Please choose a destination folder.");
+        QMessageBox::warning(this, "Export", "Please choose a destination folder.");
         return;
     }
 
     // batchIndex = 1 today; when batch export lands, the caller iterates and
     // bumps the index for the {n} token.  chooseDestination() handles the
     // overwrite policy (skip / suffix / overwrite) consistently here and there.
-    const QString destPath = ExportPath::chooseDestination(
-        opts, m_currentImagePath, /*batchIndex=*/1);
+    const QString destPath = ExportPath::chooseDestination(opts, m_currentImagePath, /*batchIndex=*/1);
     if (destPath.isEmpty()) {
         // Skip-on-conflict — surface it so the user knows nothing was written.
         QMessageBox::information(this, "Export Skipped",
-            "A file with that name already exists. "
-            "Change the pattern or pick a different policy.");
+                                 "A file with that name already exists. "
+                                 "Change the pattern or pick a different policy.");
         return;
     }
 
-    m_lastDir = opts.destinationDir;
+    m_lastDir           = opts.destinationDir;
     m_pendingExportOpts = opts;
     m_processor->exportImageAsync(m_originalImage, *m_effects, destPath);
 }
@@ -654,21 +616,20 @@ void PhotoEditorApp::importSettings() {
     QString suggested = m_lastDir;
     if (!m_currentImagePath.isEmpty()) {
         const QFileInfo fi(m_currentImagePath);
-        const QString sidecar = fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
+        const QString   sidecar = fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
         if (QFile::exists(sidecar)) suggested = sidecar;
     }
 
-    const QString fileName = QFileDialog::getOpenFileName(
-        this, "Load Settings", suggested,
-        "YAML (*.yml *.yaml);;All Files (*)");
+    const QString fileName =
+        QFileDialog::getOpenFileName(this, "Load Settings", suggested, "YAML (*.yml *.yaml);;All Files (*)");
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
 
     SettingsImporter::Settings parsed;
-    QString error;
+    QString                    error;
     if (!SettingsImporter::readYaml(fileName, &parsed, &error)) {
         QMessageBox::warning(this, "Load Failed",
-            QString("Could not read settings from:\n%1\n\n%2").arg(fileName, error));
+                             QString("Could not read settings from:\n%1\n\n%2").arg(fileName, error));
         return;
     }
 
@@ -683,39 +644,36 @@ void PhotoEditorApp::importSettings() {
 void PhotoEditorApp::saveTestCase() {
     if (m_originalImage.isNull() || m_currentImagePath.isEmpty()) {
         QMessageBox::warning(this, "Save Test Case",
-            "Open an image first — a test case bundles the source image, the "
-            "current settings, and the rendered output.");
+                             "Open an image first — a test case bundles the source image, the "
+                             "current settings, and the rendered output.");
         return;
     }
 
-    const QString dir = QFileDialog::getExistingDirectory(
-        this, "Save Test Case To Folder", m_lastDir,
-        QFileDialog::ShowDirsOnly);
+    const QString dir =
+        QFileDialog::getExistingDirectory(this, "Save Test Case To Folder", m_lastDir, QFileDialog::ShowDirsOnly);
     if (dir.isEmpty()) return;
     m_lastDir = dir;
 
     const QFileInfo srcInfo(m_currentImagePath);
-    const QString inputDest = QDir(dir).filePath("input." + srcInfo.suffix().toLower());
+    const QString   inputDest = QDir(dir).filePath("input." + srcInfo.suffix().toLower());
     if (QFile::exists(inputDest)) QFile::remove(inputDest);
     if (!QFile::copy(m_currentImagePath, inputDest)) {
-        QMessageBox::warning(this, "Save Test Case",
-            QString("Could not copy source image to:\n%1").arg(inputDest));
+        QMessageBox::warning(this, "Save Test Case", QString("Could not copy source image to:\n%1").arg(inputDest));
         return;
     }
 
-    QString error;
+    QString       error;
     const QString yamlPath = QDir(dir).filePath("settings.yaml");
     if (!SettingsExporter::writeYaml(yamlPath, *m_effects, m_currentImagePath, &error)) {
         QMessageBox::warning(this, "Save Test Case",
-            QString("Could not write settings to:\n%1\n\n%2").arg(yamlPath, error));
+                             QString("Could not write settings to:\n%1\n\n%2").arg(yamlPath, error));
         return;
     }
 
     // Reuse the normal export path: onExportComplete bakes crop + rotate and
     // writes the destination passed in here.  PNG keeps the rendered output
     // bit-exact for the SSIM check that test_golden does at runtime.
-    m_processor->exportImageAsync(m_originalImage, *m_effects,
-                                  QDir(dir).filePath("expected.png"));
+    m_processor->exportImageAsync(m_originalImage, *m_effects, QDir(dir).filePath("expected.png"));
 }
 
 void PhotoEditorApp::exportSettings() {
@@ -728,30 +686,29 @@ void PhotoEditorApp::exportSettings() {
         suggested = QDir(m_lastDir).filePath("settings.yml");
     }
 
-    const QString fileName = QFileDialog::getSaveFileName(
-        this, "Export Settings", suggested,
-        "YAML (*.yml *.yaml);;All Files (*)");
+    const QString fileName =
+        QFileDialog::getSaveFileName(this, "Export Settings", suggested, "YAML (*.yml *.yaml);;All Files (*)");
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
 
     QString error;
     if (!SettingsExporter::writeYaml(fileName, *m_effects, m_currentImagePath, &error)) {
         QMessageBox::warning(this, "Export Failed",
-            QString("Could not write settings to:\n%1\n\n%2").arg(fileName, error));
+                             QString("Could not write settings to:\n%1\n\n%2").arg(fileName, error));
     }
 }
 
 // Bake the user's non-destructive crop + rotation into the exported QImage.
 // Pipeline output is still full-frame because crop/rotate is metadata; this
 // is the one place where those metadata choices become real pixels.
-static QImage applyCropAndRotate(const QImage& image, const ICropSource& cs) {
+static QImage applyCropAndRotate(const QImage &image, const ICropSource &cs) {
     if (image.isNull()) return image;
 
     const QRectF cropN = cs.userCropRect();
-    const double cx = cropN.center().x() * image.width();
-    const double cy = cropN.center().y() * image.height();
-    const QSize dstSize(static_cast<int>(std::round(cropN.width()  * image.width())),
-                        static_cast<int>(std::round(cropN.height() * image.height())));
+    const double cx    = cropN.center().x() * image.width();
+    const double cy    = cropN.center().y() * image.height();
+    const QSize  dstSize(static_cast<int>(std::round(cropN.width() * image.width())),
+                         static_cast<int>(std::round(cropN.height() * image.height())));
     if (dstSize.isEmpty()) return image;
 
     // Map source→dst: translate crop centre to origin, rotate by -angle (Qt
@@ -780,8 +737,7 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
     const QString path = destinationPath;
 
     if (!result.isNull()) {
-        if (auto* cs = m_effects->activeCropSource())
-            result = applyCropAndRotate(result, *cs);
+        if (auto *cs = m_effects->activeCropSource()) result = applyCropAndRotate(result, *cs);
         if (opts) result = ExportResize::apply(result, opts->resize);
     }
 
@@ -792,16 +748,15 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
 
     // With opts: explicit format hint + quality (saveImage path).
     // Without: legacy QImage::save behaviour, used by saveTestCase().
-    const bool ok = !result.isNull() && (opts
-        ? result.save(path, ExportOptions::qImageFormatHint(opts->format),
-                            ExportOptions::qualityFor(*opts))
-        : result.save(path));
+    const bool ok = !result.isNull() && (opts ? result.save(path, ExportOptions::qImageFormatHint(opts->format),
+                                                            ExportOptions::qualityFor(*opts))
+                                              : result.save(path));
 
     if (!ok) {
         QMessageBox::warning(this, "Save Failed",
-            QString("Could not save image to:\n%1\n\n"
-                    "Check that the directory is writable and you have sufficient disk space.")
-            .arg(path));
+                             QString("Could not save image to:\n%1\n\n"
+                                     "Check that the directory is writable and you have sufficient disk space.")
+                                 .arg(path));
     }
 }
 
@@ -822,7 +777,7 @@ void PhotoEditorApp::syncViewportRotation() {
     // rotate the displayed image around the crop centre (Lightroom-style).
     // Updates immediately, independently of pipeline reprocessing — so live
     // dragging the rotation slider feels instant even on a slow GPU.
-    if (auto* cs = m_effects->cropSource()) {
+    if (auto *cs = m_effects->cropSource()) {
         const QRectF c = cs->userCropRect();
         m_viewport->setImageRotation(cs->userCropAngle(), c.center());
     }
@@ -831,17 +786,13 @@ void PhotoEditorApp::syncViewportRotation() {
 void PhotoEditorApp::triggerReprocess() {
     if (m_originalImage.isNull()) return;
 
-    m_processor->processImageAsync(m_originalImage, *m_effects,
-                                   m_viewport->viewportRequest(),
-                                   RunMode::Commit);
+    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::Commit);
 }
 
 void PhotoEditorApp::triggerLiveReprocess() {
     if (m_originalImage.isNull()) return;
 
-    m_processor->processImageAsync(m_originalImage, *m_effects,
-                                   m_viewport->viewportRequest(),
-                                   RunMode::LiveDrag);
+    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::LiveDrag);
 }
 
 void PhotoEditorApp::triggerViewportUpdate() {
@@ -853,9 +804,9 @@ void PhotoEditorApp::triggerViewportUpdate() {
     // panels get smoother feedback than the old hard-coded 16ms (60Hz).
     // Zoom events go through the same path but are naturally rare (one wheel
     // tick = one event), so they aren't affected.
-    const QScreen* s = screen();
-    const double hz = (s && s->refreshRate() > 0.0) ? s->refreshRate() : 60.0;
-    const int intervalMs = std::max(1, static_cast<int>(1000.0 / hz));
+    const QScreen *s          = screen();
+    const double   hz         = (s && s->refreshRate() > 0.0) ? s->refreshRate() : 60.0;
+    const int      intervalMs = std::max(1, static_cast<int>(1000.0 / hz));
     if (!m_lastPanDispatch.isValid() || m_lastPanDispatch.elapsed() >= intervalMs) {
         dispatchViewportUpdate();
         return;
@@ -870,21 +821,17 @@ void PhotoEditorApp::dispatchViewportUpdate() {
     if (m_originalImage.isNull()) return;
     m_lastPanDispatch.start();
 
-    m_processor->processImageAsync(m_originalImage, *m_effects,
-                                   m_viewport->viewportRequest(),
-                                   RunMode::PanZoom);
+    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::PanZoom);
 }
 
-bool PhotoEditorApp::eventFilter(QObject* obj, QEvent* event) {
+bool PhotoEditorApp::eventFilter(QObject *obj, QEvent *event) {
     if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
-        auto* ke = static_cast<QKeyEvent*>(event);
+        auto *ke = static_cast<QKeyEvent *>(event);
         if (ke->key() == Qt::Key_Backslash && !ke->isAutoRepeat()) {
             // Don't steal the key from text input fields (path bars, etc.).
-            QWidget* fw = QApplication::focusWidget();
-            if (fw && (fw->inherits("QLineEdit")
-                       || fw->inherits("QAbstractSpinBox")
-                       || fw->inherits("QTextEdit")
-                       || fw->inherits("QPlainTextEdit"))) {
+            QWidget *fw = QApplication::focusWidget();
+            if (fw && (fw->inherits("QLineEdit") || fw->inherits("QAbstractSpinBox") || fw->inherits("QTextEdit") ||
+                       fw->inherits("QPlainTextEdit"))) {
                 return QMainWindow::eventFilter(obj, event);
             }
             if (event->type() == QEvent::KeyPress && !m_beforeViewActive) {
@@ -905,9 +852,7 @@ void PhotoEditorApp::enterBeforeView() {
     if (m_stack && m_stack->currentWidget() == m_loupeView) {
         m_loupeView->setShowBefore(true);
     } else if (!m_originalImage.isNull()) {
-        m_processor->processImageAsync(m_originalImage, *m_effects,
-                                       m_viewport->viewportRequest(),
-                                       RunMode::Commit,
+        m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::Commit,
                                        /*bypassEffects=*/true);
     }
 }
@@ -934,16 +879,16 @@ void PhotoEditorApp::onProcessingComplete(QImage result, QPoint offset) {
     }
 }
 
-void PhotoEditorApp::resizeEvent(QResizeEvent* event) {
+void PhotoEditorApp::resizeEvent(QResizeEvent *event) {
     QMainWindow::resizeEvent(event);
     // Debounce: avoid firing a full GPU reprocess on every pixel of a window drag.
     m_resizeDebounce->start();
 }
 
-void PhotoEditorApp::closeEvent(QCloseEvent* event) {
+void PhotoEditorApp::closeEvent(QCloseEvent *event) {
     QSettings settings("Afterglow", "Afterglow");
     settings.setValue("geometry", saveGeometry());
-    settings.setValue("lastDir",  m_lastDir);
+    settings.setValue("lastDir", m_lastDir);
     flushHistorySidecar();
     QMainWindow::closeEvent(event);
 }
@@ -951,11 +896,9 @@ void PhotoEditorApp::closeEvent(QCloseEvent* event) {
 // ─── Gallery / Loupe / Develop mode switching ───────────────────────────────
 
 void PhotoEditorApp::setMode(Mode m) {
-    if (m_stack->currentIndex() == static_cast<int>(Mode::Develop)
-            && m != Mode::Develop)
-        flushHistorySidecar();
+    if (m_stack->currentIndex() == static_cast<int>(Mode::Develop) && m != Mode::Develop) flushHistorySidecar();
     m_stack->setCurrentIndex(static_cast<int>(m));
-    for (QAction* a : m_modeGroup->actions()) {
+    for (QAction *a : m_modeGroup->actions()) {
         if (a->data().toInt() == static_cast<int>(m)) {
             a->setChecked(true);
             break;
@@ -970,8 +913,7 @@ void PhotoEditorApp::setMode(Mode m) {
 }
 
 void PhotoEditorApp::openFolder() {
-    const QString folder = QFileDialog::getExistingDirectory(
-        this, "Open Folder", m_lastDir, QFileDialog::ShowDirsOnly);
+    const QString folder = QFileDialog::getExistingDirectory(this, "Open Folder", m_lastDir, QFileDialog::ShowDirsOnly);
     if (folder.isEmpty()) return;
     m_lastDir = folder;
     loadFolderIntoGrid(folder);
@@ -982,12 +924,12 @@ void PhotoEditorApp::openFolder() {
 // each RAW's embedded preview (or full QImage for non-RAW) and writes a
 // quality-85 JPEG here; subsequent opens read straight from disk if the
 // source file's mtime hasn't moved past the cache file's mtime.
-static QString thumbCachePath(const QString& sourcePath) {
+static QString thumbCachePath(const QString &sourcePath) {
     const QFileInfo fi(sourcePath);
     return fi.absoluteDir().filePath(".afterglow-thumbs/" + fi.fileName() + ".jpg");
 }
 
-static QImage tryLoadCachedThumb(const QString& sourcePath) {
+static QImage tryLoadCachedThumb(const QString &sourcePath) {
     const QFileInfo cacheFi(thumbCachePath(sourcePath));
     if (!cacheFi.exists()) return {};
     const QFileInfo srcFi(sourcePath);
@@ -996,7 +938,7 @@ static QImage tryLoadCachedThumb(const QString& sourcePath) {
     return QImage(cacheFi.absoluteFilePath());
 }
 
-static void writeCachedThumb(const QString& sourcePath, const QImage& thumb) {
+static void writeCachedThumb(const QString &sourcePath, const QImage &thumb) {
     const QString out = thumbCachePath(sourcePath);
     QDir().mkpath(QFileInfo(out).absolutePath());
     thumb.save(out, "JPEG", 85);
@@ -1004,44 +946,39 @@ static void writeCachedThumb(const QString& sourcePath, const QImage& thumb) {
 
 // Recognised image extensions: same set the single-file dialog accepts. Kept
 // here as a static QStringList so the lookup is amortised across all photos.
-static const QStringList& imageExtensions() {
+static const QStringList &imageExtensions() {
     static const QStringList exts = {
-        "png", "jpg", "jpeg", "bmp", "tiff", "tif",
-        "cr2", "cr3", "nef", "nrw", "arw", "sr2", "srf", "dng",
-        "raf", "orf", "rw2", "pef", "srw", "x3f", "rwl", "mrw",
-        "3fr", "kdc", "dcr", "erf",
+        "png", "jpg", "jpeg", "bmp", "tiff", "tif", "cr2", "cr3", "nef", "nrw", "arw", "sr2", "srf",
+        "dng", "raf", "orf",  "rw2", "pef",  "srw", "x3f", "rwl", "mrw", "3fr", "kdc", "dcr", "erf",
     };
     return exts;
 }
 
-void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
-    QStringList allPaths;
+void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
+    QStringList  allPaths;
     QDirIterator it(folder, QDir::Files | QDir::Readable, QDirIterator::NoIteratorFlags);
     while (it.hasNext()) {
         const QString p = it.next();
-        if (imageExtensions().contains(QFileInfo(p).suffix().toLower()))
-            allPaths.append(p);
+        if (imageExtensions().contains(QFileInfo(p).suffix().toLower())) allPaths.append(p);
     }
 
     // Cameras shoot RAW + JPEG side-by-side; the JPEG is just the in-camera
     // preview of the RAW so we'd be triaging two views of the same photo.
     // Drop the JPEG sibling whenever a RAW with the same basename exists.
     QSet<QString> rawBases;
-    for (const QString& p : allPaths) {
-        if (RawLoader::isRawFile(p))
-            rawBases.insert(QFileInfo(p).completeBaseName());
+    for (const QString &p : allPaths) {
+        if (RawLoader::isRawFile(p)) rawBases.insert(QFileInfo(p).completeBaseName());
     }
     QStringList paths;
-    for (const QString& p : allPaths) {
+    for (const QString &p : allPaths) {
         const QFileInfo fi(p);
-        if (!RawLoader::isRawFile(p) && rawBases.contains(fi.completeBaseName()))
-            continue;
+        if (!RawLoader::isRawFile(p) && rawBases.contains(fi.completeBaseName())) continue;
         paths.append(p);
     }
     paths.sort(Qt::CaseInsensitive);
 
     m_currentFolder = folder;
-    m_currentPaths = paths;
+    m_currentPaths  = paths;
     m_gridView->setPhotos(paths);
     readCatalog(folder);
 
@@ -1050,7 +987,7 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
         m_proofer->clear();
 
         QStringList unproofed;
-        for (const QString& path : paths) {
+        for (const QString &path : paths) {
             if (m_proofCache->isProofed(path)) {
                 m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
             } else {
@@ -1064,37 +1001,41 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString& folder) {
     // back to the GUI thread via QueuedConnection. Stale results from a
     // previous folder are dropped via the m_currentFolder guard.
     QPointer<PhotoEditorApp> self(this);
-    const QString tag = folder;
-    for (const QString& path : paths) {
+    const QString            tag = folder;
+    for (const QString &path : paths) {
         QThreadPool::globalInstance()->start([self, path, tag]() {
             QImage thumb = tryLoadCachedThumb(path);
             if (thumb.isNull()) {
-                if (RawLoader::isRawFile(path)) thumb = RawLoader::loadThumbnail(path);
-                else                            thumb = decodeOriented(path);
+                if (RawLoader::isRawFile(path))
+                    thumb = RawLoader::loadThumbnail(path);
+                else
+                    thumb = decodeOriented(path);
                 if (thumb.isNull()) return;
                 // Cap the side at 512px — saves memory when the grid is showing
                 // hundreds of thumbnails and avoids holding full-res JPEGs alive.
                 if (thumb.width() > 512 || thumb.height() > 512)
-                    thumb = thumb.scaled(512, 512, Qt::KeepAspectRatio,
-                                         Qt::SmoothTransformation);
+                    thumb = thumb.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
                 writeCachedThumb(path, thumb);
             }
-            QMetaObject::invokeMethod(qApp, [self, path, thumb, tag]() {
-                if (!self) return;
-                if (self->m_currentFolder != tag) return;
-                self->m_gridView->setThumbnail(path, thumb);
-            }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(
+                qApp,
+                [self, path, thumb, tag]() {
+                    if (!self) return;
+                    if (self->m_currentFolder != tag) return;
+                    self->m_gridView->setThumbnail(path, thumb);
+                },
+                Qt::QueuedConnection);
         });
     }
 }
 
-void PhotoEditorApp::onPhotoActivated(const QString& path) {
+void PhotoEditorApp::onPhotoActivated(const QString &path) {
     // Load the camera-embedded JPEG for instant display while the proof may
     // be fetched from cache or scheduled for generation.
-    QImage cameraJpeg;
+    QImage        cameraJpeg;
     ImageMetadata meta;
     if (RawLoader::isRawFile(path)) cameraJpeg = RawLoader::loadThumbnail(path, &meta);
-    if (cameraJpeg.isNull())        cameraJpeg = decodeOriented(path);
+    if (cameraJpeg.isNull()) cameraJpeg = decodeOriented(path);
     if (cameraJpeg.isNull()) {
         qWarning() << "No preview available for" << path;
         return;
@@ -1113,8 +1054,7 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
         } else {
             m_loupeView->setProofImage({});
             m_loupeView->setProofingState(true);
-            if (m_proofer)
-                m_proofer->promote(path);
+            if (m_proofer) m_proofer->promote(path);
         }
     }
 
@@ -1124,39 +1064,37 @@ void PhotoEditorApp::onPhotoActivated(const QString& path) {
 void PhotoEditorApp::onDevelopRequested() {
     if (m_currentImagePath.isEmpty()) return;
     setMode(Mode::Develop);
-    if (m_currentImagePath != m_developedPath)
-        loadFullImage(m_currentImagePath);
+    if (m_currentImagePath != m_developedPath) loadFullImage(m_currentImagePath);
 }
 
 void PhotoEditorApp::onLoupeNavigate(int direction) {
     if (m_currentPaths.isEmpty() || m_currentImagePath.isEmpty()) return;
-    const int idx = m_currentPaths.indexOf(m_currentImagePath);
+    const int idx  = m_currentPaths.indexOf(m_currentImagePath);
     const int next = idx + direction;
     if (idx < 0 || next < 0 || next >= m_currentPaths.size()) return;
     onPhotoActivated(m_currentPaths[next]);
 }
 
-void PhotoEditorApp::onMarkChanged(const QString& path, GridView::Mark mark) {
+void PhotoEditorApp::onMarkChanged(const QString &path, GridView::Mark mark) {
     m_gridView->setMark(path, mark);
     writeCatalog();
 }
 
 // ─── Per-image sidecar (.yml) ───────────────────────────────────────────────
 
-QString PhotoEditorApp::sidecarPathFor(const QString& imagePath) const {
+QString PhotoEditorApp::sidecarPathFor(const QString &imagePath) const {
     const QFileInfo fi(imagePath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
 }
 
-void PhotoEditorApp::refreshHistoryTray()
-{
+void PhotoEditorApp::refreshHistoryTray() {
     if (!m_historyTray) return;
-    const auto& entries = m_history->entries();
+    const auto               &entries = m_history->entries();
     QVector<HistoryTray::Row> rows;
     rows.reserve(entries.size());
-    for (const auto& e : entries) {
+    for (const auto &e : entries) {
         QString effectName = e.effectId;
-        for (const auto& eff : m_effects->entries()) {
+        for (const auto &eff : m_effects->entries()) {
             if (eff.effect && eff.effect->getId() == e.effectId) {
                 effectName = eff.effect->getName();
                 break;
@@ -1168,21 +1106,20 @@ void PhotoEditorApp::refreshHistoryTray()
     repositionHistoryTray();
 }
 
-void PhotoEditorApp::repositionHistoryTray()
-{
+void PhotoEditorApp::repositionHistoryTray() {
     if (!m_historyTray || !m_viewport) return;
     constexpr int margin = 8;
-    const QSize ts = m_historyTray->sizeHint();
-    const int x = margin;
-    const int y = qMax(0, m_viewport->height() - ts.height() - margin);
+    const QSize   ts     = m_historyTray->sizeHint();
+    const int     x      = margin;
+    const int     y      = qMax(0, m_viewport->height() - ts.height() - margin);
     m_historyTray->move(x, qBound(0, y, m_viewport->height() - 1));
 }
 
 QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() const {
-    const auto& entries = m_effects->entries();
+    const auto                               &entries = m_effects->entries();
     QVector<SettingsImporter::EffectSettings> snap;
     snap.reserve(entries.size());
-    for (const auto& e : entries) {
+    for (const auto &e : entries) {
         if (!e.effect) continue;
         SettingsImporter::EffectSettings es;
         es.id         = e.effect->getId();
@@ -1194,7 +1131,7 @@ QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() cons
     return snap;
 }
 
-QString PhotoEditorApp::historySidecarPathFor(const QString& imagePath) const {
+QString PhotoEditorApp::historySidecarPathFor(const QString &imagePath) const {
     const QFileInfo fi(imagePath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".history.yml");
 }
@@ -1202,20 +1139,17 @@ QString PhotoEditorApp::historySidecarPathFor(const QString& imagePath) const {
 void PhotoEditorApp::flushHistorySidecar() {
     if (m_developedPath.isEmpty() || m_history->entries().isEmpty()) return;
     const QString path = historySidecarPathFor(m_developedPath);
-    QString error;
-    if (!HistorySerializer::writeYaml(path,
-            m_history->entries(), m_history->cursor(),
-            currentSnapshot(), &error))
+    QString       error;
+    if (!HistorySerializer::writeYaml(path, m_history->entries(), m_history->cursor(), currentSnapshot(), &error))
         qWarning() << "History sidecar write failed for" << path << ":" << error;
 }
 
-void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry& e, bool applyFrom) {
-    const auto& entries = m_effects->entries();
+void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry &e, bool applyFrom) {
+    const auto &entries = m_effects->entries();
     for (int i = 0; i < entries.size(); ++i) {
-        if (!entries[i].effect || entries[i].effect->getId() != e.effectId)
-            continue;
+        if (!entries[i].effect || entries[i].effect->getId() != e.effectId) continue;
 
-        PhotoEditorEffect* effect = entries[i].effect;
+        PhotoEditorEffect *effect = entries[i].effect;
 
         if (e.enabled) {
             const bool val = applyFrom ? e.enabled->first : e.enabled->second;
@@ -1229,7 +1163,7 @@ void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry& e, bool applyFr
         if (!e.params.isEmpty()) {
             auto params = effect->getParameters();
             for (auto pit = e.params.cbegin(); pit != e.params.cend(); ++pit) {
-                const QVariant& val = applyFrom ? pit.value().from : pit.value().to;
+                const QVariant &val = applyFrom ? pit.value().from : pit.value().to;
                 if (val.isValid())
                     params.insert(pit.key(), val);
                 else
@@ -1245,9 +1179,9 @@ void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry& e, bool applyFr
 void PhotoEditorApp::snapshotDefaults() {
     m_defaults.image.clear();
     m_defaults.effects.clear();
-    const auto& entries = m_effects->entries();
+    const auto &entries = m_effects->entries();
     m_defaults.effects.reserve(entries.size());
-    for (const auto& e : entries) {
+    for (const auto &e : entries) {
         SettingsImporter::EffectSettings es;
         es.id         = e.effect->getId();
         es.name       = e.effect->getName();
@@ -1260,15 +1194,14 @@ void PhotoEditorApp::snapshotDefaults() {
 void PhotoEditorApp::writeSidecar() {
     if (m_currentImagePath.isEmpty()) return;
     const QString path = sidecarPathFor(m_currentImagePath);
-    QString error;
+    QString       error;
     if (!SettingsExporter::writeYaml(path, *m_effects, m_currentImagePath, &error))
         qWarning() << "Sidecar write failed for" << path << ":" << error;
 
     // Invalidate the proof for this photo: the pipeline output has changed.
     // Re-proof is lazy — generated the next time Loupe lands on this photo
     // or when the background proofer's walk reaches it.
-    if (m_proofCache)
-        m_proofCache->invalidate(m_currentImagePath);
+    if (m_proofCache) m_proofCache->invalidate(m_currentImagePath);
 }
 
 // ─── Per-folder catalog (triage marks) ──────────────────────────────────────
@@ -1277,11 +1210,11 @@ void PhotoEditorApp::writeSidecar() {
 // Keys are basenames (so the file survives the folder being moved); values
 // are single-character mark codes ('P', 'X', 'U').
 
-QString PhotoEditorApp::catalogPath(const QString& folder) const {
+QString PhotoEditorApp::catalogPath(const QString &folder) const {
     return QDir(folder).filePath(".afterglow-catalog.json");
 }
 
-void PhotoEditorApp::readCatalog(const QString& folder) {
+void PhotoEditorApp::readCatalog(const QString &folder) {
     QFile f(catalogPath(folder));
     if (!f.open(QIODevice::ReadOnly)) return;
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -1289,26 +1222,25 @@ void PhotoEditorApp::readCatalog(const QString& folder) {
     const QJsonObject obj = doc.object();
     for (auto it = obj.begin(); it != obj.end(); ++it) {
         const QString fullPath = QDir(folder).filePath(it.key());
-        const QString s = it.value().toString();
+        const QString s        = it.value().toString();
         if (s.isEmpty()) continue;
         // Only accept the current code set — a catalog written by an older
         // build (with 'P'/'X'/'U') simply loses its marks rather than
         // populating the map with bogus enum values.
         const char c = s.at(0).toLatin1();
-        if (c == 'A' || c == 'R' || c == 'D')
-            m_gridView->setMark(fullPath, static_cast<GridView::Mark>(c));
+        if (c == 'A' || c == 'R' || c == 'D') m_gridView->setMark(fullPath, static_cast<GridView::Mark>(c));
     }
 }
 
 void PhotoEditorApp::writeCatalog() const {
     if (m_currentFolder.isEmpty()) return;
-    QJsonObject obj;
+    QJsonObject  obj;
     QDirIterator it(m_currentFolder, QDir::Files, QDirIterator::NoIteratorFlags);
     while (it.hasNext()) {
         const QString p = it.next();
         if (!imageExtensions().contains(QFileInfo(p).suffix().toLower())) continue;
         const auto m = m_gridView->mark(p);
-        if (m == GridView::Mark::None) continue;  // unflagged is the default
+        if (m == GridView::Mark::None) continue; // unflagged is the default
         obj.insert(QFileInfo(p).fileName(), QString(QChar(static_cast<char>(m))));
     }
     QFile f(catalogPath(m_currentFolder));

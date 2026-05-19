@@ -19,31 +19,30 @@ public:
     QString getName() const override;
     QString getDescription() const override;
     QString getVersion() const override;
-    bool initialize() override;
+    bool    initialize() override;
 
-    QWidget* createControlsWidget() override;
+    QWidget                *createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
-    void applyParameters(const QMap<QString, QVariant>& parameters) override;
-    void onImageLoaded(const ImageMetadata& meta) override;
+    void                    applyParameters(const QMap<QString, QVariant> &parameters) override;
+    void                    onImageLoaded(const ImageMetadata &meta) override;
 
-    bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
-    bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
-                    int w, int h,
-                    const QMap<QString, QVariant>& params) override;
+    bool initGpuKernels(cl::Context &ctx, cl::Device &dev) override;
+    bool enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
+                    const QMap<QString, QVariant> &params) override;
 
 private:
-    QWidget*     controlsWidget;
-    ParamSlider* exposureParam;
-    ParamSlider* whitesParam;
-    ParamSlider* highlightsParam;
-    ParamSlider* shadowsParam;
-    ParamSlider* blacksParam;
+    QWidget     *controlsWidget;
+    ParamSlider *exposureParam;
+    ParamSlider *whitesParam;
+    ParamSlider *highlightsParam;
+    ParamSlider *shadowsParam;
+    ParamSlider *blacksParam;
 
     // Callback that pushes a histogram into the tone-curve widget.  Wired in
     // createControlsWidget() (ToneCurveWidget is an anon-namespace type, so
     // the widget pointer stays hidden behind this lambda).  Empty until the
     // panel is built.
-    std::function<void(const std::vector<uint32_t>&)> m_applyHistogram;
+    std::function<void(const std::vector<uint32_t> &)> m_applyHistogram;
 
     // Cached input-luminance histogram from the most recent onImageLoaded.
     // Pushed to the widget when the panel is built (image may be loaded

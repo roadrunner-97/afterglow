@@ -17,8 +17,7 @@ protected:
 protected slots:
     void initTestCase() {
         GpuDeviceRegistry::instance().enumerate();
-        if (GpuDeviceRegistry::instance().count() == 0)
-            QSKIP("No OpenCL device found — skipping GPU effect tests");
+        if (GpuDeviceRegistry::instance().count() == 0) QSKIP("No OpenCL device found — skipping GPU effect tests");
         GpuDeviceRegistry::instance().setDevice(0);
         m_hasGpu = true;
     }

@@ -9,7 +9,7 @@
 struct GpuDeviceInfo {
     QString name;
     QString platformName;
-    QString typeName;   // "GPU", "CPU", "Accelerator", or "Device"
+    QString typeName; // "GPU", "CPU", "Accelerator", or "Device"
 };
 
 /**
@@ -26,29 +26,37 @@ struct GpuDeviceInfo {
  */
 class GpuDeviceRegistry {
 public:
-    static GpuDeviceRegistry& instance();
+    static GpuDeviceRegistry &instance();
 
     // Populate m_devices by querying OpenCL. No-op if OpenCL is unavailable.
     void enumerate();
 
-    const std::vector<GpuDeviceInfo>& devices() const { return m_devices; }
-    int count() const { return static_cast<int>(m_devices.size()); }
+    const std::vector<GpuDeviceInfo> &devices() const {
+        return m_devices;
+    }
+    int count() const {
+        return static_cast<int>(m_devices.size());
+    }
 
     // Switch the active device. Bumps revision() so GpuContexts reinitialise.
     void setDevice(int index);
 
-    int currentIndex() const { return m_currentIndex.load(std::memory_order_relaxed); }
+    int currentIndex() const {
+        return m_currentIndex.load(std::memory_order_relaxed);
+    }
 
     // Starts at 1; effects initialise their stored revision to 0 so the very
     // first call always triggers init(). Bumped again on each setDevice() call.
-    int revision() const { return m_revision.load(std::memory_order_relaxed); }
+    int revision() const {
+        return m_revision.load(std::memory_order_relaxed);
+    }
 
 private:
     GpuDeviceRegistry() = default;
 
     std::vector<GpuDeviceInfo> m_devices;
-    std::atomic<int> m_currentIndex{0};
-    std::atomic<int> m_revision{1};
+    std::atomic<int>           m_currentIndex{0};
+    std::atomic<int>           m_revision{1};
 };
 
 #endif // GPUDEVICEREGISTRY_H

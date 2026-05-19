@@ -5,7 +5,6 @@
 #include <QVBoxLayout>
 #include <cmath>
 
-
 namespace {
 
 // Split-toning: two hue/saturation pairs tint the image's dark and bright
@@ -22,11 +21,11 @@ namespace {
 // consistent with Lightroom/darktable's split-toning behaviour.
 
 struct SplitArgs {
-    float shadowHue;     // [0, 1)
-    float shadowSat;     // [0, 1]
-    float highlightHue;  // [0, 1)
-    float highlightSat;  // [0, 1]
-    float balance;       // [-1, 1]
+    float shadowHue;    // [0, 1)
+    float shadowSat;    // [0, 1]
+    float highlightHue; // [0, 1)
+    float highlightSat; // [0, 1]
+    float balance;      // [-1, 1]
 };
 
 static float wrapHue01(float deg) {
@@ -34,15 +33,14 @@ static float wrapHue01(float deg) {
     return h / 360.0f;
 }
 
-static SplitArgs makeArgs(float shadowHueDeg, float shadowSatPct,
-                           float highlightHueDeg, float highlightSatPct,
-                           float balancePct) {
+static SplitArgs makeArgs(float shadowHueDeg, float shadowSatPct, float highlightHueDeg, float highlightSatPct,
+                          float balancePct) {
     SplitArgs a;
     a.shadowHue    = wrapHue01(shadowHueDeg);
-    a.shadowSat    = shadowSatPct    / 100.0f;
+    a.shadowSat    = shadowSatPct / 100.0f;
     a.highlightHue = wrapHue01(highlightHueDeg);
     a.highlightSat = highlightSatPct / 100.0f;
-    a.balance      = balancePct      / 100.0f;
+    a.balance      = balancePct / 100.0f;
     return a;
 }
 
@@ -56,7 +54,7 @@ static SplitArgs makeArgs(float shadowHueDeg, float shadowSatPct,
 // linear before being mixed into the linear pixel.  The tint-intensity
 // multiplier uses linear luma so pure black stays black.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 // Pure-hue RGB at V=1, S=1 in sRGB space.  Input hue is in [0,1).
 inline float3 hueToRgb(float h) {
     float r = fabs(h * 6.0f - 3.0f) - 1.0f;
@@ -117,59 +115,66 @@ __kernel void applySplitToningLinear(__global float4* pixels,
 // ============================================================================
 
 SplitToningEffect::SplitToningEffect()
-    : controlsWidget(nullptr),
-      shadowHueParam(nullptr), shadowSatParam(nullptr),
-      highlightHueParam(nullptr), highlightSatParam(nullptr),
-      balanceParam(nullptr) {}
+    : controlsWidget(nullptr), shadowHueParam(nullptr), shadowSatParam(nullptr), highlightHueParam(nullptr),
+      highlightSatParam(nullptr), balanceParam(nullptr) {}
 
 SplitToningEffect::~SplitToningEffect() {}
 
-QString SplitToningEffect::getName() const { return "Split Toning"; }
+QString SplitToningEffect::getName() const {
+    return "Split Toning";
+}
 QString SplitToningEffect::getDescription() const {
     return "Independently tint shadows and highlights";
 }
-QString SplitToningEffect::getVersion() const { return "1.0.0"; }
+QString SplitToningEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool SplitToningEffect::initialize() {
     qDebug() << "Split Toning effect initialized";
     return true;
 }
 
-QWidget* SplitToningEffect::createControlsWidget() {
+QWidget *SplitToningEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto connectSlider = [&](ParamSlider* s) {
+    auto connectSlider = [&](ParamSlider *s) {
         connect(s, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-        connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+        connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
     shadowHueParam = new ParamSlider("Shadow Hue", 0.0, 359.0, 0.1, 1);
-    shadowHueParam->setToolTip("Hue angle (degrees) of the tint applied to the darker tones.\n0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta.");
+    shadowHueParam->setToolTip("Hue angle (degrees) of the tint applied to the darker tones.\n0=red, 60=yellow, "
+                               "120=green, 180=cyan, 240=blue, 300=magenta.");
     connectSlider(shadowHueParam);
     layout->addWidget(shadowHueParam);
 
     shadowSatParam = new ParamSlider("Shadow Saturation", 0.0, 100.0, 0.1, 1);
-    shadowSatParam->setToolTip("Strength of the shadow tint.\n0 leaves shadows untouched; 100 fully tints them at the chosen hue.");
+    shadowSatParam->setToolTip(
+        "Strength of the shadow tint.\n0 leaves shadows untouched; 100 fully tints them at the chosen hue.");
     connectSlider(shadowSatParam);
     layout->addWidget(shadowSatParam);
 
     highlightHueParam = new ParamSlider("Highlight Hue", 0.0, 359.0, 0.1, 1);
-    highlightHueParam->setToolTip("Hue angle (degrees) of the tint applied to the brighter tones.\n0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta.");
+    highlightHueParam->setToolTip("Hue angle (degrees) of the tint applied to the brighter tones.\n0=red, 60=yellow, "
+                                  "120=green, 180=cyan, 240=blue, 300=magenta.");
     connectSlider(highlightHueParam);
     layout->addWidget(highlightHueParam);
 
     highlightSatParam = new ParamSlider("Highlight Saturation", 0.0, 100.0, 0.1, 1);
-    highlightSatParam->setToolTip("Strength of the highlight tint.\n0 leaves highlights untouched; 100 fully tints them at the chosen hue.");
+    highlightSatParam->setToolTip(
+        "Strength of the highlight tint.\n0 leaves highlights untouched; 100 fully tints them at the chosen hue.");
     connectSlider(highlightSatParam);
     layout->addWidget(highlightSatParam);
 
     balanceParam = new ParamSlider("Balance", -100.0, 100.0, 0.1, 1);
-    balanceParam->setToolTip("Shifts the crossover between shadow and highlight tints.\nNegative values favour the shadow tint; positive values favour the highlight tint.");
+    balanceParam->setToolTip("Shifts the crossover between shadow and highlight tints.\nNegative values favour the "
+                             "shadow tint; positive values favour the highlight tint.");
     connectSlider(balanceParam);
     layout->addWidget(balanceParam);
 
@@ -179,24 +184,23 @@ QWidget* SplitToningEffect::createControlsWidget() {
 
 QMap<QString, QVariant> SplitToningEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["shadowHue"]    = shadowHueParam    ? shadowHueParam->value()    : 0.0;
-    params["shadowSat"]    = shadowSatParam    ? shadowSatParam->value()    : 0.0;
+    params["shadowHue"]    = shadowHueParam ? shadowHueParam->value() : 0.0;
+    params["shadowSat"]    = shadowSatParam ? shadowSatParam->value() : 0.0;
     params["highlightHue"] = highlightHueParam ? highlightHueParam->value() : 0.0;
     params["highlightSat"] = highlightSatParam ? highlightSatParam->value() : 0.0;
-    params["balance"]      = balanceParam      ? balanceParam->value()      : 0.0;
+    params["balance"]      = balanceParam ? balanceParam->value() : 0.0;
     return params;
 }
 
-void SplitToningEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
-    auto apply = [&](ParamSlider* p, const char* key) {
-        if (p && parameters.contains(key))
-            p->setValue(parameters.value(key).toDouble());
+void SplitToningEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    auto apply = [&](ParamSlider *p, const char *key) {
+        if (p && parameters.contains(key)) p->setValue(parameters.value(key).toDouble());
     };
-    apply(shadowHueParam,    "shadowHue");
-    apply(shadowSatParam,    "shadowSat");
+    apply(shadowHueParam, "shadowHue");
+    apply(shadowSatParam, "shadowSat");
     apply(highlightHueParam, "highlightHue");
     apply(highlightSatParam, "highlightSat");
-    apply(balanceParam,      "balance");
+    apply(balanceParam, "balance");
     emit parametersChanged();
 }
 
@@ -204,7 +208,7 @@ void SplitToningEffect::applyParameters(const QMap<QString, QVariant>& parameter
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool SplitToningEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool SplitToningEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -212,26 +216,22 @@ bool SplitToningEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] SplitToning initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] SplitToning initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool SplitToningEffect::enqueueGpu(cl::CommandQueue& queue,
-                                    cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                    int w, int h,
-                                    const QMap<QString, QVariant>& params) {
-    const float shadowSat    = float(params.value("shadowSat",    0).toDouble());
+bool SplitToningEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
+                                   const QMap<QString, QVariant> &params) {
+    const float shadowSat    = float(params.value("shadowSat", 0).toDouble());
     const float highlightSat = float(params.value("highlightSat", 0).toDouble());
-    if (shadowSat == 0.0f && highlightSat == 0.0f) return true;  // no-op
+    if (shadowSat == 0.0f && highlightSat == 0.0f) return true; // no-op
 
-    const SplitArgs a = makeArgs(
-        float(params.value("shadowHue",    0).toDouble()), shadowSat,
-        float(params.value("highlightHue", 0).toDouble()), highlightSat,
-        float(params.value("balance",      0).toDouble()));
+    const SplitArgs a = makeArgs(float(params.value("shadowHue", 0).toDouble()), shadowSat,
+                                 float(params.value("highlightHue", 0).toDouble()), highlightSat,
+                                 float(params.value("balance", 0).toDouble()));
 
     m_kernelLinear.setArg(0, buf);
     m_kernelLinear.setArg(1, w);
@@ -241,8 +241,6 @@ bool SplitToningEffect::enqueueGpu(cl::CommandQueue& queue,
     m_kernelLinear.setArg(5, a.highlightHue);
     m_kernelLinear.setArg(6, a.highlightSat);
     m_kernelLinear.setArg(7, a.balance);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
-                               cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }
-

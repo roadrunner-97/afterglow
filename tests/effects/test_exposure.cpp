@@ -15,13 +15,12 @@
 // The tone-curve widget is the first child of the controls layout (added
 // before any ParamSlider). Retrieving it via layout keeps the test
 // independent of the anonymous-namespace class name.
-static QWidget* toneCurveWidget(QWidget* controls) {
-    auto* layout = qobject_cast<QVBoxLayout*>(controls->layout());
+static QWidget *toneCurveWidget(QWidget *controls) {
+    auto *layout = qobject_cast<QVBoxLayout *>(controls->layout());
     return layout ? layout->itemAt(0)->widget() : nullptr;
 }
 
-static void sendMouse(QWidget* w, QEvent::Type t, QPointF p,
-                      Qt::MouseButton b = Qt::NoButton,
+static void sendMouse(QWidget *w, QEvent::Type t, QPointF p, Qt::MouseButton b = Qt::NoButton,
                       Qt::MouseButtons buttons = Qt::NoButton) {
     QMouseEvent ev(t, p, p, p, b, buttons, Qt::NoModifier);
     QApplication::sendEvent(w, &ev);
@@ -53,13 +52,11 @@ private slots:
     void identity_allZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
-        QImage out   = runEffect(e, input, zeroParams());
+        QImage         input = makeSolid(32, 32, 100, 100, 100);
+        QImage         out   = runEffect(e, input, zeroParams());
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px)   - 100) <= 2
-                && qAbs(qGreen(px) - 100) <= 2
-                && qAbs(qBlue(px)  - 100) <= 2;
+            return qAbs(qRed(px) - 100) <= 2 && qAbs(qGreen(px) - 100) <= 2 && qAbs(qBlue(px) - 100) <= 2;
         }));
     }
 
@@ -67,16 +64,14 @@ private slots:
     void black_staysBlack_atAnyExposure() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 0, 0, 0);
+        QImage         input = makeSolid(32, 32, 0, 0, 0);
 
-        for (double ev : { -3.0, -1.0, 1.0, 3.0 }) {
-            auto params = zeroParams();
+        for (double ev : {-3.0, -1.0, 1.0, 3.0}) {
+            auto params        = zeroParams();
             params["exposure"] = ev;
-            QImage out = runEffect(e, input, params);
+            QImage out         = runEffect(e, input, params);
             QVERIFY(!out.isNull());
-            QVERIFY(allPixels(out, [](QRgb px) {
-                return qRed(px) == 0 && qGreen(px) == 0 && qBlue(px) == 0;
-            }));
+            QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 0 && qGreen(px) == 0 && qBlue(px) == 0; }));
         }
     }
 
@@ -85,10 +80,10 @@ private slots:
     void positiveExposure_brightens() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
-        auto params  = zeroParams();
-        params["exposure"] = 2.0;
-        QImage out = runEffect(e, input, params);
+        QImage         input  = makeSolid(32, 32, 100, 100, 100);
+        auto           params = zeroParams();
+        params["exposure"]    = 2.0;
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 100; }));
     }
@@ -97,10 +92,10 @@ private slots:
     void negativeExposure_darkens() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 150, 150, 150);
-        auto params  = zeroParams();
-        params["exposure"] = -2.0;
-        QImage out = runEffect(e, input, params);
+        QImage         input  = makeSolid(32, 32, 150, 150, 150);
+        auto           params = zeroParams();
+        params["exposure"]    = -2.0;
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) < 150; }));
     }
@@ -109,13 +104,11 @@ private slots:
     void brightPixel_clampsAt255() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 255, 255, 255);
-        auto params  = zeroParams();
-        params["exposure"] = 3.0;
-        QImage out = runEffect(e, input, params);
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 255 && qGreen(px) == 255 && qBlue(px) == 255;
-        }));
+        QImage         input  = makeSolid(32, 32, 255, 255, 255);
+        auto           params = zeroParams();
+        params["exposure"]    = 3.0;
+        QImage out            = runEffect(e, input, params);
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 255 && qGreen(px) == 255 && qBlue(px) == 255; }));
     }
 
     // A dark pixel boosted by highlights=+3 EV must become brighter.
@@ -124,10 +117,10 @@ private slots:
     void highlightsZone_boostsMidlightPixel() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 160, 160, 160);
-        auto params  = zeroParams();
-        params["highlights"] = 2.0;
-        QImage out = runEffect(e, input, params);
+        QImage         input  = makeSolid(32, 32, 160, 160, 160);
+        auto           params = zeroParams();
+        params["highlights"]  = 2.0;
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 160; }));
     }
@@ -147,17 +140,17 @@ private slots:
     void whitesSlider_actsOnPostGlobalEvZone_regressionForZoneBug() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
+        QImage         input = makeSolid(32, 32, 100, 100, 100);
 
-        auto paramsA = zeroParams();
+        auto paramsA        = zeroParams();
         paramsA["exposure"] = 3.0;
-        QImage outA = runEffect(e, input, paramsA);
+        QImage outA         = runEffect(e, input, paramsA);
         QVERIFY(!outA.isNull());
 
-        auto paramsB = zeroParams();
+        auto paramsB        = zeroParams();
         paramsB["exposure"] = 3.0;
         paramsB["whites"]   = -3.0;
-        QImage outB = runEffect(e, input, paramsB);
+        QImage outB         = runEffect(e, input, paramsB);
         QVERIFY(!outB.isNull());
 
         // outA should clip at ~255; outB should be much darker (Whites cancels).
@@ -169,10 +162,10 @@ private slots:
     void blacksZone_boostsDarkPixel() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(32, 32, 20, 20, 20);
-        auto params  = zeroParams();
-        params["blacks"] = 3.0;
-        QImage out = runEffect(e, input, params);
+        QImage         input  = makeSolid(32, 32, 20, 20, 20);
+        auto           params = zeroParams();
+        params["blacks"]      = 3.0;
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 20; }));
     }
@@ -183,12 +176,12 @@ private slots:
     void nonSquare_positiveExposure_brightens() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid(128, 64, 100, 100, 100);
-        auto params  = zeroParams();
-        params["exposure"] = 2.0;
-        QImage out = runEffect(e, input, params);
+        QImage         input  = makeSolid(128, 64, 100, 100, 100);
+        auto           params = zeroParams();
+        params["exposure"]    = 2.0;
+        QImage out            = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.width(), 128);
         QCOMPARE(out.height(), 64);
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 100; }));
     }
@@ -203,22 +196,22 @@ private slots:
 
     void defaultParameters_keys() {
         ExposureEffect e;
-        auto params = e.getParameters();
-        for (const auto& key : {"exposure", "whites", "highlights", "shadows", "blacks"})
+        auto           params = e.getParameters();
+        for (const auto &key : {"exposure", "whites", "highlights", "shadows", "blacks"})
             QVERIFY(params.contains(key));
     }
 
     void identity_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
-        QImage input = makeSolid16bit(32, 32, 100, 100, 100);
-        QImage out = runEffect(e, input, zeroParams());
+        QImage         input = makeSolid16bit(32, 32, 100, 100, 100);
+        QImage         out   = runEffect(e, input, zeroParams());
         QVERIFY(!out.isNull());
     }
 
     void createControlsWidget_constructsAndCaches() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
     }
@@ -228,11 +221,11 @@ private slots:
         ExposureEffect e;
         e.createControlsWidget();
         auto params = e.getParameters();
-        QCOMPARE(params["exposure"].toDouble(),   0.0);
-        QCOMPARE(params["whites"].toDouble(),     0.0);
+        QCOMPARE(params["exposure"].toDouble(), 0.0);
+        QCOMPARE(params["whites"].toDouble(), 0.0);
         QCOMPARE(params["highlights"].toDouble(), 0.0);
-        QCOMPARE(params["shadows"].toDouble(),    0.0);
-        QCOMPARE(params["blacks"].toDouble(),     0.0);
+        QCOMPARE(params["shadows"].toDouble(), 0.0);
+        QCOMPARE(params["blacks"].toDouble(), 0.0);
     }
 
     // Drive the underlying QSlider to fire valueChanged → refreshCurve lambda +
@@ -240,16 +233,16 @@ private slots:
     // valueChanged lambda body (lines 451–453).
     void connectSlider_valueChanged_firesRefreshCurveAndLiveParams() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spy(&e, &PhotoEditorEffect::liveParametersChanged);
 
         // exposure ParamSlider is the first child ParamSlider.
         // scaleFactor = 100 (step=0.01), so int value 100 → 1.0 EV.
-        auto* paramSlider = w->findChildren<ParamSlider*>().value(0);
+        auto *paramSlider = w->findChildren<ParamSlider *>().value(0);
         QVERIFY(paramSlider);
-        auto* qslider = paramSlider->findChild<QSlider*>();
+        auto *qslider = paramSlider->findChild<QSlider *>();
         QVERIFY(qslider);
         qslider->setValue(100);
 
@@ -259,14 +252,14 @@ private slots:
     // Invoke sliderReleased → editingFinished lambda → parametersChanged.
     void connectSlider_sliderReleased_firesParametersChanged() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
 
-        auto* paramSlider = w->findChildren<ParamSlider*>().value(0);
+        auto *paramSlider = w->findChildren<ParamSlider *>().value(0);
         QVERIFY(paramSlider);
-        auto* qslider = paramSlider->findChild<QSlider*>();
+        auto *qslider = paramSlider->findChild<QSlider *>();
         QVERIFY(qslider);
         QMetaObject::invokeMethod(qslider, "sliderReleased");
 
@@ -279,7 +272,7 @@ private slots:
     // and all CPU math functions (lines 253–295).
     void toneCurveWidget_paintEvent_noLabel() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 500);
         w->show();
         QApplication::processEvents();
@@ -294,13 +287,13 @@ private slots:
     // explicitly by range to be robust against any ordering uncertainty.
     void toneCurveWidget_paintEvent_withLabel() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 500);
 
         // Find the exposure QSlider by its unique integer range ±500.
-        QSlider* exposureQSlider = nullptr;
-        for (auto* ps : w->findChildren<ParamSlider*>()) {
-            auto* qs = ps->findChild<QSlider*>();
+        QSlider *exposureQSlider = nullptr;
+        for (auto *ps : w->findChildren<ParamSlider *>()) {
+            auto *qs = ps->findChild<QSlider *>();
             if (qs && qs->minimum() == -500 && qs->maximum() == 500) {
                 exposureQSlider = qs;
                 break;
@@ -311,13 +304,13 @@ private slots:
         exposureQSlider->setValue(100);
 
         w->show();
-        QApplication::processEvents();  // first paint: m_z.global = 1.0 → label shown
+        QApplication::processEvents(); // first paint: m_z.global = 1.0 → label shown
     }
 
     // Heap-allocate and explicitly delete to ensure the destructor body runs
     // and is attributed to ExposureEffect.cpp's coverage counters.
     void destructor_heapAllocatedWithControls_doesNotCrash() {
-        auto* e = new ExposureEffect();
+        auto *e = new ExposureEffect();
         e->createControlsWidget();
         delete e;
     }
@@ -328,10 +321,10 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
         // lum ≈ 0.02 (<= 0.075) → exactly blacksEv applied
-        QImage input = makeSolid16bit(32, 32, 5, 5, 5);
-        auto params = zeroParams();
+        QImage input     = makeSolid16bit(32, 32, 5, 5, 5);
+        auto   params    = zeroParams();
         params["blacks"] = 2.0;
-        QImage out = runEffect(e, input, params);
+        QImage out       = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -339,10 +332,10 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
         ExposureEffect e;
         // lum ≈ 0.96 (>= 0.925) → exactly whitesEv applied
-        QImage input = makeSolid16bit(32, 32, 245, 245, 245);
-        auto params = zeroParams();
+        QImage input     = makeSolid16bit(32, 32, 245, 245, 245);
+        auto   params    = zeroParams();
         params["whites"] = -1.0;
-        QImage out = runEffect(e, input, params);
+        QImage out       = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -351,12 +344,13 @@ private slots:
     // exercises the histogram-rendering branch in paintEvent (log-norm fill).
     void onImageLoaded_afterControls_rendersHistogram() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 600);
 
         ImageMetadata meta;
         meta.luminanceHistogram.assign(256, 0);
-        for (int i = 0; i < 256; ++i) meta.luminanceHistogram[i] = uint32_t(i * 10 + 1);
+        for (int i = 0; i < 256; ++i)
+            meta.luminanceHistogram[i] = uint32_t(i * 10 + 1);
         e.onImageLoaded(meta);
 
         w->show();
@@ -367,10 +361,10 @@ private slots:
     // when the widget is later built.
     void onImageLoaded_beforeControls_cachesAndAppliesOnBuild() {
         ExposureEffect e;
-        ImageMetadata meta;
+        ImageMetadata  meta;
         meta.luminanceHistogram.assign(256, 5);
         e.onImageLoaded(meta);
-        QWidget* w = e.createControlsWidget();
+        QWidget *w = e.createControlsWidget();
         w->resize(300, 600);
         w->show();
         QApplication::processEvents();
@@ -381,35 +375,30 @@ private slots:
     // renders at roughly (0.25 * W, H * (1 - 0.25)).
     void toneCurve_mousePress_onZonePoint_setsDragTarget() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 600);
         w->show();
         QApplication::processEvents();
 
-        QWidget* curve = toneCurveWidget(w);
+        QWidget *curve = toneCurveWidget(w);
         QVERIFY(curve);
         const qreal W = curve->width(), H = curve->height();
-        sendMouse(curve, QEvent::MouseButtonPress,
-                  QPointF(0.25 * W, H * (1 - 0.25)),
-                  Qt::LeftButton, Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseButtonPress, QPointF(0.25 * W, H * (1 - 0.25)), Qt::LeftButton, Qt::LeftButton);
         // Release to leave state clean for other tests
-        sendMouse(curve, QEvent::MouseButtonRelease,
-                  QPointF(0.25 * W, H * (1 - 0.25)),
-                  Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseButtonRelease, QPointF(0.25 * W, H * (1 - 0.25)), Qt::LeftButton);
     }
 
     // Non-left-button press is ignored (early return in mousePressEvent).
     void toneCurve_mousePress_nonLeft_ignored() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 600);
         w->show();
         QApplication::processEvents();
 
-        QWidget* curve = toneCurveWidget(w);
+        QWidget *curve = toneCurveWidget(w);
         QVERIFY(curve);
-        sendMouse(curve, QEvent::MouseButtonPress, QPointF(50, 50),
-                  Qt::RightButton, Qt::RightButton);
+        sendMouse(curve, QEvent::MouseButtonPress, QPointF(50, 50), Qt::RightButton, Qt::RightButton);
     }
 
     // Drag a zone control point: press + move fires onZoneChanged → updates the
@@ -417,12 +406,12 @@ private slots:
     // onEditingFinished → parametersChanged.
     void toneCurve_dragZonePoint_emitsLiveAndEditingFinished() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 600);
         w->show();
         QApplication::processEvents();
 
-        QWidget* curve = toneCurveWidget(w);
+        QWidget *curve = toneCurveWidget(w);
         QVERIFY(curve);
         const qreal W = curve->width(), H = curve->height();
 
@@ -431,12 +420,9 @@ private slots:
 
         // Press on shadows zone point, drag up, release.
         const QPointF p0(0.25 * W, H * (1 - 0.25));
-        sendMouse(curve, QEvent::MouseButtonPress, p0,
-                  Qt::LeftButton, Qt::LeftButton);
-        sendMouse(curve, QEvent::MouseMove, QPointF(p0.x(), p0.y() - 20),
-                  Qt::NoButton, Qt::LeftButton);
-        sendMouse(curve, QEvent::MouseButtonRelease, QPointF(p0.x(), p0.y() - 20),
-                  Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseButtonPress, p0, Qt::LeftButton, Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseMove, QPointF(p0.x(), p0.y() - 20), Qt::NoButton, Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseButtonRelease, QPointF(p0.x(), p0.y() - 20), Qt::LeftButton);
 
         QVERIFY(liveSpy.count() >= 1);
         QCOMPARE(doneSpy.count(), 1);
@@ -446,12 +432,12 @@ private slots:
     // onGlobalChanged fires → exposure slider updated → liveParametersChanged.
     void toneCurve_dragGlobalHandle_updatesExposureSlider() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 600);
         w->show();
         QApplication::processEvents();
 
-        QWidget* curve = toneCurveWidget(w);
+        QWidget *curve = toneCurveWidget(w);
         QVERIFY(curve);
         const qreal H = curve->height();
         // Global handle sits at x ≈ r.left()+9 (near left rail) and
@@ -459,12 +445,9 @@ private slots:
         const QPointF gp(9, H * 0.5);
 
         QSignalSpy liveSpy(&e, &PhotoEditorEffect::liveParametersChanged);
-        sendMouse(curve, QEvent::MouseButtonPress, gp,
-                  Qt::LeftButton, Qt::LeftButton);
-        sendMouse(curve, QEvent::MouseMove, QPointF(gp.x(), gp.y() - 30),
-                  Qt::NoButton, Qt::LeftButton);
-        sendMouse(curve, QEvent::MouseButtonRelease, QPointF(gp.x(), gp.y() - 30),
-                  Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseButtonPress, gp, Qt::LeftButton, Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseMove, QPointF(gp.x(), gp.y() - 30), Qt::NoButton, Qt::LeftButton);
+        sendMouse(curve, QEvent::MouseButtonRelease, QPointF(gp.x(), gp.y() - 30), Qt::LeftButton);
         QVERIFY(liveSpy.count() >= 1);
     }
 
@@ -472,18 +455,17 @@ private slots:
     // Following leaveEvent clears the hover state.
     void toneCurve_hoverAndLeave_updatesHoverState() {
         ExposureEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         w->resize(300, 600);
         w->show();
         QApplication::processEvents();
 
-        QWidget* curve = toneCurveWidget(w);
+        QWidget *curve = toneCurveWidget(w);
         QVERIFY(curve);
         const qreal W = curve->width(), H = curve->height();
 
         // Hover over highlights zone point
-        sendMouse(curve, QEvent::MouseMove,
-                  QPointF(0.75 * W, H * (1 - 0.75)));
+        sendMouse(curve, QEvent::MouseMove, QPointF(0.75 * W, H * (1 - 0.75)));
         // Hover away into empty plot area
         sendMouse(curve, QEvent::MouseMove, QPointF(W * 0.5, H * 0.5));
 
@@ -500,8 +482,8 @@ private slots:
         // path; the shared pipeline's no-op branch is covered by the GpuPipeline
         // test. Here we explicitly verify the effect returns unchanged.
         ExposureEffect e;
-        QImage input = makeSolid(16, 16, 120, 120, 120);
-        QImage out = runEffect(e, input, zeroParams());
+        QImage         input = makeSolid(16, 16, 120, 120, 120);
+        QImage         out   = runEffect(e, input, zeroParams());
         QVERIFY(!out.isNull());
     }
 };

@@ -5,7 +5,6 @@
 #include <QVBoxLayout>
 #include <QLabel>
 
-
 namespace {
 
 // Color Balance: three independent RGB offsets applied to shadows, midtones,
@@ -29,13 +28,17 @@ struct BalanceArgs {
 // Each slider is in [-100, 100] mapping to ±0.25 per channel.
 static constexpr float SLIDER_TO_OFFSET = 0.25f / 100.0f;
 
-static BalanceArgs makeArgs(float sR, float sG, float sB,
-                             float mR, float mG, float mB,
-                             float hR, float hG, float hB) {
+static BalanceArgs makeArgs(float sR, float sG, float sB, float mR, float mG, float mB, float hR, float hG, float hB) {
     BalanceArgs a;
-    a.sR = sR * SLIDER_TO_OFFSET; a.sG = sG * SLIDER_TO_OFFSET; a.sB = sB * SLIDER_TO_OFFSET;
-    a.mR = mR * SLIDER_TO_OFFSET; a.mG = mG * SLIDER_TO_OFFSET; a.mB = mB * SLIDER_TO_OFFSET;
-    a.hR = hR * SLIDER_TO_OFFSET; a.hG = hG * SLIDER_TO_OFFSET; a.hB = hB * SLIDER_TO_OFFSET;
+    a.sR = sR * SLIDER_TO_OFFSET;
+    a.sG = sG * SLIDER_TO_OFFSET;
+    a.sB = sB * SLIDER_TO_OFFSET;
+    a.mR = mR * SLIDER_TO_OFFSET;
+    a.mG = mG * SLIDER_TO_OFFSET;
+    a.mB = mB * SLIDER_TO_OFFSET;
+    a.hR = hR * SLIDER_TO_OFFSET;
+    a.hG = hG * SLIDER_TO_OFFSET;
+    a.hB = hB * SLIDER_TO_OFFSET;
     return a;
 }
 
@@ -49,7 +52,7 @@ static BalanceArgs makeArgs(float sR, float sG, float sB,
 // but are added in LINEAR RGB — no encode/decode around the addition, so the
 // full dynamic range of the pipeline is preserved.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 __kernel void applyColorBalanceLinear(__global float4* pixels,
                                        int   w,
                                        int   h,
@@ -88,55 +91,59 @@ __kernel void applyColorBalanceLinear(__global float4* pixels,
 // ============================================================================
 
 ColorBalanceEffect::ColorBalanceEffect()
-    : controlsWidget(nullptr),
-      shadowRParam(nullptr),    shadowGParam(nullptr),    shadowBParam(nullptr),
-      midtoneRParam(nullptr),   midtoneGParam(nullptr),   midtoneBParam(nullptr),
-      highlightRParam(nullptr), highlightGParam(nullptr), highlightBParam(nullptr) {}
+    : controlsWidget(nullptr), shadowRParam(nullptr), shadowGParam(nullptr), shadowBParam(nullptr),
+      midtoneRParam(nullptr), midtoneGParam(nullptr), midtoneBParam(nullptr), highlightRParam(nullptr),
+      highlightGParam(nullptr), highlightBParam(nullptr) {}
 
 ColorBalanceEffect::~ColorBalanceEffect() {}
 
-QString ColorBalanceEffect::getName() const { return "Color Balance"; }
+QString ColorBalanceEffect::getName() const {
+    return "Color Balance";
+}
 QString ColorBalanceEffect::getDescription() const {
     return "Shift colour in shadows, midtones, and highlights independently";
 }
-QString ColorBalanceEffect::getVersion() const { return "1.0.0"; }
+QString ColorBalanceEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool ColorBalanceEffect::initialize() {
     qDebug() << "Color Balance effect initialized";
     return true;
 }
 
-QWidget* ColorBalanceEffect::createControlsWidget() {
+QWidget *ColorBalanceEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(6);
 
-    auto connectSlider = [&](ParamSlider* s) {
+    auto connectSlider = [&](ParamSlider *s) {
         connect(s, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-        connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+        connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
-    auto addBand = [&](const char* label,
-                        ParamSlider*& r, ParamSlider*& g, ParamSlider*& b) {
-        auto* header = new QLabel(label, controlsWidget);
+    auto addBand = [&](const char *label, ParamSlider *&r, ParamSlider *&g, ParamSlider *&b) {
+        auto *header = new QLabel(label, controlsWidget);
         layout->addWidget(header);
-        r = new ParamSlider("Red",   -100.0, 100.0, 0.1, 1);
+        r = new ParamSlider("Red", -100.0, 100.0, 0.1, 1);
         g = new ParamSlider("Green", -100.0, 100.0, 0.1, 1);
-        b = new ParamSlider("Blue",  -100.0, 100.0, 0.1, 1);
+        b = new ParamSlider("Blue", -100.0, 100.0, 0.1, 1);
         r->setToolTip("Shift the red channel (negative = cyan, positive = red).");
         g->setToolTip("Shift the green channel (negative = magenta, positive = green).");
         b->setToolTip("Shift the blue channel (negative = yellow, positive = blue).");
-        connectSlider(r); connectSlider(g); connectSlider(b);
+        connectSlider(r);
+        connectSlider(g);
+        connectSlider(b);
         layout->addWidget(r);
         layout->addWidget(g);
         layout->addWidget(b);
     };
 
-    addBand("Shadows",    shadowRParam,    shadowGParam,    shadowBParam);
-    addBand("Midtones",   midtoneRParam,   midtoneGParam,   midtoneBParam);
+    addBand("Shadows", shadowRParam, shadowGParam, shadowBParam);
+    addBand("Midtones", midtoneRParam, midtoneGParam, midtoneBParam);
     addBand("Highlights", highlightRParam, highlightGParam, highlightBParam);
 
     layout->addStretch();
@@ -145,29 +152,28 @@ QWidget* ColorBalanceEffect::createControlsWidget() {
 
 QMap<QString, QVariant> ColorBalanceEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["shadowR"]    = shadowRParam    ? shadowRParam->value()    : 0.0;
-    params["shadowG"]    = shadowGParam    ? shadowGParam->value()    : 0.0;
-    params["shadowB"]    = shadowBParam    ? shadowBParam->value()    : 0.0;
-    params["midtoneR"]   = midtoneRParam   ? midtoneRParam->value()   : 0.0;
-    params["midtoneG"]   = midtoneGParam   ? midtoneGParam->value()   : 0.0;
-    params["midtoneB"]   = midtoneBParam   ? midtoneBParam->value()   : 0.0;
+    params["shadowR"]    = shadowRParam ? shadowRParam->value() : 0.0;
+    params["shadowG"]    = shadowGParam ? shadowGParam->value() : 0.0;
+    params["shadowB"]    = shadowBParam ? shadowBParam->value() : 0.0;
+    params["midtoneR"]   = midtoneRParam ? midtoneRParam->value() : 0.0;
+    params["midtoneG"]   = midtoneGParam ? midtoneGParam->value() : 0.0;
+    params["midtoneB"]   = midtoneBParam ? midtoneBParam->value() : 0.0;
     params["highlightR"] = highlightRParam ? highlightRParam->value() : 0.0;
     params["highlightG"] = highlightGParam ? highlightGParam->value() : 0.0;
     params["highlightB"] = highlightBParam ? highlightBParam->value() : 0.0;
     return params;
 }
 
-void ColorBalanceEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
-    auto apply = [&](ParamSlider* p, const char* key) {
-        if (p && parameters.contains(key))
-            p->setValue(parameters.value(key).toDouble());
+void ColorBalanceEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    auto apply = [&](ParamSlider *p, const char *key) {
+        if (p && parameters.contains(key)) p->setValue(parameters.value(key).toDouble());
     };
-    apply(shadowRParam,    "shadowR");
-    apply(shadowGParam,    "shadowG");
-    apply(shadowBParam,    "shadowB");
-    apply(midtoneRParam,   "midtoneR");
-    apply(midtoneGParam,   "midtoneG");
-    apply(midtoneBParam,   "midtoneB");
+    apply(shadowRParam, "shadowR");
+    apply(shadowGParam, "shadowG");
+    apply(shadowBParam, "shadowB");
+    apply(midtoneRParam, "midtoneR");
+    apply(midtoneGParam, "midtoneG");
+    apply(midtoneBParam, "midtoneB");
     apply(highlightRParam, "highlightR");
     apply(highlightGParam, "highlightG");
     apply(highlightBParam, "highlightB");
@@ -178,7 +184,7 @@ void ColorBalanceEffect::applyParameters(const QMap<QString, QVariant>& paramete
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool ColorBalanceEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool ColorBalanceEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -186,50 +192,45 @@ bool ColorBalanceEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] ColorBalance initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] ColorBalance initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-static bool allZero(const QMap<QString, QVariant>& p) {
-    static const char* keys[] = {
-        "shadowR", "shadowG", "shadowB",
-        "midtoneR", "midtoneG", "midtoneB",
-        "highlightR", "highlightG", "highlightB",
+static bool allZero(const QMap<QString, QVariant> &p) {
+    static const char *keys[] = {
+        "shadowR", "shadowG", "shadowB", "midtoneR", "midtoneG", "midtoneB", "highlightR", "highlightG", "highlightB",
     };
-    for (const char* k : keys)
+    for (const char *k : keys)
         if (p.value(k, 0).toDouble() != 0.0) return false;
     return true;
 }
 
-bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue& queue,
-                                     cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                     int w, int h,
-                                     const QMap<QString, QVariant>& params) {
-    if (allZero(params)) return true;  // no-op
+bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
+                                    const QMap<QString, QVariant> &params) {
+    if (allZero(params)) return true; // no-op
 
-    const BalanceArgs a = makeArgs(
-        float(params.value("shadowR",    0).toDouble()),
-        float(params.value("shadowG",    0).toDouble()),
-        float(params.value("shadowB",    0).toDouble()),
-        float(params.value("midtoneR",   0).toDouble()),
-        float(params.value("midtoneG",   0).toDouble()),
-        float(params.value("midtoneB",   0).toDouble()),
-        float(params.value("highlightR", 0).toDouble()),
-        float(params.value("highlightG", 0).toDouble()),
-        float(params.value("highlightB", 0).toDouble()));
+    const BalanceArgs a =
+        makeArgs(float(params.value("shadowR", 0).toDouble()), float(params.value("shadowG", 0).toDouble()),
+                 float(params.value("shadowB", 0).toDouble()), float(params.value("midtoneR", 0).toDouble()),
+                 float(params.value("midtoneG", 0).toDouble()), float(params.value("midtoneB", 0).toDouble()),
+                 float(params.value("highlightR", 0).toDouble()), float(params.value("highlightG", 0).toDouble()),
+                 float(params.value("highlightB", 0).toDouble()));
 
-    m_kernelLinear.setArg(0,  buf);
-    m_kernelLinear.setArg(1,  w);
-    m_kernelLinear.setArg(2,  h);
-    m_kernelLinear.setArg(3,  a.sR); m_kernelLinear.setArg(4,  a.sG); m_kernelLinear.setArg(5,  a.sB);
-    m_kernelLinear.setArg(6,  a.mR); m_kernelLinear.setArg(7,  a.mG); m_kernelLinear.setArg(8,  a.mB);
-    m_kernelLinear.setArg(9,  a.hR); m_kernelLinear.setArg(10, a.hG); m_kernelLinear.setArg(11, a.hB);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
-                               cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, a.sR);
+    m_kernelLinear.setArg(4, a.sG);
+    m_kernelLinear.setArg(5, a.sB);
+    m_kernelLinear.setArg(6, a.mR);
+    m_kernelLinear.setArg(7, a.mG);
+    m_kernelLinear.setArg(8, a.mB);
+    m_kernelLinear.setArg(9, a.hR);
+    m_kernelLinear.setArg(10, a.hG);
+    m_kernelLinear.setArg(11, a.hB);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }
-

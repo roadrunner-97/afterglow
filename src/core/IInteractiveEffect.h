@@ -21,29 +21,29 @@ struct ViewportTransform {
     // Pixels of screen per pixel of source.
     float displayScale() const {
         if (imageSize.isEmpty() || viewportSize.isEmpty()) return 1.0f;
-        const float fit = std::min(static_cast<float>(viewportSize.width())  / imageSize.width(),
+        const float fit = std::min(static_cast<float>(viewportSize.width()) / imageSize.width(),
                                    static_cast<float>(viewportSize.height()) / imageSize.height());
         return fit * zoom;
     }
 
     QPointF sourceToScreen(QPointF srcPx) const {
         if (imageSize.isEmpty() || viewportSize.isEmpty()) return {};
-        const float ds = displayScale();
-        const float regionW = viewportSize.width()  / ds;
+        const float ds      = displayScale();
+        const float regionW = viewportSize.width() / ds;
         const float regionH = viewportSize.height() / ds;
-        const float x0 = static_cast<float>(center.x()) * imageSize.width()  - regionW * 0.5f;
-        const float y0 = static_cast<float>(center.y()) * imageSize.height() - regionH * 0.5f;
-        return { (srcPx.x() - x0) * ds, (srcPx.y() - y0) * ds };
+        const float x0      = static_cast<float>(center.x()) * imageSize.width() - regionW * 0.5f;
+        const float y0      = static_cast<float>(center.y()) * imageSize.height() - regionH * 0.5f;
+        return {(srcPx.x() - x0) * ds, (srcPx.y() - y0) * ds};
     }
 
     QPointF screenToSource(QPointF screenPx) const {
         if (imageSize.isEmpty() || viewportSize.isEmpty()) return {};
-        const float ds = displayScale();
-        const float regionW = viewportSize.width()  / ds;
+        const float ds      = displayScale();
+        const float regionW = viewportSize.width() / ds;
         const float regionH = viewportSize.height() / ds;
-        const float x0 = static_cast<float>(center.x()) * imageSize.width()  - regionW * 0.5f;
-        const float y0 = static_cast<float>(center.y()) * imageSize.height() - regionH * 0.5f;
-        return { x0 + screenPx.x() / ds, y0 + screenPx.y() / ds };
+        const float x0      = static_cast<float>(center.x()) * imageSize.width() - regionW * 0.5f;
+        const float y0      = static_cast<float>(center.y()) * imageSize.height() - regionH * 0.5f;
+        return {x0 + screenPx.x() / ds, y0 + screenPx.y() / ds};
     }
 };
 
@@ -57,12 +57,12 @@ class IInteractiveEffect {
 public:
     virtual ~IInteractiveEffect() = default; // GCOVR_EXCL_LINE
 
-    virtual void    paintOverlay (QPainter& painter,  const ViewportTransform& vt) = 0;
-    virtual bool    mousePress   (QMouseEvent* event, const ViewportTransform& vt) = 0;
-    virtual bool    mouseMove    (QMouseEvent* event, const ViewportTransform& vt) = 0;
-    virtual bool    mouseRelease (QMouseEvent* event, const ViewportTransform& vt) = 0;
+    virtual void paintOverlay(QPainter &painter, const ViewportTransform &vt)  = 0;
+    virtual bool mousePress(QMouseEvent *event, const ViewportTransform &vt)   = 0;
+    virtual bool mouseMove(QMouseEvent *event, const ViewportTransform &vt)    = 0;
+    virtual bool mouseRelease(QMouseEvent *event, const ViewportTransform &vt) = 0;
     // GCOVR_EXCL_START
-    virtual QCursor cursorFor    (QPointF /*screenPx*/, const ViewportTransform& /*vt*/) {
+    virtual QCursor cursorFor(QPointF /*screenPx*/, const ViewportTransform & /*vt*/) {
         return {};
     }
     // GCOVR_EXCL_STOP

@@ -17,14 +17,24 @@ class FakeEffect : public PhotoEditorEffect {
 public:
     FakeEffect(QString name, QMap<QString, QVariant> params = {})
         : m_name(std::move(name)), m_params(std::move(params)) {}
-    QString getName()        const override { return m_name; }
-    QString getDescription() const override { return ""; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-    QMap<QString, QVariant> getParameters() const override { return m_params; }
-    void applyParameters(const QMap<QString, QVariant>& p) override {
+    QString getName() const override {
+        return m_name;
+    }
+    QString getDescription() const override {
+        return "";
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
+    QMap<QString, QVariant> getParameters() const override {
+        return m_params;
+    }
+    void applyParameters(const QMap<QString, QVariant> &p) override {
         m_lastApplied = p;
-        m_params = p;
+        m_params      = p;
         ++m_applyCalls;
         // Mirror real effect behaviour: applying parameters notifies
         // listeners that they changed.  SettingsImporter is expected to
@@ -32,8 +42,12 @@ public:
         emit parametersChanged();
     }
 
-    QMap<QString, QVariant> lastApplied() const { return m_lastApplied; }
-    int applyCalls() const { return m_applyCalls; }
+    QMap<QString, QVariant> lastApplied() const {
+        return m_lastApplied;
+    }
+    int applyCalls() const {
+        return m_applyCalls;
+    }
 
 private:
     QString                 m_name;
@@ -56,21 +70,19 @@ private slots:
     }
 
     void parses_imageAndScalarTypes() {
-        const QString yaml = QStringLiteral(
-            "# leading comment\n"
-            "image: \"/tmp/x.jpg\"\n"
-            "effects:\n"
-            "  - name: \"Brightness\"\n"
-            "    enabled: true\n"
-            "    parameters:\n"
-            "      brightness: 5\n"
-            "      contrast: -7\n"
-            "  - name: \"FilmGrain\"\n"
-            "    enabled: false\n"
-            "    parameters:\n"
-            "      lumWeight: false\n"
-            "      amount: 1.5\n"
-        );
+        const QString yaml = QStringLiteral("# leading comment\n"
+                                            "image: \"/tmp/x.jpg\"\n"
+                                            "effects:\n"
+                                            "  - name: \"Brightness\"\n"
+                                            "    enabled: true\n"
+                                            "    parameters:\n"
+                                            "      brightness: 5\n"
+                                            "      contrast: -7\n"
+                                            "  - name: \"FilmGrain\"\n"
+                                            "    enabled: false\n"
+                                            "    parameters:\n"
+                                            "      lumWeight: false\n"
+                                            "      amount: 1.5\n");
 
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
@@ -80,7 +92,7 @@ private slots:
         QCOMPARE(s.effects[0].name, QString("Brightness"));
         QVERIFY(s.effects[0].enabled);
         QCOMPARE(s.effects[0].parameters.value("brightness").toInt(), 5);
-        QCOMPARE(s.effects[0].parameters.value("contrast").toInt(),  -7);
+        QCOMPARE(s.effects[0].parameters.value("contrast").toInt(), -7);
 
         QCOMPARE(s.effects[1].name, QString("FilmGrain"));
         QVERIFY(!s.effects[1].enabled);
@@ -89,11 +101,10 @@ private slots:
     }
 
     void parses_emptyParametersFlowMap() {
-        const QString yaml = QStringLiteral(
-            "effects:\n"
-            "  - name: \"X\"\n"
-            "    enabled: true\n"
-            "    parameters: {}\n");
+        const QString              yaml = QStringLiteral("effects:\n"
+                                                         "  - name: \"X\"\n"
+                                                         "    enabled: true\n"
+                                                         "    parameters: {}\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
         QCOMPARE(s.effects.size(), 1);
@@ -101,27 +112,28 @@ private slots:
     }
 
     void unquotes_escapeSequences() {
-        const QString yaml = QStringLiteral(
-            "image: \"a\\nb\\tc\\\"d\\\\e\\x01f\"\n");
+        const QString              yaml = QStringLiteral("image: \"a\\nb\\tc\\\"d\\\\e\\x01f\"\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
-        const QString expected = QStringLiteral("a\nb\tc\"d\\e\x01""f");
+        const QString expected = QStringLiteral("a\nb\tc\"d\\e\x01"
+                                                "f");
         QCOMPARE(s.image, expected);
     }
 
     void unquotes_carriageReturnAndUnknownEscape() {
         // \r decodes to CR; an unknown escape like \q falls through the
         // switch's default branch and yields the literal escape char.
-        const QString yaml = QStringLiteral("image: \"x\\ry\\qz\"\n");
+        const QString              yaml = QStringLiteral("image: \"x\\ry\\qz\"\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
-        QCOMPARE(s.image, QStringLiteral("x\ry""qz"));
+        QCOMPARE(s.image, QStringLiteral("x\ry"
+                                         "qz"));
     }
 
     void unquotes_malformedHexLeavesXThenChars() {
         // \xZZ — hex parse fails, so the 'x' is appended and Z's continue
         // through the loop as ordinary characters.
-        const QString yaml = QStringLiteral("image: \"\\xZZ\"\n");
+        const QString              yaml = QStringLiteral("image: \"\\xZZ\"\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
         QCOMPARE(s.image, QStringLiteral("xZZ"));
@@ -130,7 +142,7 @@ private slots:
     void unquotes_unterminatedQuoteReturnedAsIs() {
         // Token starts with " but doesn't end with " — unquote bails out
         // and returns the raw token.
-        const QString yaml = QStringLiteral("image: \"unterminated\n");
+        const QString              yaml = QStringLiteral("image: \"unterminated\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
         QCOMPARE(s.image, QStringLiteral("\"unterminated"));
@@ -138,42 +150,38 @@ private slots:
 
     void parses_unquotedFallbackKeepsString() {
         // bare token that isn't bool/int/double — kept as the raw string.
-        const QString yaml = QStringLiteral(
-            "effects:\n"
-            "  - name: \"X\"\n"
-            "    enabled: true\n"
-            "    parameters:\n"
-            "      mode: hello\n");
+        const QString              yaml = QStringLiteral("effects:\n"
+                                                         "  - name: \"X\"\n"
+                                                         "    enabled: true\n"
+                                                         "    parameters:\n"
+                                                         "      mode: hello\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
-        QCOMPARE(s.effects[0].parameters.value("mode").toString(),
-                 QString("hello"));
+        QCOMPARE(s.effects[0].parameters.value("mode").toString(), QString("hello"));
     }
 
     void parses_largeIntegerPromotesToLongLong() {
         // Value beyond INT_MAX must round-trip without losing precision.
-        const QString yaml = QStringLiteral(
-            "effects:\n"
-            "  - name: \"X\"\n"
-            "    enabled: true\n"
-            "    parameters:\n"
-            "      big: 99999999999\n");
+        const QString              yaml = QStringLiteral("effects:\n"
+                                                         "  - name: \"X\"\n"
+                                                         "    enabled: true\n"
+                                                         "    parameters:\n"
+                                                         "      big: 99999999999\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
-        QCOMPARE(s.effects[0].parameters.value("big").toLongLong(),
-                 99999999999LL);
+        QCOMPARE(s.effects[0].parameters.value("big").toLongLong(), 99999999999LL);
     }
 
     void roundTrip_exporterToImporter() {
         // Build a manager, export, parse — values should match what we wrote.
-        EffectManager mgr;
+        EffectManager           mgr;
         QMap<QString, QVariant> p;
         p["i"] = 42;
         p["d"] = 1.25;
         p["b"] = true;
         mgr.addEffect(std::make_unique<FakeEffect>("Test", p), /*enabled=*/false);
 
-        const QString yaml = SettingsExporter::toYaml(mgr, "/tmp/round.jpg");
+        const QString              yaml = SettingsExporter::toYaml(mgr, "/tmp/round.jpg");
         SettingsImporter::Settings parsed;
         QVERIFY(SettingsImporter::fromYaml(yaml, &parsed, nullptr));
 
@@ -191,14 +199,14 @@ private slots:
 
     void applyToManager_pushesEnabledAndParameters() {
         EffectManager mgr;
-        auto owned = std::make_unique<FakeEffect>("Brightness");
-        auto* fake = owned.get();
+        auto          owned = std::make_unique<FakeEffect>("Brightness");
+        auto         *fake  = owned.get();
         mgr.addEffect(std::move(owned), /*enabled=*/true);
 
-        SettingsImporter::Settings s;
+        SettingsImporter::Settings       s;
         SettingsImporter::EffectSettings entry;
-        entry.name = "Brightness";
-        entry.enabled = false;
+        entry.name                     = "Brightness";
+        entry.enabled                  = false;
         entry.parameters["brightness"] = 10;
         entry.parameters["contrast"]   = 20;
         s.effects.append(entry);
@@ -208,18 +216,18 @@ private slots:
         QVERIFY(!mgr.entries()[0].enabled);
         QCOMPARE(fake->applyCalls(), 1);
         QCOMPARE(fake->lastApplied().value("brightness").toInt(), 10);
-        QCOMPARE(fake->lastApplied().value("contrast").toInt(),   20);
+        QCOMPARE(fake->lastApplied().value("contrast").toInt(), 20);
     }
 
     void applyToManager_skipsUnknownEffects() {
         EffectManager mgr;
-        auto owned = std::make_unique<FakeEffect>("Brightness");
-        auto* fake = owned.get();
+        auto          owned = std::make_unique<FakeEffect>("Brightness");
+        auto         *fake  = owned.get();
         mgr.addEffect(std::move(owned));
 
-        SettingsImporter::Settings s;
+        SettingsImporter::Settings       s;
         SettingsImporter::EffectSettings entry;
-        entry.name = "DoesNotExist";
+        entry.name            = "DoesNotExist";
         entry.parameters["x"] = 1;
         s.effects.append(entry);
 
@@ -232,19 +240,23 @@ private slots:
         // queue a pipeline reprocess; the importer is expected to silence
         // those so the caller can fire one definitive reprocess at the end.
         EffectManager mgr;
-        auto ownedA = std::make_unique<FakeEffect>("A");
-        auto ownedB = std::make_unique<FakeEffect>("B");
-        auto* a = ownedA.get();
-        auto* b = ownedB.get();
+        auto          ownedA = std::make_unique<FakeEffect>("A");
+        auto          ownedB = std::make_unique<FakeEffect>("B");
+        auto         *a      = ownedA.get();
+        auto         *b      = ownedB.get();
         mgr.addEffect(std::move(ownedA));
         mgr.addEffect(std::move(ownedB));
 
         QSignalSpy spyA(a, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyB(b, &PhotoEditorEffect::parametersChanged);
 
-        SettingsImporter::Settings s;
-        SettingsImporter::EffectSettings ea; ea.name = "A"; ea.parameters["x"] = 1;
-        SettingsImporter::EffectSettings eb; eb.name = "B"; eb.parameters["y"] = 2;
+        SettingsImporter::Settings       s;
+        SettingsImporter::EffectSettings ea;
+        ea.name            = "A";
+        ea.parameters["x"] = 1;
+        SettingsImporter::EffectSettings eb;
+        eb.name            = "B";
+        eb.parameters["y"] = 2;
         s.effects.append(ea);
         s.effects.append(eb);
 
@@ -260,13 +272,13 @@ private slots:
         // Sidecars written before the id migration use `- name:` keyed
         // entries; applyToManager must still match them by display name.
         EffectManager mgr;
-        auto owned = std::make_unique<FakeEffect>("Brightness");
-        auto* fake = owned.get();
+        auto          owned = std::make_unique<FakeEffect>("Brightness");
+        auto         *fake  = owned.get();
         mgr.addEffect(std::move(owned));
 
-        SettingsImporter::Settings s;
+        SettingsImporter::Settings       s;
         SettingsImporter::EffectSettings entry;
-        entry.name = "Brightness";  // legacy: id is empty
+        entry.name            = "Brightness"; // legacy: id is empty
         entry.parameters["x"] = 7;
         s.effects.append(entry);
 
@@ -277,14 +289,14 @@ private slots:
 
     void applyToManager_leavesUntouchedEffectsAlone() {
         EffectManager mgr;
-        auto ownedA = std::make_unique<FakeEffect>("A");
-        auto ownedB = std::make_unique<FakeEffect>("B");
-        auto* a = ownedA.get();
-        auto* b = ownedB.get();
+        auto          ownedA = std::make_unique<FakeEffect>("A");
+        auto          ownedB = std::make_unique<FakeEffect>("B");
+        auto         *a      = ownedA.get();
+        auto         *b      = ownedB.get();
         mgr.addEffect(std::move(ownedA));
         mgr.addEffect(std::move(ownedB));
 
-        SettingsImporter::Settings s;
+        SettingsImporter::Settings       s;
         SettingsImporter::EffectSettings entry;
         entry.name = "A";
         s.effects.append(entry);
@@ -305,7 +317,7 @@ private slots:
         tmp.close();
 
         SettingsImporter::Settings parsed;
-        QString error;
+        QString                    error;
         QVERIFY(SettingsImporter::readYaml(tmp.fileName(), &parsed, &error));
         QVERIFY(error.isEmpty());
         QCOMPARE(parsed.effects.size(), 1);
@@ -315,16 +327,16 @@ private slots:
     void fromYaml_rejectsTabsInLeadingWhitespace() {
         // Tabs would silently confuse the indent dispatch.  The parser now
         // refuses up-front with a line-numbered error.
-        const QString yaml = QStringLiteral("effects:\n\t- name: \"X\"\n");
+        const QString              yaml = QStringLiteral("effects:\n\t- name: \"X\"\n");
         SettingsImporter::Settings s;
-        QString error;
+        QString                    error;
         QVERIFY(!SettingsImporter::fromYaml(yaml, &s, &error));
         QVERIFY(error.contains("tabs"));
         QVERIFY(error.contains("line 2"));
     }
 
     void fromYaml_clearsErrorOnSuccess() {
-        QString error = "stale";
+        QString                    error = "stale";
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml("", &s, &error));
         QVERIFY(error.isEmpty());
@@ -332,9 +344,8 @@ private slots:
 
     void readYaml_returnsFalseOnMissingFile() {
         SettingsImporter::Settings parsed;
-        QString error;
-        QVERIFY(!SettingsImporter::readYaml("/nonexistent_xyz/__nope__.yml",
-                                            &parsed, &error));
+        QString                    error;
+        QVERIFY(!SettingsImporter::readYaml("/nonexistent_xyz/__nope__.yml", &parsed, &error));
         QVERIFY(!error.isEmpty());
     }
 
@@ -342,11 +353,10 @@ private slots:
     // indent 4 overrides it.  Hand-edited sidecars do this; canonical
     // exporter output does not.
     void parses_idAtIndentFourOverridesDashLine() {
-        const QString yaml = QStringLiteral(
-            "effects:\n"
-            "  - id: \"old_id\"\n"
-            "    id: \"new_id\"\n"
-            "    enabled: true\n");
+        const QString              yaml = QStringLiteral("effects:\n"
+                                                         "  - id: \"old_id\"\n"
+                                                         "    id: \"new_id\"\n"
+                                                         "    enabled: true\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
         QCOMPARE(s.effects.size(), 1);
@@ -356,10 +366,9 @@ private slots:
     // Same for "name:" at indent 4 — covers the parallel branch that
     // updates the display-name field outside the dash line.
     void parses_nameAtIndentFourOverridesDashLine() {
-        const QString yaml = QStringLiteral(
-            "effects:\n"
-            "  - id: \"x\"\n"
-            "    name: \"Pretty Name\"\n");
+        const QString              yaml = QStringLiteral("effects:\n"
+                                                         "  - id: \"x\"\n"
+                                                         "    name: \"Pretty Name\"\n");
         SettingsImporter::Settings s;
         QVERIFY(SettingsImporter::fromYaml(yaml, &s, nullptr));
         QCOMPARE(s.effects.size(), 1);
@@ -371,14 +380,14 @@ private slots:
     // effect must be matched and its parameters applied.
     void applyToManager_prefersIdMatchOverNameMatch() {
         EffectManager mgr;
-        auto owned = std::make_unique<FakeEffect>("Brightness");
-        auto* fake = owned.get();
+        auto          owned = std::make_unique<FakeEffect>("Brightness");
+        auto         *fake  = owned.get();
         mgr.addEffect(std::move(owned));
 
-        SettingsImporter::Settings s;
+        SettingsImporter::Settings       s;
         SettingsImporter::EffectSettings entry;
-        entry.id   = "brightness";          // matches FakeEffect's auto-id
-        entry.name = "WrongOldName";        // would not match by name
+        entry.id              = "brightness";   // matches FakeEffect's auto-id
+        entry.name            = "WrongOldName"; // would not match by name
         entry.parameters["k"] = 99;
         s.effects.append(entry);
 

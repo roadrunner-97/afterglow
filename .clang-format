@@ -1,0 +1,45 @@
+---
+Language:        Cpp
+BasedOnStyle:    LLVM
+
+# Indentation
+IndentWidth:             4
+ContinuationIndentWidth: 4
+UseTab:                  Never
+
+# Line length
+ColumnLimit:             120
+
+# Braces — K&R / Attach everywhere
+BreakBeforeBraces:       Attach
+
+# Pointer/reference: star/ampersand attached to the variable name
+PointerAlignment:        Right
+ReferenceAlignment:      Right
+
+# Access modifiers flush with the class keyword (public: at column 0)
+AccessModifierOffset:    -4
+
+# Namespace bodies are not indented
+NamespaceIndentation:    None
+
+# Align consecutive variable declarations and assignments within a block
+AlignConsecutiveDeclarations:
+  Enabled:                  true
+  AcrossEmptyLines:         false
+  AcrossComments:           false
+  AlignFunctionDeclarations: true
+  AlignFunctionPointers:    false
+AlignConsecutiveAssignments:
+  Enabled:                  true
+  AcrossEmptyLines:         false
+  AcrossComments:           false
+  AlignCompound:            true
+
+# Allow short forms
+AllowShortFunctionsOnASingleLine:     Empty
+AllowShortIfStatementsOnASingleLine:  WithoutElse
+AllowShortLoopsOnASingleLine:         false
+
+# Preserve include order — some OpenCL headers depend on define ordering
+SortIncludes:            Never

@@ -17,11 +17,11 @@ class ICropSource;
 // done once at addEffect() time so per-frame paths can branch without
 // re-running RTTI.
 struct EffectEntry {
-    PhotoEditorEffect*  effect      = nullptr;
+    PhotoEditorEffect  *effect      = nullptr;
     bool                enabled     = true;
-    IGpuEffect*         gpu         = nullptr;
-    IInteractiveEffect* interactive = nullptr;
-    ICropSource*        crop        = nullptr;
+    IGpuEffect         *gpu         = nullptr;
+    IInteractiveEffect *interactive = nullptr;
+    ICropSource        *crop        = nullptr;
 };
 
 /**
@@ -34,18 +34,18 @@ class EffectManager : public QObject {
     Q_OBJECT
 
 public:
-    explicit EffectManager(QObject* parent = nullptr);
+    explicit EffectManager(QObject *parent = nullptr);
 
-    void addEffect(std::unique_ptr<PhotoEditorEffect> effect, bool enabled = true);
-    const QVector<EffectEntry>& entries() const;
+    void                        addEffect(std::unique_ptr<PhotoEditorEffect> effect, bool enabled = true);
+    const QVector<EffectEntry> &entries() const;
     // First effect that implements ICropSource, or nullptr.  Cached on
     // addEffect() so per-frame callers don't re-scan + re-dynamic_cast.
     // cropSource() ignores enabled-state (e.g. for pushing image size on
     // load); activeCropSource() returns null when the owning effect is
     // disabled and is the right choice for crop injection / preview bake.
-    ICropSource*               cropSource() const;
-    ICropSource*               activeCropSource() const;
-    void setEnabled(int index, bool enabled);
+    ICropSource *cropSource() const;
+    ICropSource *activeCropSource() const;
+    void         setEnabled(int index, bool enabled);
 
 signals:
     void effectToggled(int index, bool enabled);
@@ -53,7 +53,7 @@ signals:
 private:
     std::vector<std::unique_ptr<PhotoEditorEffect>> m_owners;
     QVector<EffectEntry>                            m_entries;
-    ICropSource*                                    m_cropSource = nullptr;
+    ICropSource                                    *m_cropSource = nullptr;
 };
 
 #endif // EFFECTMANAGER_H

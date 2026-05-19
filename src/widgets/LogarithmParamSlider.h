@@ -22,11 +22,8 @@ class LogarithmParamSlider : public ParamSlider {
     Q_OBJECT
 
 public:
-    explicit LogarithmParamSlider(const QString& label,
-                                  double min, double max,
-                                  int decimals = 2,
-                                  int resolution = 1000,
-                                  QWidget* parent = nullptr);
+    explicit LogarithmParamSlider(const QString &label, double min, double max, int decimals = 2, int resolution = 1000,
+                                  QWidget *parent = nullptr);
 
 protected:
     double sliderToValue(int sliderInt) const override;
@@ -36,7 +33,7 @@ private:
     double m_min;
     double m_max;
     int    m_resolution;
-    double m_logRatio;  // log(max / min)
+    double m_logRatio; // log(max / min)
 };
 
 #endif // LOGARITHMPARAMSLIDER_H

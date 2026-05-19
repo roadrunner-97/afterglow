@@ -52,7 +52,7 @@ namespace {
 //     We keep linear luma exactly from the current pixel and blend
 //     (Cb, Cr) toward the smoothed reference using BT.601 in linear.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
 
 // Phase 1: blend original -> blurred, with shadow-based attenuation.
 __kernel void denoiseBlendLinear(__global const float4* original,
@@ -170,7 +170,7 @@ __kernel void bilateralDenoiseLinear(__global const float4* in,
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool DenoiseEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool DenoiseEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -183,38 +183,35 @@ bool DenoiseEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] Denoise initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] Denoise initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
-                                cl::Buffer& buf, cl::Buffer& aux,
-                                int w, int h,
-                                const QMap<QString, QVariant>& params) {
-    const float strength       = float(params.value("strength",       30).toDouble()) / 100.0f;
+bool DenoiseEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
+                               const QMap<QString, QVariant> &params) {
+    const float strength       = float(params.value("strength", 30).toDouble()) / 100.0f;
     const float shadowPreserve = float(params.value("shadowPreserve", 50).toDouble()) / 100.0f;
-    const float colorNoise     = float(params.value("colorNoise",     50).toDouble()) / 100.0f;
+    const float colorNoise     = float(params.value("colorNoise", 50).toDouble()) / 100.0f;
     const int   algorithm      = params.value("algorithm", 0).toInt();
 
     if (strength == 0.0f && colorNoise == 0.0f) return true;
 
     // Scale the (source-pixel) radii to preview pixels.  The base formula
     // matches the test path (5 * strength, 10 * colorNoise source pixels).
-    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    const double invScale = 1.0 / std::max(scale, 1e-6);
-    int lumRadiusSrc    = static_cast<int>(strength   * 5.0f + 0.5f);
-    int chromaRadiusSrc = static_cast<int>(colorNoise * 10.0f + 0.5f);
-    if (lumRadiusSrc    < 1) lumRadiusSrc    = 1;
+    const double scale           = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    const double invScale        = 1.0 / std::max(scale, 1e-6);
+    int          lumRadiusSrc    = static_cast<int>(strength * 5.0f + 0.5f);
+    int          chromaRadiusSrc = static_cast<int>(colorNoise * 10.0f + 0.5f);
+    if (lumRadiusSrc < 1) lumRadiusSrc = 1;
     if (chromaRadiusSrc < 2) chromaRadiusSrc = 2;
-    int lumRadius    = std::max(1, static_cast<int>(lumRadiusSrc    * invScale + 0.5));
+    int lumRadius    = std::max(1, static_cast<int>(lumRadiusSrc * invScale + 0.5));
     int chromaRadius = std::max(2, static_cast<int>(chromaRadiusSrc * invScale + 0.5));
 
-    const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
-    cl::Buffer tempBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
+    const size_t      f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    cl::Buffer        tempBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
     const cl::NDRange global(w, h);
 
     // Phase 1: luma denoising
@@ -307,34 +304,35 @@ bool DenoiseEffect::enqueueGpu(cl::CommandQueue& queue,
 // ============================================================================
 
 DenoiseEffect::DenoiseEffect()
-    : m_controls(nullptr),
-      m_strengthParam(nullptr),
-      m_shadowPreserveParam(nullptr),
-      m_colorNoiseParam(nullptr),
-      m_algorithmCombo(nullptr),
-      m_algorithm(0)
-{}
+    : m_controls(nullptr), m_strengthParam(nullptr), m_shadowPreserveParam(nullptr), m_colorNoiseParam(nullptr),
+      m_algorithmCombo(nullptr), m_algorithm(0) {}
 
 DenoiseEffect::~DenoiseEffect() {}
 
-QString DenoiseEffect::getName()        const { return "Denoise"; }
-QString DenoiseEffect::getDescription() const { return "Reduces luminance and colour noise"; }
-QString DenoiseEffect::getVersion()     const { return "1.0.0"; }
+QString DenoiseEffect::getName() const {
+    return "Denoise";
+}
+QString DenoiseEffect::getDescription() const {
+    return "Reduces luminance and colour noise";
+}
+QString DenoiseEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool DenoiseEffect::initialize() {
     qDebug() << "Denoise effect initialized";
     return true;
 }
 
-QWidget* DenoiseEffect::createControlsWidget() {
+QWidget *DenoiseEffect::createControlsWidget() {
     if (m_controls) return m_controls;
 
-    m_controls = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(m_controls);
+    m_controls          = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(m_controls);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    QLabel* algoLabel = new QLabel("Algorithm:");
+    QLabel *algoLabel = new QLabel("Algorithm:");
     algoLabel->setStyleSheet("color: #2C2018;");
     layout->addWidget(algoLabel);
 
@@ -344,11 +342,10 @@ QWidget* DenoiseEffect::createControlsWidget() {
     m_algorithmCombo->setToolTip(
         "Gaussian blend: blurs the image and mixes with the original — cheap but cannot tell noise from detail.\n"
         "Bilateral: edge-aware; smooths flat regions while preserving tonal edges. Slower.");
-    m_algorithmCombo->setStyleSheet(
-        "QComboBox { color: #2C2018; background-color: #F4F1EA;"
-        "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
-        "QComboBox::drop-down { border: none; }"
-        "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
+    m_algorithmCombo->setStyleSheet("QComboBox { color: #2C2018; background-color: #F4F1EA;"
+                                    "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
+                                    "QComboBox::drop-down { border: none; }"
+                                    "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
     layout->addWidget(m_algorithmCombo);
     connect(m_algorithmCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         m_algorithm = index;
@@ -357,23 +354,26 @@ QWidget* DenoiseEffect::createControlsWidget() {
 
     m_strengthParam = new ParamSlider("Strength", 0.0, 100.0, 0.1, 1);
     m_strengthParam->setValue(30);
-    m_strengthParam->setToolTip("Amount of luminance (brightness) noise reduction. Higher values blend more strongly toward the smoothed result.\nTip: keep below 60 to preserve fine texture.");
+    m_strengthParam->setToolTip("Amount of luminance (brightness) noise reduction. Higher values blend more strongly "
+                                "toward the smoothed result.\nTip: keep below 60 to preserve fine texture.");
     connect(m_strengthParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-    connect(m_strengthParam, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+    connect(m_strengthParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(m_strengthParam);
 
     m_shadowPreserveParam = new ParamSlider("Shadow Preserve", 0.0, 100.0, 0.1, 1);
     m_shadowPreserveParam->setValue(50);
-    m_shadowPreserveParam->setToolTip("Reduces denoising strength in dark areas to protect shadow detail from over-smoothing.\nAt 100, the darkest pixels receive almost no noise reduction.");
+    m_shadowPreserveParam->setToolTip("Reduces denoising strength in dark areas to protect shadow detail from "
+                                      "over-smoothing.\nAt 100, the darkest pixels receive almost no noise reduction.");
     connect(m_shadowPreserveParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-    connect(m_shadowPreserveParam, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+    connect(m_shadowPreserveParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(m_shadowPreserveParam);
 
     m_colorNoiseParam = new ParamSlider("Color Noise", 0.0, 100.0, 0.1, 1);
     m_colorNoiseParam->setValue(50);
-    m_colorNoiseParam->setToolTip("Reduces chroma (colour speckle) noise by blending colour channels toward a heavily-smoothed reference while keeping luminance unchanged.");
+    m_colorNoiseParam->setToolTip("Reduces chroma (colour speckle) noise by blending colour channels toward a "
+                                  "heavily-smoothed reference while keeping luminance unchanged.");
     connect(m_colorNoiseParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-    connect(m_colorNoiseParam, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+    connect(m_colorNoiseParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(m_colorNoiseParam);
 
     layout->addStretch();
@@ -382,14 +382,14 @@ QWidget* DenoiseEffect::createControlsWidget() {
 
 QMap<QString, QVariant> DenoiseEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["strength"]       = m_strengthParam       ? m_strengthParam->value()       : 30.0;
+    params["strength"]       = m_strengthParam ? m_strengthParam->value() : 30.0;
     params["shadowPreserve"] = m_shadowPreserveParam ? m_shadowPreserveParam->value() : 50.0;
-    params["colorNoise"]     = m_colorNoiseParam     ? m_colorNoiseParam->value()     : 50.0;
+    params["colorNoise"]     = m_colorNoiseParam ? m_colorNoiseParam->value() : 50.0;
     params["algorithm"]      = m_algorithm;
     return params;
 }
 
-void DenoiseEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+void DenoiseEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
     if (m_strengthParam && parameters.contains("strength"))
         m_strengthParam->setValue(parameters.value("strength").toDouble());
     if (m_shadowPreserveParam && parameters.contains("shadowPreserve"))
@@ -405,4 +405,3 @@ void DenoiseEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
     }
     emit parametersChanged();
 }
-

@@ -20,20 +20,15 @@ class ImageProcessor : public QObject {
     Q_OBJECT
 
 public:
-    explicit ImageProcessor(QObject* parent = nullptr);
+    explicit ImageProcessor(QObject *parent = nullptr);
 
     // bypassEffects=true skips the entire effect list — used by the
-     // \-key "before" preview so the viewport falls back to the raw,
-     // un-edited image without disturbing per-effect enabled flags.
-    void processImageAsync(const QImage& originalImage,
-                           const EffectManager& effects,
-                           ViewportRequest viewport = {},
-                           RunMode mode = RunMode::Commit,
-                           bool bypassEffects = false);
+    // \-key "before" preview so the viewport falls back to the raw,
+    // un-edited image without disturbing per-effect enabled flags.
+    void processImageAsync(const QImage &originalImage, const EffectManager &effects, ViewportRequest viewport = {},
+                           RunMode mode = RunMode::Commit, bool bypassEffects = false);
 
-    void exportImageAsync(const QImage& originalImage,
-                          const EffectManager& effects,
-                          QString destinationPath);
+    void exportImageAsync(const QImage &originalImage, const EffectManager &effects, QString destinationPath);
 
 signals:
     void processingStarted();
@@ -45,8 +40,7 @@ signals:
     void exportComplete(QImage result, QString destinationPath);
 
 private:
-    std::shared_ptr<std::atomic<uint64_t>> generationPtr =
-        std::make_shared<std::atomic<uint64_t>>(0);
+    std::shared_ptr<std::atomic<uint64_t>> generationPtr = std::make_shared<std::atomic<uint64_t>>(0);
 
     std::shared_ptr<GpuPipeline> m_pipeline = std::make_shared<GpuPipeline>();
 };

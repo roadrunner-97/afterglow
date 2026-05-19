@@ -19,8 +19,7 @@
 
 // Build a simple ViewportTransform so a 100×100 image maps 1:1 onto a
 // 100×100 viewport with zoom=1 (displayScale=1), centre at (0.5,0.5).
-static ViewportTransform makeVT(int imageW = 100, int imageH = 100,
-                                int vpW = 100, int vpH = 100) {
+static ViewportTransform makeVT(int imageW = 100, int imageH = 100, int vpW = 100, int vpH = 100) {
     ViewportTransform vt;
     vt.imageSize    = QSize(imageW, imageH);
     vt.viewportSize = QSize(vpW, vpH);
@@ -30,10 +29,8 @@ static ViewportTransform makeVT(int imageW = 100, int imageH = 100,
 }
 
 // Synthesise and send a QMouseEvent (press/move/release).
-static QMouseEvent makeMouseEvent(QEvent::Type type, QPointF pos,
-                                   Qt::MouseButton btn = Qt::LeftButton) {
-    return QMouseEvent(type, pos, pos, pos, btn,
-                       (type == QEvent::MouseButtonRelease) ? Qt::NoButton : btn,
+static QMouseEvent makeMouseEvent(QEvent::Type type, QPointF pos, Qt::MouseButton btn = Qt::LeftButton) {
+    return QMouseEvent(type, pos, pos, pos, btn, (type == QEvent::MouseButtonRelease) ? Qt::NoButton : btn,
                        Qt::NoModifier);
 }
 
@@ -50,7 +47,7 @@ private slots:
 
     void meta_names() {
         CropRotateEffect e;
-        QCOMPARE(e.getName(),    QString("Crop & Rotate"));
+        QCOMPARE(e.getName(), QString("Crop & Rotate"));
         QVERIFY(!e.getDescription().isEmpty());
         QCOMPARE(e.getVersion(), QString("1.0"));
         QVERIFY(e.initialize());
@@ -87,22 +84,20 @@ private slots:
 
     void processImage_nonNull_returnsUnchanged() {
         CropRotateEffect e;
-        QImage input = makeSolid(64, 64, 128, 64, 32);
-        QImage out   = runEffect(e, input);
+        QImage           input = makeSolid(64, 64, 128, 64, 32);
+        QImage           out   = runEffect(e, input);
         // Same dimensions and pixel data
         QCOMPARE(out.size(), input.size());
         QCOMPARE(out.format(), input.format());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 128 && qGreen(px) == 64 && qBlue(px) == 32;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 128 && qGreen(px) == 64 && qBlue(px) == 32; }));
     }
 
     void processImage_withParams_returnsUnchanged() {
-        CropRotateEffect e;
-        QImage input = makeSolid(32, 32, 100, 100, 100);
+        CropRotateEffect        e;
+        QImage                  input = makeSolid(32, 32, 100, 100, 100);
         QMap<QString, QVariant> params;
         params["angle"] = 15.0;
-        QImage out = runEffect(e, input, params);
+        QImage out      = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QCOMPARE(out.size(), input.size());
     }
@@ -111,7 +106,7 @@ private slots:
 
     void getParameters_defaultKeys() {
         CropRotateEffect e;
-        auto p = e.getParameters();
+        auto             p = e.getParameters();
         QVERIFY(p.contains("angle"));
         QVERIFY(p.contains("quarterTurns"));
         QVERIFY(p.contains("cropX0"));
@@ -122,34 +117,34 @@ private slots:
 
     void getParameters_defaultValues() {
         CropRotateEffect e;
-        auto p = e.getParameters();
-        QCOMPARE(p["angle"].toDouble(),        0.0);
-        QCOMPARE(p["quarterTurns"].toInt(),     0);
-        QCOMPARE(p["cropX0"].toDouble(),        0.0);
-        QCOMPARE(p["cropY0"].toDouble(),        0.0);
-        QCOMPARE(p["cropX1"].toDouble(),        1.0);
-        QCOMPARE(p["cropY1"].toDouble(),        1.0);
+        auto             p = e.getParameters();
+        QCOMPARE(p["angle"].toDouble(), 0.0);
+        QCOMPARE(p["quarterTurns"].toInt(), 0);
+        QCOMPARE(p["cropX0"].toDouble(), 0.0);
+        QCOMPARE(p["cropY0"].toDouble(), 0.0);
+        QCOMPARE(p["cropX1"].toDouble(), 1.0);
+        QCOMPARE(p["cropY1"].toDouble(), 1.0);
     }
 
     // ── createControlsWidget ────────────────────────────────────────────────
 
     void createControlsWidget_notNull() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
     }
 
     void createControlsWidget_returnsSameWidget() {
         CropRotateEffect e;
-        QWidget* w1 = e.createControlsWidget();
-        QWidget* w2 = e.createControlsWidget();
+        QWidget         *w1 = e.createControlsWidget();
+        QWidget         *w2 = e.createControlsWidget();
         QCOMPARE(w1, w2);
     }
 
     void createControlsWidget_hasAngleSlider() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
-        auto sliders = w->findChildren<ParamSlider*>();
+        QWidget         *w       = e.createControlsWidget();
+        auto             sliders = w->findChildren<ParamSlider *>();
         QVERIFY(!sliders.isEmpty());
     }
 
@@ -157,15 +152,15 @@ private slots:
 
     void angleSlider_valueChanged_emitsLiveParametersChanged() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto       sliders = w->findChildren<ParamSlider *>();
         QVERIFY(!sliders.isEmpty());
 
-        ParamSlider* slider = sliders.first();
-        auto* qs = slider->findChild<QSlider*>();
+        ParamSlider *slider = sliders.first();
+        auto        *qs     = slider->findChild<QSlider *>();
         QVERIFY(qs);
         qs->setValue(qs->value() + 10);
         QVERIFY(spyLive.count() >= 1);
@@ -173,15 +168,15 @@ private slots:
 
     void angleSlider_editingFinished_emitsParametersChanged() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto       sliders = w->findChildren<ParamSlider *>();
         QVERIFY(!sliders.isEmpty());
 
-        ParamSlider* slider = sliders.first();
-        auto* qs = slider->findChild<QSlider*>();
+        ParamSlider *slider = sliders.first();
+        auto        *qs     = slider->findChild<QSlider *>();
         QVERIFY(qs);
         qs->setValue(qs->value() + 5);
         QMetaObject::invokeMethod(qs, "sliderReleased");
@@ -199,18 +194,18 @@ private slots:
         CropRotateEffect e;
         // Mark as manual by applying off-default crop params + 45° rotation.
         QMap<QString, QVariant> params;
-        params["angle"]   = 45.0;
-        params["cropX0"]  = 0.001;
-        params["cropY0"]  = 0.001;
-        params["cropX1"]  = 0.999;
-        params["cropY1"]  = 0.999;
+        params["angle"]  = 45.0;
+        params["cropX0"] = 0.001;
+        params["cropY0"] = 0.001;
+        params["cropX1"] = 0.999;
+        params["cropY1"] = 0.999;
         e.applyParameters(params);
         // setSourceImageSize → reFitOrClamp → clampToImageBounds with the
         // oversized-rotated-AABB branch active.
         e.setSourceImageSize(QSize(800, 600));
         const QRectF c = e.userCropRect();
         // Crop must have been scaled down to fit within [0, 1]² after rotation.
-        QVERIFY(c.width()  < 0.999);
+        QVERIFY(c.width() < 0.999);
         QVERIFY(c.height() < 0.999);
         // Centre stays roughly in the middle (the original was ~centred).
         QVERIFY(qAbs(c.center().x() - 0.5) < 0.05);
@@ -219,13 +214,16 @@ private slots:
 
     void rotate90ccw_incrementsQuarterTurns() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
-        QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* ccwBtn = nullptr;
-        for (auto* b : btns)
-            if (b->text().contains("CCW")) { ccwBtn = b; break; }
+        QSignalSpy   spy(&e, &PhotoEditorEffect::parametersChanged);
+        auto         btns   = w->findChildren<QPushButton *>();
+        QPushButton *ccwBtn = nullptr;
+        for (auto *b : btns)
+            if (b->text().contains("CCW")) {
+                ccwBtn = b;
+                break;
+            }
         QVERIFY(ccwBtn);
 
         ccwBtn->click();
@@ -238,49 +236,56 @@ private slots:
 
     void rotate90cw_decrementsQuarterTurns() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* cwBtn = nullptr;
-        for (auto* b : btns)
+        auto         btns  = w->findChildren<QPushButton *>();
+        QPushButton *cwBtn = nullptr;
+        for (auto *b : btns)
             if (b->text().contains("CW") && !b->text().contains("CCW")) {
-                cwBtn = b; break;
+                cwBtn = b;
+                break;
             }
         QVERIFY(cwBtn);
 
         cwBtn->click();
-        QCOMPARE(e.quarterTurns(), 3);  // 0 - 1 mod 4 = 3
+        QCOMPARE(e.quarterTurns(), 3); // 0 - 1 mod 4 = 3
     }
 
     void rotate90ccw_wrapAround() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* ccwBtn = nullptr;
-        for (auto* b : btns)
-            if (b->text().contains("CCW")) { ccwBtn = b; break; }
+        auto         btns   = w->findChildren<QPushButton *>();
+        QPushButton *ccwBtn = nullptr;
+        for (auto *b : btns)
+            if (b->text().contains("CCW")) {
+                ccwBtn = b;
+                break;
+            }
         QVERIFY(ccwBtn);
 
         // 4 × CCW should bring us back to 0
-        for (int i = 0; i < 4; ++i) ccwBtn->click();
+        for (int i = 0; i < 4; ++i)
+            ccwBtn->click();
         QCOMPARE(e.quarterTurns(), 0);
     }
 
     void rotate90cw_wrapAround() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* cwBtn = nullptr;
-        for (auto* b : btns)
+        auto         btns  = w->findChildren<QPushButton *>();
+        QPushButton *cwBtn = nullptr;
+        for (auto *b : btns)
             if (b->text().contains("CW") && !b->text().contains("CCW")) {
-                cwBtn = b; break;
+                cwBtn = b;
+                break;
             }
         QVERIFY(cwBtn);
 
         // 4 × CW should bring us back to 0
-        for (int i = 0; i < 4; ++i) cwBtn->click();
+        for (int i = 0; i < 4; ++i)
+            cwBtn->click();
         QCOMPARE(e.quarterTurns(), 0);
     }
 
@@ -288,15 +293,15 @@ private slots:
 
     void resetButton_restoresDefaults() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
         // Mess with state
-        QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* ccwBtn = nullptr;
-        QPushButton* resetBtn = nullptr;
-        for (auto* b : btns) {
-            if (b->text().contains("CCW"))   ccwBtn   = b;
+        QSignalSpy   spy(&e, &PhotoEditorEffect::parametersChanged);
+        auto         btns     = w->findChildren<QPushButton *>();
+        QPushButton *ccwBtn   = nullptr;
+        QPushButton *resetBtn = nullptr;
+        for (auto *b : btns) {
+            if (b->text().contains("CCW")) ccwBtn = b;
             if (b->text().contains("Reset")) resetBtn = b;
         }
         QVERIFY(ccwBtn && resetBtn);
@@ -305,7 +310,7 @@ private slots:
         spy.clear();
 
         resetBtn->click();
-        QCOMPARE(e.userCropRect(),  QRectF(0.0, 0.0, 1.0, 1.0));
+        QCOMPARE(e.userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
         QCOMPARE(e.userCropAngle(), 0.0f);
         QCOMPARE(e.quarterTurns(), 0);
         QVERIFY(spy.count() >= 1);
@@ -315,21 +320,24 @@ private slots:
 
     void userCropAngle_combinesQuarterTurnsAndAngle() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
         // Set angle via internal slider drag (setValue on QSlider triggers valueChanged)
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto sliders = w->findChildren<ParamSlider *>();
         QVERIFY(!sliders.isEmpty());
-        auto* qs = sliders.first()->findChild<QSlider*>();
+        auto *qs = sliders.first()->findChild<QSlider *>();
         QVERIFY(qs);
         // Scale: range is -45..45 with step 0.01, so slider int = value / 0.01
         // We want m_angleDeg = 10°, so set slider to 1000 ticks from 0
-        qs->setValue(1000);  // 1000 * 0.01 = 10°
+        qs->setValue(1000); // 1000 * 0.01 = 10°
 
         // One CCW turn: quarterTurns=1
-        auto btns = w->findChildren<QPushButton*>();
-        for (auto* b : btns)
-            if (b->text().contains("CCW")) { b->click(); break; }
+        auto btns = w->findChildren<QPushButton *>();
+        for (auto *b : btns)
+            if (b->text().contains("CCW")) {
+                b->click();
+                break;
+            }
 
         float expected = 90.0f + 10.0f;
         QVERIFY2(std::abs(e.userCropAngle() - expected) < 0.5f,
@@ -340,12 +348,15 @@ private slots:
 
     void straightenButton_togglesSubTool() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
-        auto btns = w->findChildren<QPushButton*>();
-        QPushButton* straightenBtn = nullptr;
-        for (auto* b : btns)
-            if (b->text().contains("Straighten")) { straightenBtn = b; break; }
+        auto         btns          = w->findChildren<QPushButton *>();
+        QPushButton *straightenBtn = nullptr;
+        for (auto *b : btns)
+            if (b->text().contains("Straighten")) {
+                straightenBtn = b;
+                break;
+            }
         QVERIFY(straightenBtn);
 
         QCOMPARE(e.subTool(), CropRotateEffect::SubTool::Handles);
@@ -359,8 +370,8 @@ private slots:
 
     void icropSource_interface_accessible() {
         CropRotateEffect e;
-        ICropSource* src = &e;
-        QCOMPARE(src->userCropRect(),  QRectF(0.0, 0.0, 1.0, 1.0));
+        ICropSource     *src = &e;
+        QCOMPARE(src->userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
         QCOMPARE(src->userCropAngle(), 0.0f);
     }
 
@@ -371,7 +382,7 @@ private slots:
         // real CL objects without a device, but we exercise the no-op path.
         // The function simply returns true; tested via mock context not needed.
         CropRotateEffect e;
-        IGpuEffect* gpu = &e;
+        IGpuEffect      *gpu = &e;
         // We can't easily create a cl::Context without an OpenCL device,
         // so just confirm the vtable is wired correctly (symbol present):
         (void)gpu;
@@ -384,14 +395,14 @@ private slots:
     // source pixels map 1:1 to screen pixels.
     void viewportTransform_sourceToScreen_identity() {
         ViewportTransform vt = makeVT();
-        QPointF p = vt.sourceToScreen({50.0, 50.0});
+        QPointF           p  = vt.sourceToScreen({50.0, 50.0});
         QCOMPARE(p.x(), 50.0);
         QCOMPARE(p.y(), 50.0);
     }
 
     void viewportTransform_screenToSource_identity() {
         ViewportTransform vt = makeVT();
-        QPointF p = vt.screenToSource({30.0, 70.0});
+        QPointF           p  = vt.screenToSource({30.0, 70.0});
         QCOMPARE(p.x(), 30.0);
         QCOMPARE(p.y(), 70.0);
     }
@@ -399,7 +410,7 @@ private slots:
     // ── Mouse outside the crop rect — not claimed ────────────────────────────
 
     void mousePress_outsideCrop_notClaimed() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
         // Crop is full frame [0,0,1,1]; anything on the image IS inside.
         // Shrink the crop first so we have an outside region.
@@ -409,9 +420,9 @@ private slots:
         // Let's shrink the crop manually by dragging the TL corner.
         // TL corner screen pos with 1:1 map: (0, 0)
         {
-            auto ev = makeMouseEvent(QEvent::MouseButtonPress, {0.0, 0.0});
+            auto ev      = makeMouseEvent(QEvent::MouseButtonPress, {0.0, 0.0});
             bool claimed = e.mousePress(&ev, vt);
-            QVERIFY(claimed);  // hits TL corner handle
+            QVERIFY(claimed); // hits TL corner handle
         }
         // Move TL to (30, 30) — crop becomes [0.3, 0.3, 0.7, 0.7]
         {
@@ -424,7 +435,7 @@ private slots:
         }
 
         // Now press at (10, 10) — outside the new crop rect and not on any handle
-        auto ev = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 10.0});
+        auto ev      = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 10.0});
         bool claimed = e.mousePress(&ev, vt);
         QVERIFY(!claimed);
     }
@@ -432,18 +443,18 @@ private slots:
     // ── Corner drag updates crop rect ────────────────────────────────────────
 
     void mouseDrag_topLeftCorner_updatesCropRect() {
-        CropRotateEffect e;
-        ViewportTransform vt = makeVT();  // 100x100 1:1
+        CropRotateEffect  e;
+        ViewportTransform vt = makeVT(); // 100x100 1:1
 
         // TL handle is at source (0,0) → screen (0,0)
         {
-            auto ev = makeMouseEvent(QEvent::MouseButtonPress, {0.0, 0.0});
+            auto ev      = makeMouseEvent(QEvent::MouseButtonPress, {0.0, 0.0});
             bool claimed = e.mousePress(&ev, vt);
             QVERIFY(claimed);
         }
         // Move to (20, 20) — normalised (0.2, 0.2)
         {
-            auto ev = makeMouseEvent(QEvent::MouseMove, {20.0, 20.0});
+            auto ev    = makeMouseEvent(QEvent::MouseMove, {20.0, 20.0});
             bool moved = e.mouseMove(&ev, vt);
             QVERIFY(moved);
         }
@@ -455,12 +466,12 @@ private slots:
         QRectF crop = e.userCropRect();
         QVERIFY(crop.x() > 0.0);
         QVERIFY(crop.y() > 0.0);
-        QVERIFY(std::abs(crop.x() + crop.width()  - 1.0) < 1e-5);
+        QVERIFY(std::abs(crop.x() + crop.width() - 1.0) < 1e-5);
         QVERIFY(std::abs(crop.y() + crop.height() - 1.0) < 1e-5);
     }
 
     void mouseDrag_bottomRightCorner_updatesCropRect() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // BR handle at screen (100, 100)
@@ -480,14 +491,14 @@ private slots:
         QRectF crop = e.userCropRect();
         QCOMPARE(crop.x(), 0.0);
         QCOMPARE(crop.y(), 0.0);
-        QVERIFY(crop.width()  < 1.0);
+        QVERIFY(crop.width() < 1.0);
         QVERIFY(crop.height() < 1.0);
     }
 
     // ── Top-right corner drag ────────────────────────────────────────────────
 
     void mouseDrag_topRightCorner_updatesCropRect() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // TR handle at screen (100, 0)
@@ -507,14 +518,14 @@ private slots:
         QRectF crop = e.userCropRect();
         QCOMPARE(crop.x(), 0.0);
         QVERIFY(crop.y() > 0.0);
-        QVERIFY(crop.width()  < 1.0);
+        QVERIFY(crop.width() < 1.0);
         QVERIFY(std::abs(crop.y() + crop.height() - 1.0) < 1e-5);
     }
 
     // ── Bottom-left corner drag ──────────────────────────────────────────────
 
     void mouseDrag_bottomLeftCorner_updatesCropRect() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // BL handle at screen (0, 100)
@@ -541,12 +552,12 @@ private slots:
     // ── Edge drag (top) ──────────────────────────────────────────────────────
 
     void mouseDrag_topEdge_updatesCropTop() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Top edge midpoint at screen (50, 0)
         {
-            auto ev = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 0.0});
+            auto ev      = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 0.0});
             bool claimed = e.mousePress(&ev, vt);
             QVERIFY(claimed);
         }
@@ -568,7 +579,7 @@ private slots:
     // ── Edge drag (bottom) ───────────────────────────────────────────────────
 
     void mouseDrag_bottomEdge_updatesCropBottom() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Bottom edge midpoint at screen (50, 100)
@@ -593,7 +604,7 @@ private slots:
     // ── Edge drag (left) ─────────────────────────────────────────────────────
 
     void mouseDrag_leftEdge_updatesCropLeft() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Left edge midpoint at screen (0, 50)
@@ -618,7 +629,7 @@ private slots:
     // ── Edge drag (right) ────────────────────────────────────────────────────
 
     void mouseDrag_rightEdge_updatesCropRight() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Right edge midpoint at screen (100, 50)
@@ -643,7 +654,7 @@ private slots:
     // ── Move drag translates the whole rect ──────────────────────────────────
 
     void mouseDrag_insideCrop_movesCropRect() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // First shrink the crop to [0.2, 0.2, 0.6, 0.6] by dragging BL corner.
@@ -675,26 +686,23 @@ private slots:
 
         // Press inside the crop (not on a handle)
         {
-            auto ev = makeMouseEvent(QEvent::MouseButtonPress,
-                                     QPointF(cx, cy));
+            auto ev      = makeMouseEvent(QEvent::MouseButtonPress, QPointF(cx, cy));
             bool claimed = e.mousePress(&ev, vt);
             QVERIFY(claimed);
         }
         // Move +5 px in X, +5 px in Y
         {
-            auto ev = makeMouseEvent(QEvent::MouseMove,
-                                     QPointF(cx + 5.0f, cy + 5.0f));
+            auto ev = makeMouseEvent(QEvent::MouseMove, QPointF(cx + 5.0f, cy + 5.0f));
             e.mouseMove(&ev, vt);
         }
         {
-            auto ev = makeMouseEvent(QEvent::MouseButtonRelease,
-                                     QPointF(cx + 5.0f, cy + 5.0f));
+            auto ev = makeMouseEvent(QEvent::MouseButtonRelease, QPointF(cx + 5.0f, cy + 5.0f));
             e.mouseRelease(&ev, vt);
         }
 
         QRectF after = e.userCropRect();
         // Size preserved
-        QCOMPARE(after.width(),  before.width());
+        QCOMPARE(after.width(), before.width());
         QCOMPARE(after.height(), before.height());
         // Position shifted
         QVERIFY(std::abs(after.x() - before.x() - 0.05) < 0.01);
@@ -704,7 +712,7 @@ private slots:
     // ── Rotation grip updates angle ──────────────────────────────────────────
 
     void mouseDrag_rotationGrip_updatesAngle() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Rotation grip is at screen (50, -30) with default 1:1 map,
@@ -713,7 +721,7 @@ private slots:
         // Grip: (50, 0 - 30) = (50, -30).
         QPointF gripPos(50.0, -30.0);
         {
-            auto ev = makeMouseEvent(QEvent::MouseButtonPress, gripPos);
+            auto ev      = makeMouseEvent(QEvent::MouseButtonPress, gripPos);
             bool claimed = e.mousePress(&ev, vt);
             QVERIFY(claimed);
         }
@@ -721,7 +729,7 @@ private slots:
         // Drag to the right of centre → positive angle change
         QPointF movePos(90.0, -30.0);
         {
-            auto ev = makeMouseEvent(QEvent::MouseMove, movePos);
+            auto ev    = makeMouseEvent(QEvent::MouseMove, movePos);
             bool moved = e.mouseMove(&ev, vt);
             QVERIFY(moved);
         }
@@ -745,36 +753,34 @@ private slots:
     // ── Non-left-button press — not claimed ──────────────────────────────────
 
     void mousePress_rightButton_notClaimed() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
-        auto ev = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 50.0},
-                                  Qt::RightButton);
+        auto              ev = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 50.0}, Qt::RightButton);
         QVERIFY(!e.mousePress(&ev, vt));
     }
 
     void mouseRelease_rightButton_notClaimed() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
-        auto ev = makeMouseEvent(QEvent::MouseButtonRelease, {50.0, 50.0},
-                                  Qt::RightButton);
+        auto              ev = makeMouseEvent(QEvent::MouseButtonRelease, {50.0, 50.0}, Qt::RightButton);
         QVERIFY(!e.mouseRelease(&ev, vt));
     }
 
     // ── mouseMove with no drag — not claimed ─────────────────────────────────
 
     void mouseMove_noDrag_returnsFalse() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
-        auto ev = makeMouseEvent(QEvent::MouseMove, {50.0, 50.0});
+        auto              ev = makeMouseEvent(QEvent::MouseMove, {50.0, 50.0});
         QVERIFY(!e.mouseMove(&ev, vt));
     }
 
     // ── mouseRelease without prior press ─────────────────────────────────────
 
     void mouseRelease_noDrag_returnsFalse() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
-        auto ev = makeMouseEvent(QEvent::MouseButtonRelease, {50.0, 50.0});
+        auto              ev = makeMouseEvent(QEvent::MouseButtonRelease, {50.0, 50.0});
         QVERIFY(!e.mouseRelease(&ev, vt));
     }
 
@@ -782,23 +788,26 @@ private slots:
 
     void mousePress_straightenLine_claimsEvent() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
         // Activate StraightenLine sub-tool via button
-        auto btns = w->findChildren<QPushButton*>();
-        for (auto* b : btns)
-            if (b->text().contains("Straighten")) { b->click(); break; }
+        auto btns = w->findChildren<QPushButton *>();
+        for (auto *b : btns)
+            if (b->text().contains("Straighten")) {
+                b->click();
+                break;
+            }
         QCOMPARE(e.subTool(), CropRotateEffect::SubTool::StraightenLine);
 
         ViewportTransform vt = makeVT();
-        auto ev = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 50.0});
+        auto              ev = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 50.0});
         QVERIFY(e.mousePress(&ev, vt));
     }
 
     // ── cursorFor ────────────────────────────────────────────────────────────
 
     void cursorFor_cornerHandle_returnsDiagCursor() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
         // TL corner at screen (0,0)
         QCursor c = e.cursorFor({0.0, 0.0}, vt);
@@ -806,7 +815,7 @@ private slots:
     }
 
     void cursorFor_edgeHandle_returnsSizeCursor() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
         // Top edge midpoint at screen (50, 0)
         QCursor c = e.cursorFor({50.0, 0.0}, vt);
@@ -814,7 +823,7 @@ private slots:
     }
 
     void cursorFor_insideCrop_returnsSizeAllCursor() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
         // Centre of image, not on any handle
         QCursor c = e.cursorFor({50.0, 50.0}, vt);
@@ -822,7 +831,7 @@ private slots:
     }
 
     void cursorFor_rotationGrip_returnsOpenHandCursor() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
         // Rotation grip at (50, -30)
         QCursor c = e.cursorFor({50.0, -30.0}, vt);
@@ -831,18 +840,21 @@ private slots:
 
     void cursorFor_straightenMode_returnsCrosshair() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
-        auto btns = w->findChildren<QPushButton*>();
-        for (auto* b : btns)
-            if (b->text().contains("Straighten")) { b->click(); break; }
+        QWidget         *w    = e.createControlsWidget();
+        auto             btns = w->findChildren<QPushButton *>();
+        for (auto *b : btns)
+            if (b->text().contains("Straighten")) {
+                b->click();
+                break;
+            }
 
         ViewportTransform vt = makeVT();
-        QCursor c = e.cursorFor({50.0, 50.0}, vt);
+        QCursor           c  = e.cursorFor({50.0, 50.0}, vt);
         QCOMPARE(c.shape(), Qt::CrossCursor);
     }
 
     void cursorFor_outsideEverything_returnsArrow() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT(100, 100, 200, 200);
         // A point way outside the image (screen coords beyond the image extent)
         QCursor c = e.cursorFor({-50.0, -50.0}, vt);
@@ -852,7 +864,7 @@ private slots:
     // ── paintOverlay — just verify it doesn't crash ──────────────────────────
 
     void paintOverlay_doesNotCrash() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         QPixmap pm(100, 100);
@@ -864,12 +876,12 @@ private slots:
     }
 
     void paintOverlay_emptyViewport_doesNotCrash() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt;
         vt.imageSize    = QSize(0, 0);
         vt.viewportSize = QSize(0, 0);
 
-        QPixmap pm(1, 1);
+        QPixmap  pm(1, 1);
         QPainter painter(&pm);
         e.paintOverlay(painter, vt);
         painter.end();
@@ -879,7 +891,7 @@ private slots:
     // ── Minimum crop size enforcement ────────────────────────────────────────
 
     void drag_corner_enforcesMinimumSize() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Drag BR corner all the way to TL — should clamp to min size
@@ -897,12 +909,12 @@ private slots:
         }
 
         QRectF crop = e.userCropRect();
-        QVERIFY(crop.width()  >= 0.04);
+        QVERIFY(crop.width() >= 0.04);
         QVERIFY(crop.height() >= 0.04);
     }
 
     void drag_topEdge_enforcesMinimumSize() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         {
@@ -923,7 +935,7 @@ private slots:
     }
 
     void drag_leftEdge_enforcesMinimumSize() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         {
@@ -945,7 +957,7 @@ private slots:
     // ── Move clamped to image bounds ─────────────────────────────────────────
 
     void move_clampedToImageBounds() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Shrink crop first (drag TR inward)
@@ -959,8 +971,8 @@ private slots:
         }
 
         QRectF before = e.userCropRect();
-        float cx = static_cast<float>(before.center().x()) * 100.0f;
-        float cy = static_cast<float>(before.center().y()) * 100.0f;
+        float  cx     = static_cast<float>(before.center().x()) * 100.0f;
+        float  cy     = static_cast<float>(before.center().y()) * 100.0f;
 
         // Try to move far past the right/bottom edge
         {
@@ -968,25 +980,27 @@ private slots:
             e.mousePress(&ev, vt);
             auto evM = makeMouseEvent(QEvent::MouseMove, QPointF(cx + 500.0f, cy + 500.0f));
             e.mouseMove(&evM, vt);
-            auto evR = makeMouseEvent(QEvent::MouseButtonRelease,
-                                       QPointF(cx + 500.0f, cy + 500.0f));
+            auto evR = makeMouseEvent(QEvent::MouseButtonRelease, QPointF(cx + 500.0f, cy + 500.0f));
             e.mouseRelease(&evR, vt);
         }
 
         QRectF after = e.userCropRect();
         QVERIFY(after.x() >= 0.0);
         QVERIFY(after.y() >= 0.0);
-        QVERIFY(after.x() + after.width()  <= 1.0 + 1e-6);
+        QVERIFY(after.x() + after.width() <= 1.0 + 1e-6);
         QVERIFY(after.y() + after.height() <= 1.0 + 1e-6);
     }
 
     // ── StraightenLine — full drag computes correct angle ───────────────────
 
     // Helper: enter StraightenLine mode via the controls button.
-    static void enterStraighten(CropRotateEffect& e) {
-        QWidget* w = e.createControlsWidget();
-        for (auto* b : w->findChildren<QPushButton*>())
-            if (b->text().contains("Straighten")) { b->click(); break; }
+    static void enterStraighten(CropRotateEffect &e) {
+        QWidget *w = e.createControlsWidget();
+        for (auto *b : w->findChildren<QPushButton *>())
+            if (b->text().contains("Straighten")) {
+                b->click();
+                break;
+            }
     }
 
     // A line tilted ~5.7° above horizontal (going up-right) needs a
@@ -996,11 +1010,11 @@ private slots:
         enterStraighten(e);
         ViewportTransform vt = makeVT();
 
-        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {10.0, 50.0});
-        auto m = makeMouseEvent(QEvent::MouseMove,         {110.0, 40.0});
-        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{110.0, 40.0});
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 50.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {110.0, 40.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {110.0, 40.0});
         QVERIFY(e.mousePress(&p, vt));
-        QVERIFY(e.mouseMove (&m, vt));
+        QVERIFY(e.mouseMove(&m, vt));
         QVERIFY(e.mouseRelease(&r, vt));
 
         // atan2(-10, 100)≈-5.71° ; lineDeg=+5.71° ; quarter=0 ; angle=-5.71°
@@ -1016,9 +1030,9 @@ private slots:
         ViewportTransform vt = makeVT();
 
         // From top (10,10) to bottom-right (20,90): slightly off vertical.
-        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {10.0, 10.0});
-        auto m = makeMouseEvent(QEvent::MouseMove,         {20.0, 90.0});
-        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{20.0, 90.0});
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 10.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {20.0, 90.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {20.0, 90.0});
         e.mousePress(&p, vt);
         e.mouseMove(&m, vt);
         e.mouseRelease(&r, vt);
@@ -1033,8 +1047,8 @@ private slots:
         enterStraighten(e);
         ViewportTransform vt = makeVT();
 
-        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {50.0, 50.0});
-        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{51.0, 50.0});
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {50.0, 50.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {51.0, 50.0});
         e.mousePress(&p, vt);
         e.mouseRelease(&r, vt);
 
@@ -1045,21 +1059,24 @@ private slots:
     // Cancel: clicking the button again while drawing exits cleanly.
     void straightenLine_buttonCancelsMidDraw() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
-        QPushButton* btn = nullptr;
-        for (auto* b : w->findChildren<QPushButton*>())
-            if (b->text().contains("Straighten")) { btn = b; break; }
+        QWidget         *w   = e.createControlsWidget();
+        QPushButton     *btn = nullptr;
+        for (auto *b : w->findChildren<QPushButton *>())
+            if (b->text().contains("Straighten")) {
+                btn = b;
+                break;
+            }
         QVERIFY(btn);
-        btn->click();   // enter
+        btn->click(); // enter
         QCOMPARE(e.subTool(), CropRotateEffect::SubTool::StraightenLine);
 
         ViewportTransform vt = makeVT();
-        auto p = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 10.0});
-        auto m = makeMouseEvent(QEvent::MouseMove,        {80.0, 60.0});
+        auto              p  = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 10.0});
+        auto              m  = makeMouseEvent(QEvent::MouseMove, {80.0, 60.0});
         e.mousePress(&p, vt);
         e.mouseMove(&m, vt);
 
-        btn->click();   // cancel
+        btn->click(); // cancel
         QCOMPARE(e.subTool(), CropRotateEffect::SubTool::Handles);
         QCOMPARE(e.userCropAngle(), 0.0f);
     }
@@ -1067,7 +1084,7 @@ private slots:
     // ── Cursor stays ClosedHand while actively rotating ──────────────────────
 
     void cursorFor_duringRotationDrag_isClosedHand() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Begin a rotation drag from the grip
@@ -1091,24 +1108,24 @@ private slots:
         QPainter painter(&pm);
 
         auto runDrag = [&](QPointF press) {
-            CropRotateEffect e;
+            CropRotateEffect  e;
             ViewportTransform vt = makeVT();
-            auto p = makeMouseEvent(QEvent::MouseButtonPress, press);
+            auto              p  = makeMouseEvent(QEvent::MouseButtonPress, press);
             e.mousePress(&p, vt);
-            e.paintOverlay(painter, vt);   // active-handle highlight branch
+            e.paintOverlay(painter, vt); // active-handle highlight branch
             auto r = makeMouseEvent(QEvent::MouseButtonRelease, press);
             e.mouseRelease(&r, vt);
         };
-        runDrag({  0.0,   0.0});  // TL corner
-        runDrag({ 50.0,   0.0});  // top edge   → EdgeH
-        runDrag({  0.0,  50.0});  // left edge  → EdgeV
+        runDrag({0.0, 0.0});  // TL corner
+        runDrag({50.0, 0.0}); // top edge   → EdgeH
+        runDrag({0.0, 50.0}); // left edge  → EdgeV
 
         painter.end();
         QVERIFY(true);
     }
 
     void paintOverlay_withHoverAndStraightenLine_doesNotCrash() {
-        CropRotateEffect e;
+        CropRotateEffect  e;
         ViewportTransform vt = makeVT();
 
         // Trigger hover state on the rotation grip
@@ -1117,14 +1134,14 @@ private slots:
         QPixmap pm(100, 100);
         pm.fill(Qt::black);
         QPainter painter(&pm);
-        e.paintOverlay(painter, vt);   // hover-state grip
+        e.paintOverlay(painter, vt); // hover-state grip
 
         // Active rotation state — grip becomes "active"
         auto p = makeMouseEvent(QEvent::MouseButtonPress, {50.0, -30.0});
         e.mousePress(&p, vt);
         auto m = makeMouseEvent(QEvent::MouseMove, {80.0, -30.0});
         e.mouseMove(&m, vt);
-        e.paintOverlay(painter, vt);   // active-state grip + degree readout
+        e.paintOverlay(painter, vt); // active-state grip + degree readout
         // Repeat with grip in the right portion of the viewport — flips the
         // readout to the left-of-grip layout branch.
         ViewportTransform vtRight = makeVT(100, 100, 60, 100);
@@ -1134,12 +1151,12 @@ private slots:
 
         // Straighten-line overlay: hint strip + drawn line
         enterStraighten(e);
-        e.paintOverlay(painter, vt);    // hint only
+        e.paintOverlay(painter, vt); // hint only
         auto p2 = makeMouseEvent(QEvent::MouseButtonPress, {10.0, 50.0});
         e.mousePress(&p2, vt);
         auto m2 = makeMouseEvent(QEvent::MouseMove, {90.0, 40.0});
         e.mouseMove(&m2, vt);
-        e.paintOverlay(painter, vt);    // hint + line
+        e.paintOverlay(painter, vt); // hint + line
 
         painter.end();
         QVERIFY(true);
@@ -1148,11 +1165,13 @@ private slots:
     // ── Bound clamping with rotation ────────────────────────────────────────
 
     // Helper: shrink the full crop to a known sub-rect by dragging BR inward.
-    static void shrinkCropToCenter(CropRotateEffect& e, ViewportTransform vt) {
-        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
-        auto m = makeMouseEvent(QEvent::MouseMove,         { 70.0,  70.0});
-        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{ 70.0,  70.0});
-        e.mousePress(&p, vt);  e.mouseMove(&m, vt);  e.mouseRelease(&r, vt);
+    static void shrinkCropToCenter(CropRotateEffect &e, ViewportTransform vt) {
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {70.0, 70.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {70.0, 70.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+        e.mouseRelease(&r, vt);
     }
 
     // After rotating, the rotated source-space footprint of the crop must
@@ -1161,17 +1180,17 @@ private slots:
     // and verify the shrunk crop, when un-rotated, doesn't poke out.
     void rotation_shrinksOversizedCropToFitImageBounds() {
         CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
 
         // Drive the rotation slider to 30°.  The full-frame crop's AABB at
         // 30° is bigger than 1×1, so the clamp must shrink the crop.
-        auto* slider = w->findChild<QSlider*>();
+        auto *slider = w->findChild<QSlider *>();
         QVERIFY(slider);
-        slider->setValue(3000);  // 3000 * 0.01 = 30°
+        slider->setValue(3000); // 3000 * 0.01 = 30°
 
-        const QRectF c = e.userCropRect();
-        const double half = std::abs(std::cos(30.0 * M_PI / 180.0)) * c.width()  * 0.5
-                          + std::abs(std::sin(30.0 * M_PI / 180.0)) * c.height() * 0.5;
+        const QRectF c    = e.userCropRect();
+        const double half = std::abs(std::cos(30.0 * M_PI / 180.0)) * c.width() * 0.5 +
+                            std::abs(std::sin(30.0 * M_PI / 180.0)) * c.height() * 0.5;
         QVERIFY(c.center().x() + half <= 1.0 + 1e-6);
         QVERIFY(c.center().x() - half >= 0.0 - 1e-6);
     }
@@ -1179,24 +1198,24 @@ private slots:
     // Move drag with rotation: pushing the crop toward the edge stops at
     // the rotated-AABB bound, not at the unrotated edge.
     void move_withRotation_clampsToRotatedBound() {
-        CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        CropRotateEffect  e;
+        QWidget          *w  = e.createControlsWidget();
         ViewportTransform vt = makeVT();
         shrinkCropToCenter(e, vt);
 
         // Apply a 20° rotation via the slider.
-        auto* slider = w->findChild<QSlider*>();
+        auto *slider = w->findChild<QSlider *>();
         QVERIFY(slider);
         slider->setValue(2000);
 
-        const QRectF before = e.userCropRect();
+        const QRectF before   = e.userCropRect();
         const double cxBefore = before.center().x();
         const double cyBefore = before.center().y();
 
         // Try to slam the crop centre toward (1, 1) with a giant move drag.
         const double sxBefore = cxBefore * 100.0;
         const double syBefore = cyBefore * 100.0;
-        auto p = makeMouseEvent(QEvent::MouseButtonPress, {sxBefore, syBefore});
+        auto         p        = makeMouseEvent(QEvent::MouseButtonPress, {sxBefore, syBefore});
         e.mousePress(&p, vt);
         auto m = makeMouseEvent(QEvent::MouseMove, {500.0, 500.0});
         e.mouseMove(&m, vt);
@@ -1204,8 +1223,8 @@ private slots:
         e.mouseRelease(&r, vt);
 
         const QRectF after = e.userCropRect();
-        const double half = std::abs(std::cos(20.0 * M_PI / 180.0)) * after.width()  * 0.5
-                          + std::abs(std::sin(20.0 * M_PI / 180.0)) * after.height() * 0.5;
+        const double half  = std::abs(std::cos(20.0 * M_PI / 180.0)) * after.width() * 0.5 +
+                             std::abs(std::sin(20.0 * M_PI / 180.0)) * after.height() * 0.5;
         QVERIFY(after.center().x() + half <= 1.0 + 1e-6);
         QVERIFY(after.center().y() + half <= 1.0 + 1e-6);
         // Centre actually moved (otherwise the test isn't proving anything)
@@ -1214,25 +1233,30 @@ private slots:
 
     // Quarter-turn re-clamps the crop too.
     void quarterTurn_reclampsCropAfterRotation() {
-        CropRotateEffect e;
-        QWidget* w = e.createControlsWidget();
+        CropRotateEffect  e;
+        QWidget          *w  = e.createControlsWidget();
         ViewportTransform vt = makeVT();
         // Make a tall thin crop in a corner.
-        auto p1 = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
-        auto m1 = makeMouseEvent(QEvent::MouseMove,         { 90.0,  20.0});
-        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease,{ 90.0,  20.0});
-        e.mousePress(&p1, vt); e.mouseMove(&m1, vt); e.mouseRelease(&r1, vt);
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove, {90.0, 20.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease, {90.0, 20.0});
+        e.mousePress(&p1, vt);
+        e.mouseMove(&m1, vt);
+        e.mouseRelease(&r1, vt);
 
-        QPushButton* ccw = nullptr;
-        for (auto* b : w->findChildren<QPushButton*>())
-            if (b->text().contains("CCW")) { ccw = b; break; }
+        QPushButton *ccw = nullptr;
+        for (auto *b : w->findChildren<QPushButton *>())
+            if (b->text().contains("CCW")) {
+                ccw = b;
+                break;
+            }
         QVERIFY(ccw);
         ccw->click();
         // After +90°, the rotated AABB swaps width/height. The clamp should
         // ensure the crop still fits.
         const QRectF c = e.userCropRect();
         QVERIFY(c.center().x() + c.height() * 0.5 <= 1.0 + 1e-6);
-        QVERIFY(c.center().y() + c.width()  * 0.5 <= 1.0 + 1e-6);
+        QVERIFY(c.center().y() + c.width() * 0.5 <= 1.0 + 1e-6);
     }
 
     // ── Auto-fit on rotation when no manual crop applied ────────────────────
@@ -1242,14 +1266,13 @@ private slots:
     void rotate_noManualCrop_autoFitsSquareImage() {
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
-        QWidget* w = e.createControlsWidget();
-        auto* slider = w->findChild<QSlider*>();
-        slider->setValue(3000);   // 30°
+        QWidget *w      = e.createControlsWidget();
+        auto    *slider = w->findChild<QSlider *>();
+        slider->setValue(3000); // 30°
 
-        const QRectF c = e.userCropRect();
-        const double expected = 1.0 / (std::cos(30.0 * M_PI / 180.0)
-                                      + std::sin(30.0 * M_PI / 180.0));
-        QVERIFY(std::abs(c.width()  - expected) < 1e-3);
+        const QRectF c        = e.userCropRect();
+        const double expected = 1.0 / (std::cos(30.0 * M_PI / 180.0) + std::sin(30.0 * M_PI / 180.0));
+        QVERIFY(std::abs(c.width() - expected) < 1e-3);
         QVERIFY(std::abs(c.height() - expected) < 1e-3);
         QVERIFY(std::abs(c.center().x() - 0.5) < 1e-6);
         QVERIFY(std::abs(c.center().y() - 0.5) < 1e-6);
@@ -1261,30 +1284,30 @@ private slots:
     // tighter of the two constraints.
     void rotate_noManualCrop_autoFitsNonSquareImage() {
         CropRotateEffect e;
-        e.setSourceImageSize({1600, 900});       // 16:9
-        QWidget* w = e.createControlsWidget();
-        auto* slider = w->findChild<QSlider*>();
-        slider->setValue(2000);   // 20°
+        e.setSourceImageSize({1600, 900}); // 16:9
+        QWidget *w      = e.createControlsWidget();
+        auto    *slider = w->findChild<QSlider *>();
+        slider->setValue(2000); // 20°
 
-        const QRectF c = e.userCropRect();
-        const double a = 20.0 * M_PI / 180.0;
-        const double r = 16.0 / 9.0;
+        const QRectF c  = e.userCropRect();
+        const double a  = 20.0 * M_PI / 180.0;
+        const double r  = 16.0 / 9.0;
         const double cT = std::cos(a), sT = std::sin(a);
-        const double sizeW = 1.0 / (cT + sT / r);
-        const double sizeH = 1.0 / (sT * r + cT);
+        const double sizeW    = 1.0 / (cT + sT / r);
+        const double sizeH    = 1.0 / (sT * r + cT);
         const double expected = std::min(sizeW, sizeH);
         QVERIFY2(std::abs(c.width() - expected) < 1e-3,
                  qPrintable(QString("got %1 expected %2").arg(c.width()).arg(expected)));
-        QCOMPARE(c.width(), c.height());   // square in normalised coords
+        QCOMPARE(c.width(), c.height()); // square in normalised coords
     }
 
     // Reduce angle back to zero → full-frame crop is restored.
     void rotate_thenReduceAngle_uncropsToFullFrame() {
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
-        QWidget* w = e.createControlsWidget();
-        auto* slider = w->findChild<QSlider*>();
-        slider->setValue(3000);   // 30°
+        QWidget *w      = e.createControlsWidget();
+        auto    *slider = w->findChild<QSlider *>();
+        slider->setValue(3000); // 30°
         QVERIFY(e.userCropRect().width() < 0.9);
 
         slider->setValue(0);
@@ -1296,18 +1319,20 @@ private slots:
     void rotate_afterManualCrop_doesNotAutoFit() {
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
-        QWidget* w = e.createControlsWidget();
+        QWidget          *w  = e.createControlsWidget();
         ViewportTransform vt = makeVT();
         // User shrinks the crop by dragging BR inward → manual flag set.
-        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
-        auto m = makeMouseEvent(QEvent::MouseMove,         { 70.0,  70.0});
-        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{ 70.0,  70.0});
-        e.mousePress(&p, vt); e.mouseMove(&m, vt); e.mouseRelease(&r, vt);
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {70.0, 70.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {70.0, 70.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+        e.mouseRelease(&r, vt);
         const QRectF before = e.userCropRect();
 
         // Apply rotation; the crop should keep the same size (still fits).
-        auto* slider = w->findChild<QSlider*>();
-        slider->setValue(500);    // 5°
+        auto *slider = w->findChild<QSlider *>();
+        slider->setValue(500); // 5°
         const QRectF after = e.userCropRect();
         QCOMPARE(after.size(), before.size());
     }
@@ -1316,24 +1341,29 @@ private slots:
     void resetCrop_reenablesAutoFit() {
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
-        QWidget* w = e.createControlsWidget();
+        QWidget          *w  = e.createControlsWidget();
         ViewportTransform vt = makeVT();
 
         // Manual crop
-        auto p = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
-        auto m = makeMouseEvent(QEvent::MouseMove,         { 70.0,  70.0});
-        auto r = makeMouseEvent(QEvent::MouseButtonRelease,{ 70.0,  70.0});
-        e.mousePress(&p, vt); e.mouseMove(&m, vt); e.mouseRelease(&r, vt);
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {70.0, 70.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {70.0, 70.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+        e.mouseRelease(&r, vt);
 
-        QPushButton* resetBtn = nullptr;
-        for (auto* b : w->findChildren<QPushButton*>())
-            if (b->text().contains("Reset")) { resetBtn = b; break; }
+        QPushButton *resetBtn = nullptr;
+        for (auto *b : w->findChildren<QPushButton *>())
+            if (b->text().contains("Reset")) {
+                resetBtn = b;
+                break;
+            }
         resetBtn->click();
         QCOMPARE(e.userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
 
         // Now rotation should auto-fit again.
-        auto* slider = w->findChild<QSlider*>();
-        slider->setValue(3000);   // 30°
+        auto *slider = w->findChild<QSlider *>();
+        slider->setValue(3000); // 30°
         QVERIFY(e.userCropRect().width() < 0.9);
     }
 
@@ -1342,9 +1372,9 @@ private slots:
     void setSourceImageSize_rerunsAutoFit() {
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
-        QWidget* w = e.createControlsWidget();
-        auto* slider = w->findChild<QSlider*>();
-        slider->setValue(3000);   // 30° — square auto-fit ≈ 0.732
+        QWidget *w      = e.createControlsWidget();
+        auto    *slider = w->findChild<QSlider *>();
+        slider->setValue(3000); // 30° — square auto-fit ≈ 0.732
         const double squareSize = e.userCropRect().width();
 
         // Switch to a 16:9 image: auto-fit should change.
@@ -1358,7 +1388,7 @@ private slots:
     // Enabling the lock captures the current crop's pixel-space aspect ratio.
     void lockAspect_enable_capturesCurrentRatio() {
         CropRotateEffect e;
-        e.setSourceImageSize({1600, 900});       // 16:9 image
+        e.setSourceImageSize({1600, 900}); // 16:9 image
         e.setLockAspect(true);
         QVERIFY(e.lockAspect());
         QVERIFY(std::abs(e.lockedAspect() - 16.0 / 9.0) < 1e-6);
@@ -1372,29 +1402,30 @@ private slots:
         e.createControlsWidget();
         ViewportTransform vt = makeVT();
         // Shrink crop slightly so the locked aspect isn't 1:1 trivially.
-        auto p1 = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
-        auto m1 = makeMouseEvent(QEvent::MouseMove,         { 80.0,  60.0});
-        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease,{ 80.0,  60.0});
-        e.mousePress(&p1, vt); e.mouseMove(&m1, vt); e.mouseRelease(&r1, vt);
-        const QRectF base = e.userCropRect();
-        const double startAspect = (base.width()  * 100.0) /
-                                   (base.height() * 100.0);
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove, {80.0, 60.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease, {80.0, 60.0});
+        e.mousePress(&p1, vt);
+        e.mouseMove(&m1, vt);
+        e.mouseRelease(&r1, vt);
+        const QRectF base        = e.userCropRect();
+        const double startAspect = (base.width() * 100.0) / (base.height() * 100.0);
 
         e.setLockAspect(true);
 
         // Drag BR corner inward — mostly along X to verify the Y axis follows.
         const QPointF br(base.right() * 100.0, base.bottom() * 100.0);
-        auto p2 = makeMouseEvent(QEvent::MouseButtonPress,  br);
-        auto m2 = makeMouseEvent(QEvent::MouseMove,         br - QPointF(30, 2));
-        auto r2 = makeMouseEvent(QEvent::MouseButtonRelease,br - QPointF(30, 2));
-        e.mousePress(&p2, vt); e.mouseMove(&m2, vt); e.mouseRelease(&r2, vt);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, br);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, br - QPointF(30, 2));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, br - QPointF(30, 2));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
 
-        const QRectF after = e.userCropRect();
-        const double newAspect = (after.width()  * 100.0) /
-                                 (after.height() * 100.0);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
         QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
-                 qPrintable(QString("aspect drifted: %1 vs %2")
-                            .arg(newAspect).arg(startAspect)));
+                 qPrintable(QString("aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
     }
 
     // Edge drag with lock on: the perpendicular dimension scales to maintain
@@ -1405,26 +1436,28 @@ private slots:
         e.createControlsWidget();
         ViewportTransform vt = makeVT();
         // Shrink to a 2:1 rect via a corner drag first.
-        auto p1 = makeMouseEvent(QEvent::MouseButtonPress,  {100.0, 100.0});
-        auto m1 = makeMouseEvent(QEvent::MouseMove,         { 80.0,  60.0});
-        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease,{ 80.0,  60.0});
-        e.mousePress(&p1, vt); e.mouseMove(&m1, vt); e.mouseRelease(&r1, vt);
+        auto p1 = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m1 = makeMouseEvent(QEvent::MouseMove, {80.0, 60.0});
+        auto r1 = makeMouseEvent(QEvent::MouseButtonRelease, {80.0, 60.0});
+        e.mousePress(&p1, vt);
+        e.mouseMove(&m1, vt);
+        e.mouseRelease(&r1, vt);
 
         e.setLockAspect(true);
         const double aspect = e.lockedAspect();
 
         // Drag the right edge inward.
-        const QRectF base = e.userCropRect();
-        const QPointF rm(base.right() * 100.0,
-                        (base.top() + base.bottom()) * 50.0);
-        auto p2 = makeMouseEvent(QEvent::MouseButtonPress,  rm);
-        auto m2 = makeMouseEvent(QEvent::MouseMove,         rm - QPointF(20, 0));
-        auto r2 = makeMouseEvent(QEvent::MouseButtonRelease,rm - QPointF(20, 0));
-        e.mousePress(&p2, vt); e.mouseMove(&m2, vt); e.mouseRelease(&r2, vt);
+        const QRectF  base = e.userCropRect();
+        const QPointF rm(base.right() * 100.0, (base.top() + base.bottom()) * 50.0);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, rm);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, rm - QPointF(20, 0));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, rm - QPointF(20, 0));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
 
-        const QRectF after = e.userCropRect();
-        const double newAspect = (after.width()  * 100.0) /
-                                 (after.height() * 100.0);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
         QVERIFY(std::abs(newAspect - aspect) < 1e-3);
     }
 
@@ -1432,13 +1465,16 @@ private slots:
     void lockAspect_resetCrop_clearsLock() {
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
-        QWidget* w = e.createControlsWidget();
+        QWidget *w = e.createControlsWidget();
         e.setLockAspect(true);
         QVERIFY(e.lockAspect());
 
-        QPushButton* resetBtn = nullptr;
-        for (auto* b : w->findChildren<QPushButton*>())
-            if (b->text().contains("Reset")) { resetBtn = b; break; }
+        QPushButton *resetBtn = nullptr;
+        for (auto *b : w->findChildren<QPushButton *>())
+            if (b->text().contains("Reset")) {
+                resetBtn = b;
+                break;
+            }
         resetBtn->click();
         QVERIFY(!e.lockAspect());
     }
@@ -1446,7 +1482,7 @@ private slots:
     // ── Destructor ────────────────────────────────────────────────────────────
 
     void destructor_heapAllocated_doesNotCrash() {
-        auto* e = new CropRotateEffect();
+        auto *e = new CropRotateEffect();
         e->createControlsWidget();
         delete e;
     }

@@ -4,18 +4,11 @@
 #include <algorithm>
 #include <cmath>
 
-LogarithmParamSlider::LogarithmParamSlider(const QString& label,
-                                           double min, double max,
-                                           int decimals, int resolution,
-                                           QWidget* parent)
-    : ParamSlider(label,
-                  Setup{0, resolution, min, max, std::pow(10.0, -decimals), decimals}, // GCOVR_EXCL_LINE
-                  parent)
-    , m_min(min)
-    , m_max(max)
-    , m_resolution(resolution)
-    , m_logRatio(std::log(max / min))
-{
+LogarithmParamSlider::LogarithmParamSlider(const QString &label, double min, double max, int decimals, int resolution,
+                                           QWidget *parent)
+    : ParamSlider(label, Setup{0, resolution, min, max, std::pow(10.0, -decimals), decimals}, // GCOVR_EXCL_LINE
+                  parent),
+      m_min(min), m_max(max), m_resolution(resolution), m_logRatio(std::log(max / min)) {
     Q_ASSERT(min > 0.0);
     Q_ASSERT(max > min);
     Q_ASSERT(resolution > 0);

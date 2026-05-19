@@ -9,11 +9,18 @@
 class MockEffect : public PhotoEditorEffect {
     Q_OBJECT
 public:
-    QString getName()        const override { return "Mock"; }
-    QString getDescription() const override { return "Test effect"; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-
+    QString getName() const override {
+        return "Mock";
+    }
+    QString getDescription() const override {
+        return "Test effect";
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
 };
 
 // MockEffect that also implements ICropSource — exercises the
@@ -21,12 +28,24 @@ public:
 class MockCropEffect : public PhotoEditorEffect, public ICropSource {
     Q_OBJECT
 public:
-    QString getName()        const override { return "MockCrop"; }
-    QString getDescription() const override { return ""; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-    QRectF userCropRect()    const override { return {0, 0, 1, 1}; }
-    float  userCropAngle()   const override { return 0.0f; }
+    QString getName() const override {
+        return "MockCrop";
+    }
+    QString getDescription() const override {
+        return "";
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
+    QRectF userCropRect() const override {
+        return {0, 0, 1, 1};
+    }
+    float userCropAngle() const override {
+        return 0.0f;
+    }
 };
 
 class TestEffectManager : public QObject {
@@ -73,8 +92,8 @@ private slots:
         mgr.setEnabled(0, false);
 
         QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy[0][0].toInt(),   0);     // index
-        QCOMPARE(spy[0][1].toBool(),  false); // enabled
+        QCOMPARE(spy[0][0].toInt(), 0);      // index
+        QCOMPARE(spy[0][1].toBool(), false); // enabled
     }
 
     void setEnabled_emitsCorrectIndexForMultipleEffects() {
@@ -113,10 +132,10 @@ private slots:
 
     void multipleEffects_orderedByInsertion() {
         EffectManager mgr;
-        auto a = std::make_unique<MockEffect>();
-        auto b = std::make_unique<MockEffect>();
-        auto* aRaw = a.get();
-        auto* bRaw = b.get();
+        auto          a    = std::make_unique<MockEffect>();
+        auto          b    = std::make_unique<MockEffect>();
+        auto         *aRaw = a.get();
+        auto         *bRaw = b.get();
         mgr.addEffect(std::move(a));
         mgr.addEffect(std::move(b));
 
@@ -135,20 +154,20 @@ private slots:
 
     void cropSource_returnsCachedPointerEvenWhenDisabled() {
         EffectManager mgr;
-        auto crop = std::make_unique<MockCropEffect>();
-        auto* cropRaw = crop.get();
+        auto          crop    = std::make_unique<MockCropEffect>();
+        auto         *cropRaw = crop.get();
         mgr.addEffect(std::move(crop), /*enabled=*/false);
-        QCOMPARE(static_cast<ICropSource*>(cropRaw), mgr.cropSource());
+        QCOMPARE(static_cast<ICropSource *>(cropRaw), mgr.cropSource());
         // activeCropSource respects the enabled bit
         QVERIFY(mgr.activeCropSource() == nullptr);
     }
 
     void activeCropSource_returnsPointerWhenEnabled() {
         EffectManager mgr;
-        auto crop = std::make_unique<MockCropEffect>();
-        auto* cropRaw = crop.get();
+        auto          crop    = std::make_unique<MockCropEffect>();
+        auto         *cropRaw = crop.get();
         mgr.addEffect(std::move(crop));
-        QCOMPARE(static_cast<ICropSource*>(cropRaw), mgr.activeCropSource());
+        QCOMPARE(static_cast<ICropSource *>(cropRaw), mgr.activeCropSource());
     }
 
     void activeCropSource_clearsWhenEffectDisabledAtRuntime() {
@@ -157,7 +176,7 @@ private slots:
         QVERIFY(mgr.activeCropSource() != nullptr);
         mgr.setEnabled(0, false);
         QVERIFY(mgr.activeCropSource() == nullptr);
-        QVERIFY(mgr.cropSource() != nullptr);  // cache survives toggle
+        QVERIFY(mgr.cropSource() != nullptr); // cache survives toggle
     }
 
     void setEnabled_doesNotAffectOtherEffects() {
@@ -168,7 +187,7 @@ private slots:
         mgr.setEnabled(0, false);
 
         QVERIFY(!mgr.entries()[0].enabled);
-        QVERIFY( mgr.entries()[1].enabled); // untouched
+        QVERIFY(mgr.entries()[1].enabled); // untouched
     }
 
     // ── PhotoEditorEffect base class default methods ──────────────────────────
@@ -188,10 +207,18 @@ private slots:
 
     void baseClass_getId_snakeCasesGetName() {
         struct E : public PhotoEditorEffect {
-            QString getName()        const override { return "Crop & Rotate"; }
-            QString getDescription() const override { return ""; }
-            QString getVersion()     const override { return "1.0"; }
-            bool    initialize()           override { return true; }
+            QString getName() const override {
+                return "Crop & Rotate";
+            }
+            QString getDescription() const override {
+                return "";
+            }
+            QString getVersion() const override {
+                return "1.0";
+            }
+            bool initialize() override {
+                return true;
+            }
         };
         E e;
         QCOMPARE(e.getId(), QString("crop_rotate"));
@@ -203,16 +230,16 @@ private slots:
     }
 
     void baseClass_onImageLoaded_doesNotCrash() {
-        MockEffect e;
+        MockEffect    e;
         ImageMetadata meta;
         meta.colorTempK = 5500.0f;
-        e.onImageLoaded(meta);  // default impl is a no-op
+        e.onImageLoaded(meta); // default impl is a no-op
     }
 
     // Heap-allocate EffectManager so the unique_ptr-driven cleanup runs and
     // ASan/leak-sanitiser would catch a missed destruction.
     void destructor_heapAllocated_deletesEffects() {
-        auto* mgr = new EffectManager();
+        auto *mgr = new EffectManager();
         mgr->addEffect(std::make_unique<MockEffect>());
         mgr->addEffect(std::make_unique<MockEffect>());
         delete mgr;

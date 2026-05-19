@@ -8,8 +8,8 @@
 // Metadata extracted from an image file at load time.
 // colorTempK == 0 means unknown / not available.
 struct ImageMetadata {
-    float colorTempK = 0.0f;  // as-shot color temperature in Kelvin (0 = unknown)
-    float tintGM     = 0.0f;  // green-magenta tint, 0 = neutral (reserved for future use)
+    float colorTempK = 0.0f; // as-shot color temperature in Kelvin (0 = unknown)
+    float tintGM     = 0.0f; // green-magenta tint, 0 = neutral (reserved for future use)
 
     // EXIF orientation tag of the source file (1..8). 1 = no rotation. The
     // loader applies the rotation to the QImage before returning, so the
@@ -28,8 +28,8 @@ struct ImageMetadata {
     QString   cameraModel;
     QString   lens;
     float     isoSpeed   = 0.0f;
-    float     shutterSec = 0.0f;   // exposure time in seconds (0.004 = 1/250)
-    float     aperture   = 0.0f;   // f-number
+    float     shutterSec = 0.0f; // exposure time in seconds (0.004 = 1/250)
+    float     aperture   = 0.0f; // f-number
     float     focalLenMm = 0.0f;
-    QDateTime captureTime;          // null when the file lacks a timestamp
+    QDateTime captureTime; // null when the file lacks a timestamp
 };

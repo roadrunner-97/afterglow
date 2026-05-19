@@ -2,11 +2,12 @@
 #include "UndoHistory.h"
 #include "SettingsImporter.h"
 
-static SettingsImporter::EffectSettings makeEff(
-    const QString& id, bool enabled, QMap<QString, QVariant> params)
-{
+static SettingsImporter::EffectSettings makeEff(const QString &id, bool enabled, QMap<QString, QVariant> params) {
     SettingsImporter::EffectSettings e;
-    e.id = id; e.name = id; e.enabled = enabled; e.parameters = std::move(params);
+    e.id         = id;
+    e.name       = id;
+    e.enabled    = enabled;
+    e.parameters = std::move(params);
     return e;
 }
 
@@ -23,7 +24,7 @@ private slots:
     }
 
     void seedClearsLog() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("brightness", true, {{"value", 5}});
         h.seed(snap);
@@ -31,14 +32,14 @@ private slots:
         h.recordFromCurrent(snap);
         QVERIFY(h.canUndo());
 
-        h.seed(snap);  // re-seed should clear
+        h.seed(snap); // re-seed should clear
         QVERIFY(!h.canUndo());
         QVERIFY(!h.canRedo());
         QCOMPARE(h.entries().size(), 0);
     }
 
     void recordPushesEntry() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("brightness", true, {{"value", 0}});
         h.seed(snap);
@@ -51,11 +52,11 @@ private slots:
         QCOMPARE(h.cursor(), 1);
         QCOMPARE(h.entries()[0].effectId, QString("brightness"));
         QCOMPARE(h.entries()[0].params["value"].from, QVariant(0));
-        QCOMPARE(h.entries()[0].params["value"].to,   QVariant(10));
+        QCOMPARE(h.entries()[0].params["value"].to, QVariant(10));
     }
 
     void noRecordWhenUnchanged() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("brightness", true, {{"value", 5}});
         h.seed(snap);
@@ -65,7 +66,7 @@ private slots:
     }
 
     void undoReturnsFrimValues() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("brightness", true, {{"value", 0}});
         h.seed(snap);
@@ -76,14 +77,14 @@ private slots:
         QVERIFY(entry.has_value());
         QCOMPARE(entry->effectId, QString("brightness"));
         QCOMPARE(entry->params["value"].from, QVariant(0));
-        QCOMPARE(entry->params["value"].to,   QVariant(20));
+        QCOMPARE(entry->params["value"].to, QVariant(20));
         QVERIFY(!h.canUndo());
         QVERIFY(h.canRedo());
         QCOMPARE(h.cursor(), 0);
     }
 
     void redoReturnsEntry() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("brightness", true, {{"value", 0}});
         h.seed(snap);
@@ -105,7 +106,7 @@ private slots:
     }
 
     void redoNopWhenAtEnd() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -113,7 +114,7 @@ private slots:
     }
 
     void recordTruncatesRedoTail() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -136,7 +137,7 @@ private slots:
     }
 
     void capacityDropsFromFront() {
-        UndoHistory h(3);
+        UndoHistory                               h(3);
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -151,7 +152,7 @@ private slots:
     }
 
     void applyingGuardPreventsRecord() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -167,7 +168,7 @@ private slots:
     }
 
     void enabledDeltaRecorded() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("vignette", false, {});
         h.seed(snap);
@@ -178,19 +179,19 @@ private slots:
         auto entry = h.undo();
         QVERIFY(entry.has_value());
         QVERIFY(entry->enabled.has_value());
-        QVERIFY(!entry->enabled->first);   // from: false
-        QVERIFY(entry->enabled->second);   // to: true
+        QVERIFY(!entry->enabled->first); // from: false
+        QVERIFY(entry->enabled->second); // to: true
     }
 
     void multipleEffectsCreateMultipleEntries() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("brightness", true, {{"value", 0}});
-        snap << makeEff("vignette",   false, {{"amount", 0}});
+        snap << makeEff("vignette", false, {{"amount", 0}});
         h.seed(snap);
 
         snap[0].parameters["value"] = 10;
-        snap[1].enabled = true;
+        snap[1].enabled             = true;
         h.recordFromCurrent(snap);
 
         QCOMPARE(h.entries().size(), 2);
@@ -198,7 +199,7 @@ private slots:
     }
 
     void shadowUpdatedAfterUndo() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -210,13 +211,13 @@ private slots:
         // recordFromCurrent should detect no change (the shadow tracks v=0).
         snap[0].parameters["v"] = 0;
         h.recordFromCurrent(snap);
-        QCOMPARE(h.entries().size(), 1);  // no new entry
+        QCOMPARE(h.entries().size(), 1); // no new entry
     }
 
     void loadRestoresState() {
         QVector<UndoHistory::Entry> entries;
-        UndoHistory::Entry e;
-        e.effectId = "brightness";
+        UndoHistory::Entry          e;
+        e.effectId        = "brightness";
         e.params["value"] = {QVariant(0), QVariant(10)};
         entries.append(e);
 
@@ -233,18 +234,18 @@ private slots:
 
     void loadClampsOutOfRangeCursor() {
         QVector<UndoHistory::Entry> entries;
-        UndoHistory::Entry e;
-        e.effectId = "b";
+        UndoHistory::Entry          e;
+        e.effectId    = "b";
         e.params["v"] = {QVariant(0), QVariant(1)};
         entries.append(e);
 
         UndoHistory h;
-        h.load(entries, 99, {});  // cursor > size should clamp to size
+        h.load(entries, 99, {}); // cursor > size should clamp to size
         QCOMPARE(h.cursor(), 1);
     }
 
     void canUndoChangedSignalFires() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -268,7 +269,7 @@ private slots:
     void disappearingParamTracked() {
         // A param present in seed but absent from cur creates an entry
         // with from=value, to=invalid (line 56 in UndoHistory.cpp).
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}, {"extra", 5}});
         h.seed(snap);
@@ -278,7 +279,7 @@ private slots:
         h.recordFromCurrent(snap);
 
         QVERIFY(h.canUndo());
-        const auto& e = h.entries()[0];
+        const auto &e = h.entries()[0];
         QVERIFY(e.params.contains("extra"));
         QCOMPARE(e.params["extra"].from, QVariant(5));
         QVERIFY(!e.params["extra"].to.isValid());
@@ -287,7 +288,7 @@ private slots:
     void shadowRemovesNewParamOnUndo() {
         // When a param is NEW in cur (from=invalid), undoing it should remove
         // it from shadow — exercises the remove() branch in updateShadowFrom.
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {});
         h.seed(snap);
@@ -310,7 +311,7 @@ private slots:
     void shadowRemovesDisappearedParamOnRedo() {
         // When a param DISAPPEARED in cur (to=invalid), redoing it removes the
         // param from shadow — exercises the remove() branch in updateShadowTo.
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"extra", 5}});
         h.seed(snap);
@@ -324,13 +325,13 @@ private slots:
         // After redo, shadow should not contain "extra"
         // Verify: record with same state (no extra) — expect no new entry
         h.recordFromCurrent(snap);
-        QCOMPARE(h.cursor(), h.entries().size());  // no new entry beyond cursor
+        QCOMPARE(h.cursor(), h.entries().size()); // no new entry beyond cursor
     }
 
     void historyChangedOnSeed() {
         UndoHistory h;
-        int count = 0;
-        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        int         count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&] { ++count; });
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -338,32 +339,32 @@ private slots:
     }
 
     void historyChangedOnRecord() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
 
         int count = 0;
-        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        connect(&h, &UndoHistory::historyChanged, this, [&] { ++count; });
         snap[0].parameters["v"] = 5;
         h.recordFromCurrent(snap);
         QCOMPARE(count, 1);
     }
 
     void historyChangedNotOnNoOpRecord() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
 
         int count = 0;
-        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
-        h.recordFromCurrent(snap);   // no change
+        connect(&h, &UndoHistory::historyChanged, this, [&] { ++count; });
+        h.recordFromCurrent(snap); // no change
         QCOMPARE(count, 0);
     }
 
     void historyChangedOnUndo() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -371,13 +372,13 @@ private slots:
         h.recordFromCurrent(snap);
 
         int count = 0;
-        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        connect(&h, &UndoHistory::historyChanged, this, [&] { ++count; });
         h.undo();
         QCOMPARE(count, 1);
     }
 
     void historyChangedOnRedo() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -386,19 +387,19 @@ private slots:
         h.undo();
 
         int count = 0;
-        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        connect(&h, &UndoHistory::historyChanged, this, [&] { ++count; });
         h.redo();
         QCOMPARE(count, 1);
     }
 
     void historyChangedOnLoad() {
         UndoHistory h;
-        int count = 0;
-        connect(&h, &UndoHistory::historyChanged, this, [&]{ ++count; });
+        int         count = 0;
+        connect(&h, &UndoHistory::historyChanged, this, [&] { ++count; });
 
         QVector<UndoHistory::Entry> entries;
-        UndoHistory::Entry e;
-        e.effectId = "b";
+        UndoHistory::Entry          e;
+        e.effectId    = "b";
         e.params["v"] = {QVariant(0), QVariant(1)};
         entries.append(e);
         h.load(entries, 1, {});
@@ -406,7 +407,7 @@ private slots:
     }
 
     void canRedoChangedSignalFires() {
-        UndoHistory h;
+        UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;
         snap << makeEff("b", true, {{"v", 0}});
         h.seed(snap);
@@ -416,7 +417,7 @@ private slots:
         bool gotFalse = true;
         connect(&h, &UndoHistory::canRedoChanged, this, [&](bool b) { gotFalse = b; });
         h.undo();
-        QVERIFY(gotFalse);  // canRedo went true; signal fired with true
+        QVERIFY(gotFalse); // canRedo went true; signal fired with true
     }
 };
 

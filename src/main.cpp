@@ -38,7 +38,7 @@ static std::unique_ptr<EffectManager> makeEffects() {
     mgr->addEffect(std::make_unique<SplitToningEffect>());
     mgr->addEffect(std::make_unique<ClarityEffect>());
     mgr->addEffect(std::make_unique<ColorBalanceEffect>());
-    for (const auto& e : mgr->entries())
+    for (const auto &e : mgr->entries())
         e.effect->initialize();
     return mgr;
 }
@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
     GpuDeviceRegistry::instance().enumerate();
 
     std::unique_ptr<EffectManager> effects = makeEffects();
-    PhotoEditorApp window(effects.get());
+    PhotoEditorApp                 window(effects.get());
     window.initProofer(makeEffects());
     window.show();
 

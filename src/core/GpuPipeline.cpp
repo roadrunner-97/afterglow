@@ -20,7 +20,7 @@
 //
 // cropX0/Y0/X1/Y1 are the visible region in source image pixels (may extend
 // outside [0..srcW/H) — those pixels are output as black for letterboxing).
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 
 // Shared crop-to-source-range helper.  Returns [sx0, sx1) × [sy0, sy1) for the
 // dest pixel (dx, dy); callers check sx0<sx1 && sy0<sy1 before sampling.
@@ -207,8 +207,8 @@ __kernel void pack_linear_to_srgb_rgb32(
 
 // ── run ──────────────────────────────────────────────────────────────────────
 
-GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelineCall>& calls,
-                                   const ViewportRequest& viewport, RunMode mode) {
+GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelineCall> &calls,
+                                   const ViewportRequest &viewport, RunMode mode) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     const int rev = GpuDeviceRegistry::instance().revision();
@@ -216,22 +216,20 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         m_available = false;
         m_lastBits  = nullptr;
         m_initializedEffects.clear();
-        m_previewW = 0;
-        m_previewH = 0;
+        m_previewW       = 0;
+        m_previewH       = 0;
         m_processedValid = false;
         m_processedBytes = 0;
-        if (!initContext())
-            return {}; // GCOVR_EXCL_LINE
+        if (!initContext()) return {}; // GCOVR_EXCL_LINE
         m_revision = rev;
     }
 
     // Lazily compile kernels for any effect not yet seen in this context.
-    for (const auto& call : calls) {
-        IGpuEffect* g = call.gpu;
+    for (const auto &call : calls) {
+        IGpuEffect *g = call.gpu;
         if (m_initializedEffects.find(g) == m_initializedEffects.end()) {
             if (!g->initGpuKernels(m_context, m_device)) {
-                qWarning() << "[GpuPipeline] initGpuKernels failed for"
-                           << call.effect->getName();
+                qWarning() << "[GpuPipeline] initGpuKernels failed for" << call.effect->getName();
                 return {};
             }
             m_initializedEffects.insert(g);
@@ -241,30 +239,28 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
     // Also compare dimensions, because freed-then-reallocated QImage buffers
     // can land at the same address.  The bits pointer alone isn't a reliable
     // identity for the source image.
-    if (image.constBits() != m_lastBits ||
-        image.width()     != m_width    ||
-        image.height()    != m_height)
+    if (image.constBits() != m_lastBits || image.width() != m_width || image.height() != m_height)
         uploadImageLocked(image);
 
     if (!m_available) return {};
 
     try {
         // Compute preview dimensions from viewport.
-        const int previewW = viewport.displaySize.isValid() ? viewport.displaySize.width()  : m_width;
+        const int previewW = viewport.displaySize.isValid() ? viewport.displaySize.width() : m_width;
         const int previewH = viewport.displaySize.isValid() ? viewport.displaySize.height() : m_height;
 
         // Compute the visible crop region in source image pixels.
         // Mirrors the pan/zoom math in ViewportWidget exactly.  Letterbox
         // padding shows up here as cropX0<0 / cropX1>srcW (the visible region
         // extends past the image into empty viewport space).
-        const float W  = m_width,  H  = m_height;
+        const float W = m_width, H = m_height;
         const float Vw = previewW, Vh = previewH;
         const float fitScale     = std::min(Vw / W, Vh / H);
         const float displayScale = fitScale * viewport.zoom;
-        const float regionW = Vw / displayScale;
-        const float regionH = Vh / displayScale;
-        const float cropX0 = (float)viewport.center.x() * W - regionW * 0.5f;
-        const float cropY0 = (float)viewport.center.y() * H - regionH * 0.5f;
+        const float regionW      = Vw / displayScale;
+        const float regionH      = Vh / displayScale;
+        const float cropX0       = (float)viewport.center.x() * W - regionW * 0.5f;
+        const float cropY0       = (float)viewport.center.y() * H - regionH * 0.5f;
 
         // Clip the crop region to the actual image bounds.  Effects only run
         // on real image pixels; the viewport widget renders the result inside
@@ -274,8 +270,8 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         // colour balance) painted onto the black letterbox pixels.
         const float clipX0 = std::max(0.0f, cropX0);
         const float clipY0 = std::max(0.0f, cropY0);
-        const float clipX1 = std::min(W,    cropX0 + regionW);
-        const float clipY1 = std::min(H,    cropY0 + regionH);
+        const float clipX1 = std::min(W, cropX0 + regionW);
+        const float clipY1 = std::min(H, cropY0 + regionH);
         if (clipX0 >= clipX1 || clipY0 >= clipY1) return {};
 
         // Preview-pixel range that covers the clipped source region.  Round
@@ -292,11 +288,11 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         if (m_previewW != imgW || m_previewH != imgH) {
             const size_t f4Bytes     = static_cast<size_t>(imgW) * imgH * sizeof(cl_float4);
             const size_t packedBytes = static_cast<size_t>(imgW) * imgH * sizeof(cl_uint);
-            m_workBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
-            m_auxBuf    = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
-            m_packedBuf = cl::Buffer(m_context, CL_MEM_READ_WRITE, packedBytes);
-            m_previewW  = imgW;
-            m_previewH  = imgH;
+            m_workBuf                = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
+            m_auxBuf                 = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
+            m_packedBuf              = cl::Buffer(m_context, CL_MEM_READ_WRITE, packedBytes);
+            m_previewW               = imgW;
+            m_previewH               = imgH;
         }
 
         const QPoint offset(imgX0, imgY0);
@@ -305,21 +301,20 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         // If the cache is valid the visible preview can be produced with a
         // single float4→float4 downsample plus pack+readback.  No effect work.
         if (mode == RunMode::PanZoom && m_processedValid) {
-            cl::Kernel& ds = m_downsampleKernelFloat4;
+            cl::Kernel &ds = m_downsampleKernelFloat4;
             ds.setArg(0, m_processedBuf);
             ds.setArg(1, m_workBuf);
             ds.setArg(2, m_width);
             ds.setArg(3, m_height);
-            ds.setArg(4, m_width);   // m_processedBuf is tightly packed
+            ds.setArg(4, m_width); // m_processedBuf is tightly packed
             ds.setArg(5, imgW);
             ds.setArg(6, imgH);
             ds.setArg(7, clipX0);
             ds.setArg(8, clipY0);
             ds.setArg(9, clipX1);
             ds.setArg(10, clipY1);
-            m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
-                                         cl::NDRange(imgW, imgH));
-            return { packAndReadbackLocked(m_workBuf, imgW, imgH), offset };
+            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(imgW, imgH));
+            return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
         }
 
         // ── Commit path ───────────────────────────────────────────────────────
@@ -327,20 +322,18 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         // effects in-place on processedBuf.  Finally downsample the cache and
         // pack+readback for display.
         if (mode == RunMode::Commit) {
-            if (!decodeFullResLocked())
-                return {}; // GCOVR_EXCL_LINE — decodeFullResLocked can only fail via cl::Error
+            if (!decodeFullResLocked()) return {}; // GCOVR_EXCL_LINE — decodeFullResLocked can only fail via cl::Error
 
             // Effects at full resolution: pixel radii are in source pixels.
-            for (const auto& call : calls) {
-                IGpuEffect* g = call.gpu;
+            for (const auto &call : calls) {
+                IGpuEffect             *g      = call.gpu;
                 QMap<QString, QVariant> params = call.params;
                 params.insert("_srcPixelsPerPreviewPixel", 1.0);
                 params.insert("_cropX0", 0.0);
                 params.insert("_cropY0", 0.0);
                 params.insert("_srcW", m_width);
                 params.insert("_srcH", m_height);
-                if (!g->enqueueGpu(m_queue, m_processedBuf, m_fullAuxBuf,
-                                   m_width, m_height, params)) {
+                if (!g->enqueueGpu(m_queue, m_processedBuf, m_fullAuxBuf, m_width, m_height, params)) {
                     qWarning() << "[GpuPipeline]" << call.effect->getName()
                                << "enqueueGpu() failed — aborting pipeline";
                     return {};
@@ -350,7 +343,7 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
             m_processedValid = true;
 
             // Downsample cache → workBuf at the visible-region dimensions.
-            cl::Kernel& ds = m_downsampleKernelFloat4;
+            cl::Kernel &ds = m_downsampleKernelFloat4;
             ds.setArg(0, m_processedBuf);
             ds.setArg(1, m_workBuf);
             ds.setArg(2, m_width);
@@ -362,10 +355,9 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
             ds.setArg(8, clipY0);
             ds.setArg(9, clipX1);
             ds.setArg(10, clipY1);
-            m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
-                                         cl::NDRange(imgW, imgH));
+            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(imgW, imgH));
 
-            return { packAndReadbackLocked(m_workBuf, imgW, imgH), offset };
+            return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
         }
 
         // ── LiveDrag / PanZoom fallback ───────────────────────────────────────
@@ -375,10 +367,9 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         // since a new drag-state overrides the last committed frame.
         m_processedValid = false;
 
-        cl::Kernel* dsKernel = nullptr;
+        cl::Kernel *dsKernel = nullptr;
         if (m_is16bit)
-            dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear
-                                       : &m_downsampleKernel16Srgb;
+            dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
         else
             dsKernel = &m_downsampleKernel8Srgb;
 
@@ -393,36 +384,32 @@ GpuPipelineResult GpuPipeline::run(const QImage& image, const QVector<GpuPipelin
         dsKernel->setArg(8, clipY0);
         dsKernel->setArg(9, clipX1);
         dsKernel->setArg(10, clipY1);
-        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange,
-                                     cl::NDRange(imgW, imgH));
+        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange, cl::NDRange(imgW, imgH));
         m_queue.finish();
 
         const float srcPixelsPerPreviewPixel = (clipX1 - clipX0) / static_cast<float>(imgW);
-        for (const auto& call : calls) {
-            IGpuEffect* g = call.gpu;
+        for (const auto &call : calls) {
+            IGpuEffect             *g            = call.gpu;
             QMap<QString, QVariant> scaledParams = call.params;
-            scaledParams.insert("_srcPixelsPerPreviewPixel",
-                                static_cast<double>(srcPixelsPerPreviewPixel));
+            scaledParams.insert("_srcPixelsPerPreviewPixel", static_cast<double>(srcPixelsPerPreviewPixel));
             scaledParams.insert("_cropX0", static_cast<double>(clipX0));
             scaledParams.insert("_cropY0", static_cast<double>(clipY0));
             scaledParams.insert("_srcW", m_width);
             scaledParams.insert("_srcH", m_height);
-            if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf,
-                               imgW, imgH, scaledParams)) {
+            if (!g->enqueueGpu(m_queue, m_workBuf, m_auxBuf, imgW, imgH, scaledParams)) {
                 // GCOVR_EXCL_START — every shipped IGpuEffect returns true
                 // unless it threw, in which case the surrounding catch fires.
-                qWarning() << "[GpuPipeline]" << call.effect->getName()
-                           << "enqueueGpu() failed — aborting pipeline";
+                qWarning() << "[GpuPipeline]" << call.effect->getName() << "enqueueGpu() failed — aborting pipeline";
                 return {};
                 // GCOVR_EXCL_STOP
             }
         }
         m_queue.finish();
 
-        return { packAndReadbackLocked(m_workBuf, imgW, imgH), offset };
+        return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
+    catch (const cl::Error &e) {
         qWarning() << "[GpuPipeline] run() failed:" << e.what() << "(err" << e.err() << ")";
         m_available = false;
         return {};
@@ -439,7 +426,7 @@ bool GpuPipeline::decodeFullResLocked() {
         m_processedValid = false;
     }
 
-    cl::Kernel* k = nullptr;
+    cl::Kernel *k = nullptr;
     if (m_is16bit)
         k = m_inputIsLinear ? &m_decodeKernel16Linear : &m_decodeKernel16Srgb;
     else
@@ -450,13 +437,12 @@ bool GpuPipeline::decodeFullResLocked() {
     k->setArg(2, m_width);
     k->setArg(3, m_height);
     k->setArg(4, m_stride);
-    m_queue.enqueueNDRangeKernel(*k, cl::NullRange,
-                                 cl::NDRange(m_width, m_height));
+    m_queue.enqueueNDRangeKernel(*k, cl::NullRange, cl::NDRange(m_width, m_height));
     m_queue.finish();
     return true;
 }
 
-QImage GpuPipeline::packAndReadbackLocked(cl::Buffer& src, int w, int h) {
+QImage GpuPipeline::packAndReadbackLocked(cl::Buffer &src, int w, int h) {
     m_packKernel.setArg(0, src);
     m_packKernel.setArg(1, m_packedBuf);
     m_packKernel.setArg(2, w);
@@ -464,9 +450,7 @@ QImage GpuPipeline::packAndReadbackLocked(cl::Buffer& src, int w, int h) {
     m_queue.enqueueNDRangeKernel(m_packKernel, cl::NullRange, cl::NDRange(w, h));
 
     QImage result(w, h, QImage::Format_RGB32);
-    m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0,
-                              static_cast<size_t>(w) * h * sizeof(cl_uint),
-                              result.bits());
+    m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0, static_cast<size_t>(w) * h * sizeof(cl_uint), result.bits());
     return result;
 }
 
@@ -483,12 +467,11 @@ bool GpuPipeline::initContext() {
     // GCOVR_EXCL_STOP
 
     try {
-        m_context = cl::Context(device);
-        m_queue   = cl::CommandQueue(m_context, device);
-        m_device  = device;
+        m_context   = cl::Context(device);
+        m_queue     = cl::CommandQueue(m_context, device);
+        m_device    = device;
         m_available = true;
-        qDebug() << "[GpuPipeline] context ready on:"
-                 << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
+        qDebug() << "[GpuPipeline] context ready on:" << QString::fromStdString(device.getInfo<CL_DEVICE_NAME>());
 
         // GCOVR_EXCL_START
         if (!initDownsampleKernels()) {
@@ -500,7 +483,7 @@ bool GpuPipeline::initContext() {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
+    catch (const cl::Error &e) {
         qWarning() << "[GpuPipeline] initContext failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
@@ -511,30 +494,30 @@ bool GpuPipeline::initDownsampleKernels() {
     cl::Program prog(m_context, PIPELINE_KERNEL_SOURCE);
     try {
         prog.build({m_device});
-        m_downsampleKernel8Srgb     = cl::Kernel(prog, "preview_downsample_8bit_srgb_to_linear");
-        m_downsampleKernel16Srgb    = cl::Kernel(prog, "preview_downsample_16bit_srgb_to_linear");
-        m_downsampleKernel16Linear  = cl::Kernel(prog, "preview_downsample_16bit_linear");
-        m_downsampleKernelFloat4    = cl::Kernel(prog, "preview_downsample_float4_linear");
-        m_decodeKernel8Srgb         = cl::Kernel(prog, "fullres_decode_8bit_srgb_to_linear");
-        m_decodeKernel16Srgb        = cl::Kernel(prog, "fullres_decode_16bit_srgb_to_linear");
-        m_decodeKernel16Linear      = cl::Kernel(prog, "fullres_decode_16bit_linear");
-        m_packKernel                = cl::Kernel(prog, "pack_linear_to_srgb_rgb32");
+        m_downsampleKernel8Srgb    = cl::Kernel(prog, "preview_downsample_8bit_srgb_to_linear");
+        m_downsampleKernel16Srgb   = cl::Kernel(prog, "preview_downsample_16bit_srgb_to_linear");
+        m_downsampleKernel16Linear = cl::Kernel(prog, "preview_downsample_16bit_linear");
+        m_downsampleKernelFloat4   = cl::Kernel(prog, "preview_downsample_float4_linear");
+        m_decodeKernel8Srgb        = cl::Kernel(prog, "fullres_decode_8bit_srgb_to_linear");
+        m_decodeKernel16Srgb       = cl::Kernel(prog, "fullres_decode_16bit_srgb_to_linear");
+        m_decodeKernel16Linear     = cl::Kernel(prog, "fullres_decode_16bit_linear");
+        m_packKernel               = cl::Kernel(prog, "pack_linear_to_srgb_rgb32");
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] initDownsampleKernels failed:" << e.what()
-                   << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] initDownsampleKernels failed:" << e.what() << "(err" << e.err() << ")";
         try {
             std::string log = prog.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
             qWarning() << "Build log:" << QString::fromStdString(log);
-        } catch (...) {}
+        } catch (...) {
+        }
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-void GpuPipeline::uploadImageLocked(const QImage& image) {
+void GpuPipeline::uploadImageLocked(const QImage &image) {
     const bool is16bit = (image.format() == QImage::Format_RGBX64);
     const int  bpp     = is16bit ? 8 : 4;
 
@@ -550,17 +533,16 @@ void GpuPipeline::uploadImageLocked(const QImage& image) {
     // copy, to survive the convertToFormat round-trip.
     m_inputIsLinear = (image.text("color_space") == QStringLiteral("linear"));
 
-    m_previewW = 0;
-    m_previewH = 0;
-    m_processedValid = false;  // new image content invalidates the cache
+    m_previewW       = 0;
+    m_previewH       = 0;
+    m_processedValid = false; // new image content invalidates the cache
 
     try {
-        m_srcBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                m_bufBytes, src.bits());
+        m_srcBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, m_bufBytes, src.bits());
         m_lastBits = image.constBits();
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
+    catch (const cl::Error &e) {
         qWarning() << "[GpuPipeline] upload failed:" << e.what() << "(err" << e.err() << ")";
         m_available = false;
     }

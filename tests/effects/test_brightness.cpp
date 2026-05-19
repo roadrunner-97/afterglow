@@ -14,34 +14,32 @@ private slots:
     // runEffect(null, {}) must return a null image, not crash.
     void nullImage_passThrough() {
         BrightnessEffect e;
-        QImage result = runEffect(e, QImage(), {});
+        QImage           result = runEffect(e, QImage(), {});
         QVERIFY(result.isNull());
     }
 
     // brightness=0, contrast=0 → identity: no pixel should change.
     void identity_zeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid(32, 32, 128, 90, 60);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid(32, 32, 128, 90, 60);
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 128 && qGreen(px) == 90 && qBlue(px) == 60;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 128 && qGreen(px) == 90 && qBlue(px) == 60; }));
     }
 
     // brightness=+50 on mid-grey → all pixels must get brighter.
     void brightnessUp_brightensPixels() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["brightness"] = 50;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 128; }));
     }
@@ -49,12 +47,12 @@ private slots:
     // brightness=-50 on mid-grey → all pixels must get darker.
     void brightnessDown_darkensPixels() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["brightness"] = -50;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) < 128; }));
     }
@@ -62,45 +60,41 @@ private slots:
     // White + max brightness → must not overflow: still 255.
     void white_clampsAt255() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid(32, 32, 255, 255, 255);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid(32, 32, 255, 255, 255);
         QMap<QString, QVariant> params;
         params["brightness"] = 100;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 255 && qGreen(px) == 255 && qBlue(px) == 255;
-        }));
+        QImage out           = runEffect(e, input, params);
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 255 && qGreen(px) == 255 && qBlue(px) == 255; }));
     }
 
     // Black + max negative brightness → must not underflow: still 0.
     void black_clampsAt0() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid(32, 32, 0, 0, 0);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid(32, 32, 0, 0, 0);
         QMap<QString, QVariant> params;
         params["brightness"] = -100;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 0 && qGreen(px) == 0 && qBlue(px) == 0;
-        }));
+        QImage out           = runEffect(e, input, params);
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 0 && qGreen(px) == 0 && qBlue(px) == 0; }));
     }
 
     // contrast=+50: dark pixels should get darker, bright pixels get brighter.
     // contrastFactor = (50+100)/100 = 1.5; pivot is at 0.5 (≈128).
     void contrastUp_spreadsPixels() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
+        BrightnessEffect        e;
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 50;
 
-        QImage dark = makeSolid(32, 32, 50, 50, 50);
+        QImage dark    = makeSolid(32, 32, 50, 50, 50);
         QImage darkOut = runEffect(e, dark, params);
         QVERIFY(pixelR(darkOut, 0, 0) < 50);
 
-        QImage bright = makeSolid(32, 32, 200, 200, 200);
+        QImage bright    = makeSolid(32, 32, 200, 200, 200);
         QImage brightOut = runEffect(e, bright, params);
         QVERIFY(pixelR(brightOut, 0, 0) > 200);
     }
@@ -109,16 +103,16 @@ private slots:
     // contrastFactor = (-50+100)/100 = 0.5.
     void contrastDown_compressesPixels() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
+        BrightnessEffect        e;
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = -50;
 
-        QImage dark = makeSolid(32, 32, 50, 50, 50);
+        QImage dark    = makeSolid(32, 32, 50, 50, 50);
         QImage darkOut = runEffect(e, dark, params);
         QVERIFY(pixelR(darkOut, 0, 0) > 50);
 
-        QImage bright = makeSolid(32, 32, 200, 200, 200);
+        QImage bright    = makeSolid(32, 32, 200, 200, 200);
         QImage brightOut = runEffect(e, bright, params);
         QVERIFY(pixelR(brightOut, 0, 0) < 200);
     }
@@ -127,14 +121,14 @@ private slots:
     // still preserve input dimensions and process every pixel correctly.
     void nonSquare_brightnessUp_brightensAllPixels() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid(128, 64, 128, 128, 128);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid(128, 64, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["brightness"] = 50;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.width(), 128);
         QCOMPARE(out.height(), 64);
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) > 128; }));
     }
@@ -149,7 +143,7 @@ private slots:
 
     void defaultParameters_keys() {
         BrightnessEffect e;
-        auto params = e.getParameters();
+        auto             params = e.getParameters();
         QVERIFY(params.contains("brightness"));
         QVERIFY(params.contains("contrast"));
         QCOMPARE(params["brightness"].toInt(), 0);
@@ -158,18 +152,18 @@ private slots:
 
     void identity_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid16bit(32, 32, 128, 90, 60);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid16bit(32, 32, 128, 90, 60);
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
     void createControlsWidget_constructsAndCaches() {
         BrightnessEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
     }
@@ -177,41 +171,41 @@ private slots:
     // 16-bit image with non-zero brightness — exercises the 16-bit decode path.
     void brightness_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid16bit(32, 32, 100, 100, 100);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid16bit(32, 32, 100, 100, 100);
         QMap<QString, QVariant> params;
         params["brightness"] = 50;
         params["contrast"]   = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
     // 16-bit with non-zero contrast — also exercises the 16-bit decode path.
     void contrast_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
-        BrightnessEffect e;
-        QImage input = makeSolid16bit(32, 32, 128, 128, 128);
+        BrightnessEffect        e;
+        QImage                  input = makeSolid16bit(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["brightness"] = 0;
         params["contrast"]   = 30;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
     // Fire signal lambdas in createControlsWidget (covers lambda bodies for both sliders).
     void connectSlider_signals_coverLambdaBodies() {
         BrightnessEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto sliders = w->findChildren<ParamSlider *>();
         QVERIFY(sliders.size() >= 2);
 
-        for (auto* ps : sliders) {
-            auto* qs = ps->findChild<QSlider*>();
+        for (auto *ps : sliders) {
+            auto *qs = ps->findChild<QSlider *>();
             QVERIFY(qs);
             qs->setValue(1);
             QMetaObject::invokeMethod(qs, "sliderReleased");
@@ -223,7 +217,7 @@ private slots:
 
     // Heap-allocate so the destructor body is explicitly attributed.
     void destructor_heapAllocated_doesNotCrash() {
-        auto* e = new BrightnessEffect();
+        auto *e = new BrightnessEffect();
         e->createControlsWidget();
         delete e;
     }

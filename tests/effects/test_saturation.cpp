@@ -20,28 +20,26 @@ private slots:
     // delta=0 the hue/saturation reconstruction is exact → pixel unchanged.
     void grey_identityWithZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid(32, 32, 128, 128, 128);
+        SaturationEffect        e;
+        QImage                  input = makeSolid(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 128 && qGreen(px) == 128 && qBlue(px) == 128;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 128 && qGreen(px) == 128 && qBlue(px) == 128; }));
     }
 
     // sat=-20 on a pixel with HSV saturation 0.5 (R=200, G=100, B=100, h=0°):
     // s_new = 0.5 − 0.2 = 0.3 → chroma gap R−G shrinks from 100 to ~60.
     void desaturate_reducesChromaGap() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid(32, 32, 200, 100, 100);
+        SaturationEffect        e;
+        QImage                  input = makeSolid(32, 32, 200, 100, 100);
         QMap<QString, QVariant> params;
         params["saturation"] = -20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         int gapIn  = 200 - 100;
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
@@ -51,12 +49,12 @@ private slots:
     // sat=+20 on the same pixel: s_new = 0.5 + 0.2 = 0.7 → gap grows to ~140.
     void saturate_increasesChromaGap() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid(32, 32, 200, 100, 100);
+        SaturationEffect        e;
+        QImage                  input = makeSolid(32, 32, 200, 100, 100);
         QMap<QString, QVariant> params;
         params["saturation"] = 20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
         int gapIn  = 200 - 100;
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
@@ -68,12 +66,12 @@ private slots:
     // Not fully grey but gap must shrink substantially.
     void desaturate_lowSatPixel_nearGrey() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid(32, 32, 200, 148, 148);
+        SaturationEffect        e;
+        QImage                  input = makeSolid(32, 32, 200, 148, 148);
         QMap<QString, QVariant> params;
         params["saturation"] = -20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         // After desaturation, R−G gap should be smaller than before (52 → ~12).
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
         QVERIFY(gapOut < 52);
@@ -84,14 +82,14 @@ private slots:
     // With vib=+20, s increases → gap between R and G should grow.
     void vibrancy_boostsDullColour() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid(32, 32, 200, 180, 180);
+        SaturationEffect        e;
+        QImage                  input = makeSolid(32, 32, 200, 180, 180);
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 20.0;
-        QImage out = runEffect(e, input, params);
-        int gapIn  = 200 - 180;
-        int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
+        QImage out           = runEffect(e, input, params);
+        int    gapIn         = 200 - 180;
+        int    gapOut        = pixelR(out, 0, 0) - pixelG(out, 0, 0);
         QVERIFY(gapOut > gapIn);
     }
 
@@ -100,14 +98,14 @@ private slots:
     // must widen the R−G chroma gap.
     void nonSquare_saturate_increasesChromaGap() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid(128, 64, 200, 100, 100);
+        SaturationEffect        e;
+        QImage                  input = makeSolid(128, 64, 200, 100, 100);
         QMap<QString, QVariant> params;
         params["saturation"] = 20.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.width(), 128);
         QCOMPARE(out.height(), 64);
         int gapIn  = 200 - 100;
         int gapOut = pixelR(out, 0, 0) - pixelG(out, 0, 0);
@@ -124,27 +122,27 @@ private slots:
 
     void defaultParameters_keys() {
         SaturationEffect e;
-        auto params = e.getParameters();
+        auto             params = e.getParameters();
         QVERIFY(params.contains("saturation"));
         QVERIFY(params.contains("vibrancy"));
         QCOMPARE(params["saturation"].toDouble(), 0.0);
-        QCOMPARE(params["vibrancy"].toDouble(),   0.0);
+        QCOMPARE(params["vibrancy"].toDouble(), 0.0);
     }
 
     void identity_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid16bit(32, 32, 128, 128, 128);
+        SaturationEffect        e;
+        QImage                  input = makeSolid16bit(32, 32, 128, 128, 128);
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
     void createControlsWidget_constructsAndCaches() {
         SaturationEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
     }
@@ -152,41 +150,41 @@ private slots:
     // 16-bit with non-zero saturation — exercises the 16-bit decode path.
     void saturation_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid16bit(32, 32, 200, 100, 100);
+        SaturationEffect        e;
+        QImage                  input = makeSolid16bit(32, 32, 200, 100, 100);
         QMap<QString, QVariant> params;
         params["saturation"] = 10.0;
         params["vibrancy"]   = 0.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
     // 16-bit with non-zero vibrancy — also exercises the 16-bit decode path.
     void vibrancy_16bit_nonZeroParams() {
         if (!m_hasGpu) QSKIP("No GPU");
-        SaturationEffect e;
-        QImage input = makeSolid16bit(32, 32, 200, 180, 180);
+        SaturationEffect        e;
+        QImage                  input = makeSolid16bit(32, 32, 200, 180, 180);
         QMap<QString, QVariant> params;
         params["saturation"] = 0.0;
         params["vibrancy"]   = 10.0;
-        QImage out = runEffect(e, input, params);
+        QImage out           = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
     // Fire signal lambdas in createControlsWidget (covers both slider signal lambda bodies).
     void connectSlider_signals_coverLambdaBodies() {
         SaturationEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget         *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto sliders = w->findChildren<ParamSlider *>();
         QVERIFY(sliders.size() >= 2);
 
-        for (auto* ps : sliders) {
-            auto* qs = ps->findChild<QSlider*>();
+        for (auto *ps : sliders) {
+            auto *qs = ps->findChild<QSlider *>();
             QVERIFY(qs);
             qs->setValue(qs->value() + 1);
             QMetaObject::invokeMethod(qs, "sliderReleased");
@@ -197,7 +195,7 @@ private slots:
     }
 
     void destructor_heapAllocated_doesNotCrash() {
-        auto* e = new SaturationEffect();
+        auto *e = new SaturationEffect();
         e->createControlsWidget();
         delete e;
     }

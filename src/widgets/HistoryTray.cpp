@@ -7,26 +7,24 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-HistoryTray::HistoryTray(QWidget* parent)
-    : QWidget(parent)
-{
+HistoryTray::HistoryTray(QWidget *parent) : QWidget(parent) {
     setAutoFillBackground(true);
 
-    auto* outerLayout = new QVBoxLayout(this);
+    auto *outerLayout = new QVBoxLayout(this);
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->setSpacing(0);
 
     // Header bar
-    auto* header = new QWidget();
-    auto* headerLayout = new QHBoxLayout(header);
+    auto *header       = new QWidget();
+    auto *headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(4, 2, 4, 2);
-    auto* titleLabel = new QLabel("History");
-    QFont titleFont = titleLabel->font();
+    auto *titleLabel = new QLabel("History");
+    QFont titleFont  = titleLabel->font();
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
     headerLayout->addWidget(titleLabel, 1);
     m_collapseBtn = new QToolButton();
-    m_collapseBtn->setText(u8"▲");   // ▲
+    m_collapseBtn->setText(u8"▲"); // ▲
     m_collapseBtn->setAutoRaise(true);
     headerLayout->addWidget(m_collapseBtn);
     outerLayout->addWidget(header);
@@ -42,23 +40,21 @@ HistoryTray::HistoryTray(QWidget* parent)
     setFixedWidth(fontMetrics().averageCharWidth() * 26);
 
     connect(m_collapseBtn, &QToolButton::clicked, this, &HistoryTray::toggleCollapsed);
-    connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
-        emit rowActivated(m_list->row(item));
-    });
+    connect(m_list, &QListWidget::itemClicked, this,
+            [this](QListWidgetItem *item) { emit rowActivated(m_list->row(item)); });
 }
 
-void HistoryTray::setHistory(const QVector<Row>& rows, int cursor)
-{
+void HistoryTray::setHistory(const QVector<Row> &rows, int cursor) {
     m_list->clear();
 
     m_list->addItem("Original");
-    for (const auto& r : rows)
+    for (const auto &r : rows)
         m_list->addItem(r.label);
 
     const QColor dimColor = palette().color(QPalette::Disabled, QPalette::Text);
-    const int total = m_list->count();
+    const int    total    = m_list->count();
     for (int i = 0; i < total; ++i) {
-        QListWidgetItem* item = m_list->item(i);
+        QListWidgetItem *item = m_list->item(i);
         if (i == cursor) {
             QFont f = item->font();
             f.setBold(true);
@@ -74,10 +70,9 @@ void HistoryTray::setHistory(const QVector<Row>& rows, int cursor)
     }
 }
 
-void HistoryTray::toggleCollapsed()
-{
+void HistoryTray::toggleCollapsed() {
     m_collapsed = !m_collapsed;
     m_list->setVisible(!m_collapsed);
-    m_collapseBtn->setText(m_collapsed ? u8"▼" : u8"▲");  // ▼ / ▲
+    m_collapseBtn->setText(m_collapsed ? u8"▼" : u8"▲"); // ▼ / ▲
     adjustSize();
 }

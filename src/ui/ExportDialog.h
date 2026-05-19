@@ -20,12 +20,12 @@ class ExportDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit ExportDialog(QWidget* parent = nullptr);
+    explicit ExportDialog(QWidget *parent = nullptr);
 
     // Pre-populate the destination folder when the user has no saved choice
     // yet (e.g. first launch).  Pattern, format, quality, and conflict policy
     // come from QSettings or hard defaults.
-    void setDefaultDestinationDir(const QString& dir);
+    void setDefaultDestinationDir(const QString &dir);
 
     ExportOptions::Options options() const;
 
@@ -39,20 +39,20 @@ private:
     void persistToSettings() const;
     void accept() override;
 
-    QLineEdit*   m_destEdit         = nullptr;
-    QPushButton* m_browseBtn        = nullptr;
-    QLineEdit*   m_patternEdit      = nullptr;
-    QPushButton* m_subfolderToggle  = nullptr;
-    QWidget*     m_subfolderBody    = nullptr;
-    QLineEdit*   m_subfolderEdit    = nullptr;
-    QComboBox*   m_formatCombo      = nullptr;
-    QSlider*     m_qualitySlider    = nullptr;
-    QLabel*      m_qualityLabel     = nullptr;
-    QComboBox*   m_conflictCombo    = nullptr;
-    QComboBox*   m_resizeModeCombo  = nullptr;
-    QSpinBox*    m_resizePixelsSpin = nullptr;
-    QSpinBox*    m_resizePercentSpin= nullptr;
-    QCheckBox*   m_resizeNoEnlarge  = nullptr;
+    QLineEdit   *m_destEdit          = nullptr;
+    QPushButton *m_browseBtn         = nullptr;
+    QLineEdit   *m_patternEdit       = nullptr;
+    QPushButton *m_subfolderToggle   = nullptr;
+    QWidget     *m_subfolderBody     = nullptr;
+    QLineEdit   *m_subfolderEdit     = nullptr;
+    QComboBox   *m_formatCombo       = nullptr;
+    QSlider     *m_qualitySlider     = nullptr;
+    QLabel      *m_qualityLabel      = nullptr;
+    QComboBox   *m_conflictCombo     = nullptr;
+    QComboBox   *m_resizeModeCombo   = nullptr;
+    QSpinBox    *m_resizePixelsSpin  = nullptr;
+    QSpinBox    *m_resizePercentSpin = nullptr;
+    QCheckBox   *m_resizeNoEnlarge   = nullptr;
 };
 
 #endif // EXPORTDIALOG_H

@@ -6,27 +6,25 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
 
-ImageProcessor::ImageProcessor(QObject *parent)
-    : QObject(parent) {}
+ImageProcessor::ImageProcessor(QObject *parent) : QObject(parent) {}
 
 // Build the injection map for non-destructive crop.  Geometry-aware effects
 // (vignette, film grain, ...) read these keys to operate on the cropped
 // frame; effects that ignore them pay only a QMap lookup miss.  No-op when
 // the supplied source is null.
-static QMap<QString, QVariant> buildCropInjection(ICropSource* src) {
+static QMap<QString, QVariant> buildCropInjection(ICropSource *src) {
     if (!src) return {};
     const QRectF r = src->userCropRect();
     return {
-        {"_userCropX0",    r.left()},
-        {"_userCropY0",    r.top()},
-        {"_userCropX1",    r.right()},
-        {"_userCropY1",    r.bottom()},
+        {"_userCropX0", r.left()},
+        {"_userCropY0", r.top()},
+        {"_userCropX1", r.right()},
+        {"_userCropY1", r.bottom()},
         {"_userCropAngle", static_cast<double>(src->userCropAngle())},
     };
 }
 
-static void mergeInto(QMap<QString, QVariant>& dst,
-                      const QMap<QString, QVariant>& src) {
+static void mergeInto(QMap<QString, QVariant> &dst, const QMap<QString, QVariant> &src) {
     for (auto it = src.constBegin(); it != src.constEnd(); ++it)
         dst.insert(it.key(), it.value());
 }
@@ -34,14 +32,13 @@ static void mergeInto(QMap<QString, QVariant>& dst,
 // Builds the per-frame GPU call list from the manager's enabled entries.
 // Every shipping effect implements IGpuEffect, so the cached entry.gpu
 // pointer is always non-null and there is no QImage / CPU fallback path.
-static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager& effects) {
-    const QMap<QString, QVariant> cropInjected =
-        buildCropInjection(effects.activeCropSource());
-    QVector<GpuPipelineCall> calls;
+static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager &effects) {
+    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects.activeCropSource());
+    QVector<GpuPipelineCall>      calls;
     calls.reserve(effects.entries().size());
-    for (const EffectEntry& entry : effects.entries()) {
+    for (const EffectEntry &entry : effects.entries()) {
         if (!entry.enabled) continue;
-        Q_ASSERT(entry.gpu);  // every shipping effect implements IGpuEffect
+        Q_ASSERT(entry.gpu); // every shipping effect implements IGpuEffect
         QMap<QString, QVariant> params = entry.effect->getParameters();
         mergeInto(params, cropInjected);
         calls.append({entry.effect, entry.gpu, params});
@@ -49,60 +46,49 @@ static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager& effects) {
     return calls;
 }
 
-void ImageProcessor::processImageAsync(const QImage &originalImage,
-                                       const EffectManager &effects,
-                                       ViewportRequest viewport,
-                                       RunMode mode,
-                                       bool bypassEffects) {
-    auto genPtr = generationPtr;
-    uint64_t myGen = ++(*genPtr);
+void ImageProcessor::processImageAsync(const QImage &originalImage, const EffectManager &effects,
+                                       ViewportRequest viewport, RunMode mode, bool bypassEffects) {
+    auto     genPtr = generationPtr;
+    uint64_t myGen  = ++(*genPtr);
 
     // Snapshot parameters on the calling (main) thread so effect QObjects
     // are never touched from the worker thread.
-    QVector<GpuPipelineCall> calls =
-        bypassEffects ? QVector<GpuPipelineCall>{} : buildGpuCalls(effects);
+    QVector<GpuPipelineCall> calls = bypassEffects ? QVector<GpuPipelineCall>{} : buildGpuCalls(effects);
 
     emit processingStarted();
 
     auto *watcher = new QFutureWatcher<GpuPipelineResult>(this);
-    connect(watcher, &QFutureWatcher<GpuPipelineResult>::finished, this,
-            [this, watcher, myGen, genPtr]() {
+    connect(watcher, &QFutureWatcher<GpuPipelineResult>::finished, this, [this, watcher, myGen, genPtr]() {
         if (myGen == genPtr->load(std::memory_order_relaxed)) {
             const GpuPipelineResult r = watcher->result();
-            emit processingComplete(r.image, r.offset);
+            emit                    processingComplete(r.image, r.offset);
         }
         watcher->deleteLater();
     });
 
     auto pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run(
-        [image = originalImage, calls = std::move(calls),
-         genPtr, myGen, pipeline, viewport, mode]() -> GpuPipelineResult {
-            if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
-            return pipeline->run(image, calls, viewport, mode);
-        }
-    ));
+    watcher->setFuture(QtConcurrent::run([image = originalImage, calls = std::move(calls), genPtr, myGen, pipeline,
+                                          viewport, mode]() -> GpuPipelineResult {
+        if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
+        return pipeline->run(image, calls, viewport, mode);
+    }));
 }
 
-void ImageProcessor::exportImageAsync(const QImage& originalImage,
-                                      const EffectManager& effects,
+void ImageProcessor::exportImageAsync(const QImage &originalImage, const EffectManager &effects,
                                       QString destinationPath) {
     QVector<GpuPipelineCall> calls = buildGpuCalls(effects);
 
-    auto* watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this,
-            [this, watcher, destinationPath]() {
+    auto *watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, destinationPath]() {
         emit exportComplete(watcher->result(), destinationPath);
         watcher->deleteLater();
     });
 
     auto pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run(
-        [image = originalImage, calls = std::move(calls), pipeline]() -> QImage {
-            // Export has no viewport, so the pipeline returns the full-resolution
-            // image with offset (0, 0).  Strip the offset; exportComplete only
-            // needs the pixels.
-            return pipeline->run(image, calls, {}, RunMode::Commit).image;
-        }
-    ));
+    watcher->setFuture(QtConcurrent::run([image = originalImage, calls = std::move(calls), pipeline]() -> QImage {
+        // Export has no viewport, so the pipeline returns the full-resolution
+        // image with offset (0, 0).  Strip the offset; exportComplete only
+        // needs the pixels.
+        return pipeline->run(image, calls, {}, RunMode::Commit).image;
+    }));
 }

@@ -21,11 +21,11 @@ class TestProofer : public QObject {
 
 private:
     QTemporaryDir m_dir;
-    ProofCache*   m_cache = nullptr;
+    ProofCache   *m_cache = nullptr;
 
 private slots:
     void init() {
-        m_cache = new ProofCache();  // orphaned; cleaned up in cleanup()
+        m_cache = new ProofCache(); // orphaned; cleaned up in cleanup()
     }
 
     void cleanup() {
@@ -75,7 +75,7 @@ private slots:
         Proofer p(emptyMgr(), emptyDefaults(), m_cache);
         p.pause();
         p.setQueue({"a", "b", "c"});
-        p.promote("a");  // already at head
+        p.promote("a"); // already at head
         QCOMPARE(p.pendingCount(), 3);
     }
 
@@ -83,7 +83,7 @@ private slots:
         Proofer p(emptyMgr(), emptyDefaults(), m_cache);
         p.pause();
         p.setQueue({"a", "b"});
-        p.promote("z");  // not in queue — should be added
+        p.promote("z"); // not in queue — should be added
         QCOMPARE(p.pendingCount(), 3);
     }
 

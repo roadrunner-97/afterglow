@@ -5,7 +5,6 @@
 #include <QDebug>
 #include <QVBoxLayout>
 
-
 namespace {
 
 // Value-noise film grain, evaluated in source-image pixel space so the
@@ -23,27 +22,27 @@ namespace {
 // real film grain is least visible in deep shadows / highlights.
 
 struct GrainArgs {
-    float    size;        // lattice spacing in source pixels, ≥1
-    float    amount;      // 0..1 (slider 0..40 → /100)
-    int      lumWeight;   // 0 or 1
-    unsigned seed;        // hashed user seed
-    float    srcX0;       // source-pixel origin of preview pixel (0, 0)
+    float    size;      // lattice spacing in source pixels, ≥1
+    float    amount;    // 0..1 (slider 0..40 → /100)
+    int      lumWeight; // 0 or 1
+    unsigned seed;      // hashed user seed
+    float    srcX0;     // source-pixel origin of preview pixel (0, 0)
     float    srcY0;
-    float    srcPPP;      // source pixels per preview pixel (1.0 when run on full-res)
+    float    srcPPP; // source pixels per preview pixel (1.0 when run on full-res)
 };
 
-static GrainArgs makeArgs(float amount, int size, bool lumWeight, int userSeed,
-                          double srcX0 = 0.0, double srcY0 = 0.0, double srcPPP = 1.0) {
+static GrainArgs makeArgs(float amount, int size, bool lumWeight, int userSeed, double srcX0 = 0.0, double srcY0 = 0.0,
+                          double srcPPP = 1.0) {
     GrainArgs a;
     a.size      = static_cast<float>(size < 1 ? 1 : size);
     a.amount    = amount / 100.0f;
     a.lumWeight = lumWeight ? 1 : 0;
     // Mix the user's seed into a well-distributed 32-bit value so adjacent
     // integers (0, 1, 2, …) produce visibly different patterns.
-    a.seed      = static_cast<unsigned>(userSeed) * 2654435761u + 0xDEADBEEFu;
-    a.srcX0     = static_cast<float>(srcX0);
-    a.srcY0     = static_cast<float>(srcY0);
-    a.srcPPP    = static_cast<float>(srcPPP);
+    a.seed   = static_cast<unsigned>(userSeed) * 2654435761u + 0xDEADBEEFu;
+    a.srcX0  = static_cast<float>(srcX0);
+    a.srcY0  = static_cast<float>(srcY0);
+    a.srcPPP = static_cast<float>(srcPPP);
     return a;
 }
 
@@ -57,7 +56,7 @@ static GrainArgs makeArgs(float amount, int size, bool lumWeight, int userSeed,
 // coordinates are source-anchored via _cropX0/_cropY0/_srcPixelsPerPreviewPixel
 // so the grain pattern doesn't crawl with zoom / pan.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 inline uint pcg_hash(uint x, uint y, uint seed) {
     uint h = x * 374761393u + y * 668265263u + seed * 3266489917u;
     h = (h ^ (h >> 13)) * 1274126177u;
@@ -164,35 +163,36 @@ __kernel void applyFilmGrainLinear(__global float4* pixels,
 // ============================================================================
 
 FilmGrainEffect::FilmGrainEffect()
-    : controlsWidget(nullptr), amountParam(nullptr), sizeParam(nullptr),
-      seedParam(nullptr), lumWeightBox(nullptr) {
-}
+    : controlsWidget(nullptr), amountParam(nullptr), sizeParam(nullptr), seedParam(nullptr), lumWeightBox(nullptr) {}
 
-FilmGrainEffect::~FilmGrainEffect() {
-}
+FilmGrainEffect::~FilmGrainEffect() {}
 
-QString FilmGrainEffect::getName() const { return "Film Grain"; }
+QString FilmGrainEffect::getName() const {
+    return "Film Grain";
+}
 QString FilmGrainEffect::getDescription() const {
     return "Additive per-pixel noise with optional luminance weighting";
 }
-QString FilmGrainEffect::getVersion() const { return "1.0.0"; }
+QString FilmGrainEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool FilmGrainEffect::initialize() {
     qDebug() << "FilmGrain effect initialized";
     return true;
 }
 
-QWidget* FilmGrainEffect::createControlsWidget() {
+QWidget *FilmGrainEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto connectSlider = [&](ParamSlider* s) {
+    auto connectSlider = [&](ParamSlider *s) {
         connect(s, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
-        connect(s, &ParamSlider::valueChanged,    this, [this](double) { emit liveParametersChanged(); });
+        connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
     amountParam = new ParamSlider("Amount", 0.0, 40.0, 0.1, 1);
@@ -216,7 +216,8 @@ QWidget* FilmGrainEffect::createControlsWidget() {
 
     lumWeightBox = new QCheckBox("Luminance-weighted");
     lumWeightBox->setChecked(true);
-    lumWeightBox->setToolTip("When enabled, grain is strongest in the midtones\nand fades toward pure black or white — like real film.");
+    lumWeightBox->setToolTip(
+        "When enabled, grain is strongest in the midtones\nand fades toward pure black or white — like real film.");
     connect(lumWeightBox, &QCheckBox::toggled, this, [this](bool) { emit parametersChanged(); });
     layout->addWidget(lumWeightBox);
 
@@ -233,13 +234,10 @@ QMap<QString, QVariant> FilmGrainEffect::getParameters() const {
     return params;
 }
 
-void FilmGrainEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
-    if (amountParam && parameters.contains("amount"))
-        amountParam->setValue(parameters.value("amount").toDouble());
-    if (sizeParam && parameters.contains("size"))
-        sizeParam->setValue(parameters.value("size").toDouble());
-    if (seedParam && parameters.contains("seed"))
-        seedParam->setValue(parameters.value("seed").toDouble());
+void FilmGrainEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    if (amountParam && parameters.contains("amount")) amountParam->setValue(parameters.value("amount").toDouble());
+    if (sizeParam && parameters.contains("size")) sizeParam->setValue(parameters.value("size").toDouble());
+    if (seedParam && parameters.contains("seed")) seedParam->setValue(parameters.value("seed").toDouble());
     if (lumWeightBox && parameters.contains("lumWeight")) {
         QSignalBlocker block(lumWeightBox);
         lumWeightBox->setChecked(parameters.value("lumWeight").toBool());
@@ -251,7 +249,7 @@ void FilmGrainEffect::applyParameters(const QMap<QString, QVariant>& parameters)
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool FilmGrainEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool FilmGrainEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -259,42 +257,33 @@ bool FilmGrainEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] FilmGrain initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] FilmGrain initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool FilmGrainEffect::enqueueGpu(cl::CommandQueue& queue,
-                                  cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                  int w, int h,
-                                  const QMap<QString, QVariant>& params) {
+bool FilmGrainEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
+                                 const QMap<QString, QVariant> &params) {
     const float amount = float(params.value("amount", 0).toDouble());
-    if (amount == 0.0f) return true;  // no-op
+    if (amount == 0.0f) return true; // no-op
 
-    const GrainArgs a = makeArgs(
-        amount,
-        params.value("size", 8).toInt(),
-        params.value("lumWeight", true).toBool(),
-        params.value("seed", 0).toInt(),
-        params.value("_cropX0", 0.0).toDouble(),
-        params.value("_cropY0", 0.0).toDouble(),
-        params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
+    const GrainArgs a =
+        makeArgs(amount, params.value("size", 8).toInt(), params.value("lumWeight", true).toBool(),
+                 params.value("seed", 0).toInt(), params.value("_cropX0", 0.0).toDouble(),
+                 params.value("_cropY0", 0.0).toDouble(), params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
 
-    m_kernelLinear.setArg(0,  buf);
-    m_kernelLinear.setArg(1,  w);
-    m_kernelLinear.setArg(2,  h);
-    m_kernelLinear.setArg(3,  a.size);
-    m_kernelLinear.setArg(4,  a.amount);
-    m_kernelLinear.setArg(5,  a.lumWeight);
-    m_kernelLinear.setArg(6,  a.seed);
-    m_kernelLinear.setArg(7,  a.srcX0);
-    m_kernelLinear.setArg(8,  a.srcY0);
-    m_kernelLinear.setArg(9,  a.srcPPP);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
-                               cl::NDRange(w, h), cl::NullRange);
+    m_kernelLinear.setArg(0, buf);
+    m_kernelLinear.setArg(1, w);
+    m_kernelLinear.setArg(2, h);
+    m_kernelLinear.setArg(3, a.size);
+    m_kernelLinear.setArg(4, a.amount);
+    m_kernelLinear.setArg(5, a.lumWeight);
+    m_kernelLinear.setArg(6, a.seed);
+    m_kernelLinear.setArg(7, a.srcX0);
+    m_kernelLinear.setArg(8, a.srcY0);
+    m_kernelLinear.setArg(9, a.srcPPP);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }
-

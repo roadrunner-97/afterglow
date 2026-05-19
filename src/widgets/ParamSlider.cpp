@@ -10,38 +10,29 @@
 #include <algorithm>
 #include <cmath>
 
-ParamSlider::ParamSlider(const QString& label,
-                         double min, double max,
-                         double step, int decimals,
-                         QWidget* parent)
+ParamSlider::ParamSlider(const QString &label, double min, double max, double step, int decimals, QWidget *parent)
     : ParamSlider(label,
-                  Setup{
-                      static_cast<int>(std::round(min / step)),
-                      static_cast<int>(std::round(max / step)),
-                      min, max, step, decimals
-                  },
-                  parent)
-{
+                  Setup{static_cast<int>(std::round(min / step)), static_cast<int>(std::round(max / step)), min, max,
+                        step, decimals},
+                  parent) {
     m_scaleFactor = 1.0 / step;
 }
 
-ParamSlider::ParamSlider(const QString& label, const Setup& s, QWidget* parent)
-    : QWidget(parent)
-    , m_labelPrefix(label)
-{
+ParamSlider::ParamSlider(const QString &label, const Setup &s, QWidget *parent)
+    : QWidget(parent), m_labelPrefix(label) {
     buildUi(label, s);
     wireSignals();
 }
 
-void ParamSlider::buildUi(const QString& label, const Setup& s) {
-    QVBoxLayout* outer = new QVBoxLayout(this);
+void ParamSlider::buildUi(const QString &label, const Setup &s) {
+    QVBoxLayout *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(4);
 
     m_label = new QLabel();
     outer->addWidget(m_label);
 
-    QHBoxLayout* row = new QHBoxLayout();
+    QHBoxLayout *row = new QHBoxLayout();
     row->setSpacing(6);
 
     m_slider = new QSlider(Qt::Horizontal);
@@ -76,9 +67,7 @@ void ParamSlider::wireSignals() {
     // Slider released → emit editingFinished. With our custom drag handler this no
     // longer fires from real input (we consume press/release), but keep the wiring
     // for callers / tests that invoke sliderReleased programmatically.
-    connect(m_slider, &QSlider::sliderReleased, this, [this]() {
-        emit editingFinished();
-    });
+    connect(m_slider, &QSlider::sliderReleased, this, [this]() { emit editingFinished(); });
 
     // Spinbox → slider sync (no emit — avoids double-fire)
     connect(m_spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {
@@ -116,19 +105,17 @@ int ParamSlider::valueToSlider(double v) const {
 
 void ParamSlider::updateLabel(double v) {
     if (m_spinBox->decimals() > 0) {
-        m_label->setText(QString("%1: %2").arg(m_labelPrefix)
-                                          .arg(v, 0, 'f', m_spinBox->decimals()));
+        m_label->setText(QString("%1: %2").arg(m_labelPrefix).arg(v, 0, 'f', m_spinBox->decimals()));
     } else {
-        m_label->setText(QString("%1: %2").arg(m_labelPrefix)
-                                          .arg(static_cast<int>(std::round(v))));
+        m_label->setText(QString("%1: %2").arg(m_labelPrefix).arg(static_cast<int>(std::round(v))));
     }
 }
 
-bool ParamSlider::eventFilter(QObject* watched, QEvent* event) {
+bool ParamSlider::eventFilter(QObject *watched, QEvent *event) {
     if (watched == m_slider) {
         switch (event->type()) {
         case QEvent::MouseButtonDblClick: {
-            auto* me = static_cast<QMouseEvent*>(event);
+            auto *me = static_cast<QMouseEvent *>(event);
             if (me->button() == Qt::LeftButton) {
                 m_dragging = false;
                 setValue(0.0);
@@ -139,11 +126,11 @@ bool ParamSlider::eventFilter(QObject* watched, QEvent* event) {
             break;
         }
         case QEvent::MouseButtonPress:
-            return handleDragPress(static_cast<QMouseEvent*>(event));
+            return handleDragPress(static_cast<QMouseEvent *>(event));
         case QEvent::MouseMove:
-            return handleDragMove(static_cast<QMouseEvent*>(event));
+            return handleDragMove(static_cast<QMouseEvent *>(event));
         case QEvent::MouseButtonRelease:
-            return handleDragRelease(static_cast<QMouseEvent*>(event));
+            return handleDragRelease(static_cast<QMouseEvent *>(event));
         default:
             break;
         }
@@ -151,7 +138,7 @@ bool ParamSlider::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
-bool ParamSlider::handleDragPress(QMouseEvent* me) {
+bool ParamSlider::handleDragPress(QMouseEvent *me) {
     if (me->button() != Qt::LeftButton) return false;
     m_dragging       = true;
     m_dragMoved      = false;
@@ -159,13 +146,13 @@ bool ParamSlider::handleDragPress(QMouseEvent* me) {
     m_dragSliderPosF = static_cast<double>(m_dragStartInt);
     m_dragLastPos    = me->pos();
     m_dragLastTimeMs = me->timestamp();
-    return true;  // consume — don't let QSlider do click-to-jump
+    return true; // consume — don't let QSlider do click-to-jump
 }
 
-bool ParamSlider::handleDragMove(QMouseEvent* me) {
+bool ParamSlider::handleDragMove(QMouseEvent *me) {
     if (!m_dragging) return false;
 
-    const QPoint pos = me->pos();
+    const QPoint pos   = me->pos();
     const int    dx_px = pos.x() - m_dragLastPos.x();
     if (dx_px == 0) {
         m_dragLastTimeMs = me->timestamp();
@@ -173,30 +160,29 @@ bool ParamSlider::handleDragMove(QMouseEvent* me) {
     }
 
     // Time delta — clamp to >=4 ms so a flurry of same-tick events doesn't blow up the gain.
-    const qulonglong now = me->timestamp();
-    const double dt_ms = std::max<double>(4.0, static_cast<double>(now - m_dragLastTimeMs));
+    const qulonglong now   = me->timestamp();
+    const double     dt_ms = std::max<double>(4.0, static_cast<double>(now - m_dragLastTimeMs));
 
     // Velocity (px/sec) → gain. Slow ≈ 0.25×, typical ≈ 1.25×, fast flick ≈ 6×.
     const double speed_pxps = std::abs(dx_px) * 1000.0 / dt_ms;
-    double gain = std::clamp(0.25 + speed_pxps / 600.0, 0.25, 6.0);
+    double       gain       = std::clamp(0.25 + speed_pxps / 600.0, 0.25, 6.0);
     if (me->modifiers() & Qt::ShiftModifier) {
-        gain = std::min(gain, 0.4);  // forced fine-grain
+        gain = std::min(gain, 0.4); // forced fine-grain
     }
 
     // Convert px → slider int units. At gain=1, dragging the full slider width sweeps the full range.
-    const int sliderRange = m_slider->maximum() - m_slider->minimum();
-    const int sliderUsablePx = std::max(1, m_slider->width());
-    const double intsPerPx = static_cast<double>(sliderRange) / static_cast<double>(sliderUsablePx);
+    const int    sliderRange    = m_slider->maximum() - m_slider->minimum();
+    const int    sliderUsablePx = std::max(1, m_slider->width());
+    const double intsPerPx      = static_cast<double>(sliderRange) / static_cast<double>(sliderUsablePx);
 
     m_dragSliderPosF += dx_px * intsPerPx * gain;
-    m_dragSliderPosF = std::clamp(m_dragSliderPosF,
-                                  static_cast<double>(m_slider->minimum()),
-                                  static_cast<double>(m_slider->maximum()));
+    m_dragSliderPosF  = std::clamp(m_dragSliderPosF, static_cast<double>(m_slider->minimum()),
+                                   static_cast<double>(m_slider->maximum()));
 
     const int newInt = static_cast<int>(std::round(m_dragSliderPosF));
     if (newInt != m_slider->value()) {
         m_dragMoved = true;
-        m_slider->setValue(newInt);  // fires valueChanged → user-facing emit
+        m_slider->setValue(newInt); // fires valueChanged → user-facing emit
     }
 
     m_dragLastPos    = pos;
@@ -204,11 +190,11 @@ bool ParamSlider::handleDragMove(QMouseEvent* me) {
     return true;
 }
 
-bool ParamSlider::handleDragRelease(QMouseEvent* me) {
+bool ParamSlider::handleDragRelease(QMouseEvent *me) {
     if (me->button() != Qt::LeftButton || !m_dragging) return false;
     const bool moved = m_dragMoved;
-    m_dragging = false;
-    m_dragMoved = false;
+    m_dragging       = false;
+    m_dragMoved      = false;
     if (moved) {
         emit editingFinished();
     }

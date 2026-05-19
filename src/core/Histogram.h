@@ -15,4 +15,4 @@
 // This is a single-pass CPU routine intended to run once per image load.
 // Designed for reuse across effect widgets that want an input-luminance
 // distribution (e.g. the Exposure tone-curve widget).
-std::vector<uint32_t> computeLuminanceHistogram(const QImage& image);
+std::vector<uint32_t> computeLuminanceHistogram(const QImage &image);

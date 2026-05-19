@@ -26,7 +26,7 @@ namespace {
 // Flow: H blur (buf→aux), V blur (aux→blurBuf), combine (orig=buf,
 // blurred=blurBuf → aux), copy (aux→buf) so result ends in buf.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
 
 __kernel void unsharpCombineLinear(__global const float4* original,
                                     __global const float4* blurred,
@@ -66,39 +66,36 @@ __kernel void unsharpCombineLinear(__global const float4* original,
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool UnsharpEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool UnsharpEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
         m_kernelBlurHLinear   = cl::Kernel(prog, "blurHLinear");
         m_kernelBlurVLinear   = cl::Kernel(prog, "blurVLinear");
         m_kernelUnsharpLinear = cl::Kernel(prog, "unsharpCombineLinear");
-        m_pipelineCtx         = ctx;  // save for temp buffer allocation
+        m_pipelineCtx         = ctx; // save for temp buffer allocation
         m_blurBuf             = cl::Buffer();
         m_blurBufW = m_blurBufH = 0;
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] Unsharp initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] Unsharp initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,
-                                cl::Buffer& buf, cl::Buffer& aux,
-                                int w, int h,
-                                const QMap<QString, QVariant>& params) {
+bool UnsharpEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
+                               const QMap<QString, QVariant> &params) {
     const float amount       = static_cast<float>(params.value("amount", 1.0).toDouble());
     const int   radiusSrc    = params.value("radius", 2).toInt();
     const int   thresholdInt = params.value("threshold", 3).toInt();
     if (amount == 0.0f || radiusSrc == 0) return true;
 
     // Scale blur radius from source pixels to preview pixels.
-    const double scale = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    int radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
+    const double scale  = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
+    int          radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
     // Threshold slider is defined in 0..20 of 0..255 sRGB-byte units.  Scale
     // to normalised sRGB [0,1] for comparison with linear_to_srgb() output.
@@ -152,61 +149,55 @@ bool UnsharpEffect::enqueueGpu(cl::CommandQueue& queue,
 // ============================================================================
 
 UnsharpEffect::UnsharpEffect()
-    : controlsWidget(nullptr), amountParam(nullptr),
-      radiusParam(nullptr), thresholdParam(nullptr) {
-}
+    : controlsWidget(nullptr), amountParam(nullptr), radiusParam(nullptr), thresholdParam(nullptr) {}
 
-UnsharpEffect::~UnsharpEffect() {
-}
+UnsharpEffect::~UnsharpEffect() {}
 
-QString UnsharpEffect::getName() const        { return "Unsharp Mask"; }
-QString UnsharpEffect::getDescription() const { return "Sharpens by subtracting a blurred mask"; }
-QString UnsharpEffect::getVersion() const     { return "1.0.0"; }
+QString UnsharpEffect::getName() const {
+    return "Unsharp Mask";
+}
+QString UnsharpEffect::getDescription() const {
+    return "Sharpens by subtracting a blurred mask";
+}
+QString UnsharpEffect::getVersion() const {
+    return "1.0.0";
+}
 
 bool UnsharpEffect::initialize() {
     qDebug() << "Unsharp Mask effect initialized";
     return true;
 }
 
-QWidget* UnsharpEffect::createControlsWidget() {
+QWidget *UnsharpEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
     amountParam = new ParamSlider("Amount", 0.0, 5.0, 0.01, 2);
     amountParam->setValue(1.0);
-    amountParam->setToolTip("Sharpening strength. 1.0 is a standard boost; values above 2 can produce visible edge halos.");
-    connect(amountParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(amountParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    amountParam->setToolTip(
+        "Sharpening strength. 1.0 is a standard boost; values above 2 can produce visible edge halos.");
+    connect(amountParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(amountParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(amountParam);
 
     radiusParam = new ParamSlider("Radius", 1, 15);
     radiusParam->setValue(2);
-    radiusParam->setToolTip("Pixel radius of the blur used to find edges. Larger values sharpen broader features; smaller values target fine detail.");
-    connect(radiusParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(radiusParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    radiusParam->setToolTip("Pixel radius of the blur used to find edges. Larger values sharpen broader features; "
+                            "smaller values target fine detail.");
+    connect(radiusParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(radiusParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(radiusParam);
 
     thresholdParam = new ParamSlider("Threshold", 0, 20);
     thresholdParam->setValue(3);
-    thresholdParam->setToolTip("Minimum per-channel difference required before sharpening is applied. Increase to avoid sharpening noise in flat areas.");
-    connect(thresholdParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(thresholdParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    thresholdParam->setToolTip("Minimum per-channel difference required before sharpening is applied. Increase to "
+                               "avoid sharpening noise in flat areas.");
+    connect(thresholdParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(thresholdParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(thresholdParam);
 
     layout->addStretch();
@@ -215,19 +206,16 @@ QWidget* UnsharpEffect::createControlsWidget() {
 
 QMap<QString, QVariant> UnsharpEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["amount"]    = amountParam    ? amountParam->value()                       : 1.0;
-    params["radius"]    = radiusParam    ? static_cast<int>(radiusParam->value())     : 2;
-    params["threshold"] = thresholdParam ? static_cast<int>(thresholdParam->value())  : 3;
+    params["amount"]    = amountParam ? amountParam->value() : 1.0;
+    params["radius"]    = radiusParam ? static_cast<int>(radiusParam->value()) : 2;
+    params["threshold"] = thresholdParam ? static_cast<int>(thresholdParam->value()) : 3;
     return params;
 }
 
-void UnsharpEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
-    if (amountParam && parameters.contains("amount"))
-        amountParam->setValue(parameters.value("amount").toDouble());
-    if (radiusParam && parameters.contains("radius"))
-        radiusParam->setValue(parameters.value("radius").toDouble());
+void UnsharpEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    if (amountParam && parameters.contains("amount")) amountParam->setValue(parameters.value("amount").toDouble());
+    if (radiusParam && parameters.contains("radius")) radiusParam->setValue(parameters.value("radius").toDouble());
     if (thresholdParam && parameters.contains("threshold"))
         thresholdParam->setValue(parameters.value("threshold").toDouble());
     emit parametersChanged();
 }
-

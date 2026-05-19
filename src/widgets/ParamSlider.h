@@ -32,17 +32,15 @@ class ParamSlider : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ParamSlider(const QString& label,
-                         double min, double max,
-                         double step = 1.0, int decimals = 0,
-                         QWidget* parent = nullptr);
+    explicit ParamSlider(const QString &label, double min, double max, double step = 1.0, int decimals = 0,
+                         QWidget *parent = nullptr);
 
     double value() const;
-    void setValue(double v);
+    void   setValue(double v);
 
 signals:
-    void valueChanged(double value);  // fires on every slider drag / spinbox sync
-    void editingFinished();           // fires only on slider release (with change) or spinbox commit
+    void valueChanged(double value); // fires on every slider drag / spinbox sync
+    void editingFinished();          // fires only on slider release (with change) or spinbox commit
 
 protected:
     // Subclass hook — describes the slider's integer range and the spinbox bounds.
@@ -54,38 +52,38 @@ protected:
         double spinStep;
         int    spinDecimals;
     };
-    ParamSlider(const QString& label, const Setup& s, QWidget* parent);
+    ParamSlider(const QString &label, const Setup &s, QWidget *parent);
 
     // Default mapping is linear via the public constructor's step.
     // Override these in subclasses (e.g. LogarithmParamSlider) for non-linear curves.
     virtual double sliderToValue(int sliderInt) const;
     virtual int    valueToSlider(double v) const;
 
-    bool eventFilter(QObject* watched, QEvent* event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    void buildUi(const QString& label, const Setup& s);
+    void buildUi(const QString &label, const Setup &s);
     void wireSignals();
     void updateLabel(double v);
 
-    bool   handleDragPress(QMouseEvent* me);
-    bool   handleDragMove(QMouseEvent* me);
-    bool   handleDragRelease(QMouseEvent* me);
+    bool handleDragPress(QMouseEvent *me);
+    bool handleDragMove(QMouseEvent *me);
+    bool handleDragRelease(QMouseEvent *me);
 
-    QLabel*         m_label;
-    QSlider*        m_slider;
-    QDoubleSpinBox* m_spinBox;
+    QLabel         *m_label;
+    QSlider        *m_slider;
+    QDoubleSpinBox *m_spinBox;
     QString         m_labelPrefix;
 
     // Default linear mapping uses this. Subclasses with their own mapping ignore it.
     double m_scaleFactor = 1.0;
 
     // Velocity-based drag state
-    bool   m_dragging         = false;
-    bool   m_dragMoved        = false;
-    int    m_dragStartInt     = 0;
-    double m_dragSliderPosF   = 0.0;
-    QPoint m_dragLastPos;
+    bool       m_dragging       = false;
+    bool       m_dragMoved      = false;
+    int        m_dragStartInt   = 0;
+    double     m_dragSliderPosF = 0.0;
+    QPoint     m_dragLastPos;
     qulonglong m_dragLastTimeMs = 0;
 };
 

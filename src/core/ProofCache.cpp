@@ -4,37 +4,34 @@
 #include <QFile>
 #include <QFileInfo>
 
-ProofCache::ProofCache(QObject* parent)
-    : QObject(parent)
-{}
+ProofCache::ProofCache(QObject *parent) : QObject(parent) {}
 
 // static
-QString ProofCache::proofPath(const QString& imagePath) {
+QString ProofCache::proofPath(const QString &imagePath) {
     const QFileInfo fi(imagePath);
     // <folder>/.afterglow/proofs/<original-filename>.jpg
     // The full filename (including extension) disambiguates IMG_0001.CR2
     // from IMG_0001.NEF when both exist in the same folder.
-    return fi.absoluteDir().filePath(
-        ".afterglow/proofs/" + fi.fileName() + ".jpg");
+    return fi.absoluteDir().filePath(".afterglow/proofs/" + fi.fileName() + ".jpg");
 }
 
 // static
-QString ProofCache::sidecarPath(const QString& imagePath) {
+QString ProofCache::sidecarPath(const QString &imagePath) {
     const QFileInfo fi(imagePath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
 }
 
-bool ProofCache::isProofed(const QString& imagePath) const {
+bool ProofCache::isProofed(const QString &imagePath) const {
     const QFileInfo proofFi(proofPath(imagePath));
     if (!proofFi.exists()) return false;
 
     const QFileInfo sidecarFi(sidecarPath(imagePath));
-    if (!sidecarFi.exists()) return true;  // no edits → always fresh
+    if (!sidecarFi.exists()) return true; // no edits → always fresh
 
     return proofFi.lastModified() >= sidecarFi.lastModified();
 }
 
-QImage ProofCache::proof(const QString& imagePath) {
+QImage ProofCache::proof(const QString &imagePath) {
     auto it = m_lruCache.find(imagePath);
     if (it != m_lruCache.end()) {
         lruPromote(imagePath);
@@ -50,20 +47,18 @@ QImage ProofCache::proof(const QString& imagePath) {
     return img;
 }
 
-void ProofCache::store(const QString& imagePath, const QImage& proof) {
+void ProofCache::store(const QString &imagePath, const QImage &proof) {
     const QString path = proofPath(imagePath);
     QDir().mkpath(QFileInfo(path).absolutePath());
     proof.save(path, "JPEG", 90);
     lruInsert(imagePath, proof);
 }
 
-void ProofCache::invalidate(const QString& imagePath) {
+void ProofCache::invalidate(const QString &imagePath) {
     const QString path = proofPath(imagePath);
-    if (QFileInfo::exists(path))
-        QFile::remove(path);
+    if (QFileInfo::exists(path)) QFile::remove(path);
 
-    if (m_lruCache.remove(imagePath) > 0)
-        m_lruOrder.removeOne(imagePath);
+    if (m_lruCache.remove(imagePath) > 0) m_lruOrder.removeOne(imagePath);
 }
 
 void ProofCache::clear() {
@@ -71,7 +66,7 @@ void ProofCache::clear() {
     m_lruCache.clear();
 }
 
-void ProofCache::lruInsert(const QString& key, const QImage& img) {
+void ProofCache::lruInsert(const QString &key, const QImage &img) {
     if (m_lruCache.contains(key)) {
         lruPromote(key);
         m_lruCache[key] = img;
@@ -82,7 +77,7 @@ void ProofCache::lruInsert(const QString& key, const QImage& img) {
     m_lruCache[key] = img;
 }
 
-void ProofCache::lruPromote(const QString& key) {
+void ProofCache::lruPromote(const QString &key) {
     m_lruOrder.removeOne(key);
     m_lruOrder.prepend(key);
 }

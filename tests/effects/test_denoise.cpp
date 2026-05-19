@@ -20,97 +20,87 @@ private slots:
 
     // All params=0 → early return, image unchanged.
     void zeroParams_isIdentity() {
-        DenoiseEffect e;
-        QImage input = makeSolid(32, 32, 100, 120, 80);
+        DenoiseEffect           e;
+        QImage                  input = makeSolid(32, 32, 100, 120, 80);
         QMap<QString, QVariant> params;
-        params["strength"]      = 0;
+        params["strength"]       = 0;
         params["shadowPreserve"] = 0;
-        params["colorNoise"]    = 0;
-        QImage out = runEffect(e, input, params);
+        params["colorNoise"]     = 0;
+        QImage out               = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80; }));
     }
 
     // Solid colour with non-zero strength: denoising of a uniform image leaves it unchanged
     // because every pixel equals its neighbourhood average.
     void solidColour_denoiseUnchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
-        DenoiseEffect e;
-        QImage input = makeSolid(64, 64, 128, 100, 80);
+        DenoiseEffect           e;
+        QImage                  input = makeSolid(64, 64, 128, 100, 80);
         QMap<QString, QVariant> params;
         params["strength"]       = 50;
         params["shadowPreserve"] = 0;
         params["colorNoise"]     = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out               = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 100) <= 2;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 100) <= 2; }));
     }
 
     // Non-zero colorNoise: solid colour image leaves pixel values unchanged.
     void solidColour_colorNoise_unchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
-        DenoiseEffect e;
-        QImage input = makeSolid(64, 64, 128, 100, 80);
+        DenoiseEffect           e;
+        QImage                  input = makeSolid(64, 64, 128, 100, 80);
         QMap<QString, QVariant> params;
         params["strength"]       = 0;
         params["shadowPreserve"] = 0;
         params["colorNoise"]     = 50;
-        QImage out = runEffect(e, input, params);
+        QImage out               = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 100) <= 2;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qAbs(qRed(px) - 128) <= 2 && qAbs(qGreen(px) - 100) <= 2; }));
     }
 
     // Both phases active at once.
     void bothPhases_solidColour_unchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
-        DenoiseEffect e;
-        QImage input = makeSolid(64, 64, 200, 150, 100);
+        DenoiseEffect           e;
+        QImage                  input = makeSolid(64, 64, 200, 150, 100);
         QMap<QString, QVariant> params;
         params["strength"]       = 50;
         params["shadowPreserve"] = 30;
         params["colorNoise"]     = 50;
-        QImage out = runEffect(e, input, params);
+        QImage out               = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px) - 200) <= 3 && qAbs(qGreen(px) - 150) <= 3;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qAbs(qRed(px) - 200) <= 3 && qAbs(qGreen(px) - 150) <= 3; }));
     }
 
     // Non-square (wide) image: denoise runs a 2D neighbourhood pass.  A
     // uniform input must remain uniform and preserve dimensions.
     void nonSquare_solidColour_unchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
-        DenoiseEffect e;
-        QImage input = makeSolid(128, 64, 128, 100, 80);
+        DenoiseEffect           e;
+        QImage                  input = makeSolid(128, 64, 128, 100, 80);
         QMap<QString, QVariant> params;
         params["strength"]       = 50;
         params["shadowPreserve"] = 30;
         params["colorNoise"]     = 50;
-        QImage out = runEffect(e, input, params);
+        QImage out               = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QCOMPARE(out.width(),  128);
+        QCOMPARE(out.width(), 128);
         QCOMPARE(out.height(), 64);
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3; }));
     }
 
     // 16-bit path: solid colour with non-zero params stays unchanged.
     void solidColour_16bit_denoiseUnchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
-        DenoiseEffect e;
-        QImage input = makeSolid16bit(64, 64, 128, 100, 80);
+        DenoiseEffect           e;
+        QImage                  input = makeSolid16bit(64, 64, 128, 100, 80);
         QMap<QString, QVariant> params;
         params["strength"]       = 50;
         params["shadowPreserve"] = 0;
         params["colorNoise"]     = 50;
-        QImage out = runEffect(e, input, params);
+        QImage out               = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -124,7 +114,7 @@ private slots:
 
     void defaultParameters_keys() {
         DenoiseEffect e;
-        auto params = e.getParameters();
+        auto          params = e.getParameters();
         QVERIFY(params.contains("strength"));
         QVERIFY(params.contains("shadowPreserve"));
         QVERIFY(params.contains("colorNoise"));
@@ -132,7 +122,7 @@ private slots:
 
     void createControlsWidget_constructsAndCaches() {
         DenoiseEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget      *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
     }
@@ -149,17 +139,17 @@ private slots:
     // Fire signal lambdas in createControlsWidget to cover those branches.
     void connectSlider_signals_coverLambdaBodies() {
         DenoiseEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget      *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto sliders = w->findChildren<ParamSlider *>();
         QVERIFY(!sliders.isEmpty());
 
-        for (auto* ps : sliders) {
-            auto* qs = ps->findChild<QSlider*>();
+        for (auto *ps : sliders) {
+            auto *qs = ps->findChild<QSlider *>();
             QVERIFY(qs);
             qs->setValue(qs->value() + 1);
             QMetaObject::invokeMethod(qs, "sliderReleased");
@@ -171,7 +161,7 @@ private slots:
 
     // Heap-allocate so the destructor body is explicitly attributed.
     void destructor_heapAllocated_doesNotCrash() {
-        auto* e = new DenoiseEffect();
+        auto *e = new DenoiseEffect();
         e->createControlsWidget();
         delete e;
     }
@@ -180,34 +170,32 @@ private slots:
     // bilateral path in enqueueGpu.
     void bilateralAlgorithm_solidColour_unchanged() {
         if (!m_hasGpu) QSKIP("No GPU");
-        DenoiseEffect e;
-        GpuPipeline pipeline;
+        DenoiseEffect           e;
+        GpuPipeline             pipeline;
         QMap<QString, QVariant> params;
         params["strength"]       = 50;
         params["shadowPreserve"] = 30;
         params["colorNoise"]     = 0;
-        params["algorithm"]      = 1;  // Bilateral
-        QImage input = makeSolid(64, 64, 128, 100, 80);
+        params["algorithm"]      = 1; // Bilateral
+        QImage          input    = makeSolid(64, 64, 128, 100, 80);
         ViewportRequest vp;
         vp.displaySize = input.size();
-        QImage out = pipeline.run(input, {{&e, &e, params}}, vp).image;
+        QImage out     = pipeline.run(input, {{&e, &e, params}}, vp).image;
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qAbs(qRed(px) - 128) <= 3 && qAbs(qGreen(px) - 100) <= 3; }));
     }
 
     // Algorithm combo activation: firing the activated(int) signal updates
     // m_algorithm and emits parametersChanged.
     void algorithmCombo_activated_updatesAlgorithmAndEmits() {
         DenoiseEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget      *w = e.createControlsWidget();
         QVERIFY(w);
-        auto* combo = w->findChild<QComboBox*>();
+        auto *combo = w->findChild<QComboBox *>();
         QVERIFY(combo);
 
         QSignalSpy spy(&e, &PhotoEditorEffect::parametersChanged);
-        emit combo->activated(1);
+        emit       combo->activated(1);
 
         QCOMPARE(e.getParameters()["algorithm"].toInt(), 1);
         QCOMPARE(spy.count(), 1);

@@ -51,21 +51,19 @@ QString formatFocal(float mm) {
 
 // Most cameras already include the make in the model string ("Canon EOS R5"),
 // so de-duplicate the make prefix to avoid "Canon Canon EOS R5".
-QString formatCamera(const ImageMetadata& m) {
+QString formatCamera(const ImageMetadata &m) {
     if (m.cameraMake.isEmpty() && m.cameraModel.isEmpty()) return "—";
-    if (!m.cameraMake.isEmpty() &&
-        m.cameraModel.startsWith(m.cameraMake, Qt::CaseInsensitive))
-        return m.cameraModel;
-    if (m.cameraMake.isEmpty())  return m.cameraModel;
+    if (!m.cameraMake.isEmpty() && m.cameraModel.startsWith(m.cameraMake, Qt::CaseInsensitive)) return m.cameraModel;
+    if (m.cameraMake.isEmpty()) return m.cameraModel;
     if (m.cameraModel.isEmpty()) return m.cameraMake;
     return m.cameraMake + " " + m.cameraModel;
 }
 
-QString formatLens(const QString& s) {
+QString formatLens(const QString &s) {
     return s.isEmpty() ? QString("—") : s;
 }
 
-QString formatDateTime(const QDateTime& dt) {
+QString formatDateTime(const QDateTime &dt) {
     if (!dt.isValid()) return "—";
     return QLocale::system().toString(dt, QLocale::ShortFormat);
 }
@@ -77,9 +75,7 @@ QString formatTempK(float k) {
 
 } // namespace
 
-LoupeView::LoupeView(QWidget* parent)
-    : QWidget(parent)
-{
+LoupeView::LoupeView(QWidget *parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
     buildSidebar();
 
@@ -91,29 +87,27 @@ LoupeView::LoupeView(QWidget* parent)
     m_proofingLabel->raise();
 }
 
-void LoupeView::buildSidebar()
-{
+void LoupeView::buildSidebar() {
     m_sidebar = new QWidget(this);
     m_sidebar->setObjectName("loupeSidebar");
-    m_sidebar->setStyleSheet(
-        "QLabel { font-size: 14px; }"
-        "QLabel[role=\"key\"]     { font-size: 13px; letter-spacing: 1px; }"
-        "QLabel[role=\"section\"] { font-size: 13px; letter-spacing: 1px; padding-top: 4px; }");
+    m_sidebar->setStyleSheet("QLabel { font-size: 14px; }"
+                             "QLabel[role=\"key\"]     { font-size: 13px; letter-spacing: 1px; }"
+                             "QLabel[role=\"section\"] { font-size: 13px; letter-spacing: 1px; padding-top: 4px; }");
 
-    auto* outer = new QVBoxLayout(m_sidebar);
+    auto *outer = new QVBoxLayout(m_sidebar);
     outer->setContentsMargins(14, 14, 14, 14);
     outer->setSpacing(10);
 
     // ── Mark buttons row ──────────────────────────────────────────────────
-    auto* markHeader = new QLabel("Mark", m_sidebar);
+    auto *markHeader = new QLabel("Mark", m_sidebar);
     markHeader->setProperty("role", "section");
     outer->addWidget(markHeader);
 
-    auto* btnRow = new QHBoxLayout();
+    auto *btnRow = new QHBoxLayout();
     btnRow->setSpacing(4);
 
-    auto makeBtn = [&](const QString& label) {
-        auto* b = new QPushButton(label, m_sidebar);
+    auto makeBtn = [&](const QString &label) {
+        auto *b = new QPushButton(label, m_sidebar);
         b->setCheckable(true);
         btnRow->addWidget(b, 1);
         return b;
@@ -126,48 +120,43 @@ void LoupeView::buildSidebar()
     // Auto-exclusivity is off so that clicking the already-checked button
     // can run our toggle handler (otherwise QButtonGroup blocks the second
     // click and we'd never see "active mark pressed → clear to None").
-    auto* group = new QButtonGroup(this);
+    auto *group = new QButtonGroup(this);
     group->setExclusive(false);
     group->addButton(m_btnAccept);
     group->addButton(m_btnRefine);
     group->addButton(m_btnDecline);
 
-    connect(m_btnAccept,  &QPushButton::clicked, this,
-            [this]() { emitMarkToggle(GridView::Mark::Accept); });
-    connect(m_btnRefine,  &QPushButton::clicked, this,
-            [this]() { emitMarkToggle(GridView::Mark::Refine); });
-    connect(m_btnDecline, &QPushButton::clicked, this,
-            [this]() { emitMarkToggle(GridView::Mark::Decline); });
+    connect(m_btnAccept, &QPushButton::clicked, this, [this]() { emitMarkToggle(GridView::Mark::Accept); });
+    connect(m_btnRefine, &QPushButton::clicked, this, [this]() { emitMarkToggle(GridView::Mark::Refine); });
+    connect(m_btnDecline, &QPushButton::clicked, this, [this]() { emitMarkToggle(GridView::Mark::Decline); });
 
     outer->addLayout(btnRow);
 
     // ── Camera JPEG toggle ────────────────────────────────────────────────
     m_btnCameraJpeg = new QPushButton("Camera JPEG", m_sidebar);
     m_btnCameraJpeg->setCheckable(true);
-    m_btnCameraJpeg->setToolTip(
-        "Compare against the camera's embedded JPEG (as-shot, no edits applied).\n"
-        "Uncheck to return to the pipeline-rendered proof.");
-    connect(m_btnCameraJpeg, &QPushButton::toggled, this,
-            [this](bool checked) {
+    m_btnCameraJpeg->setToolTip("Compare against the camera's embedded JPEG (as-shot, no edits applied).\n"
+                                "Uncheck to return to the pipeline-rendered proof.");
+    connect(m_btnCameraJpeg, &QPushButton::toggled, this, [this](bool checked) {
         m_userForcedCameraJpeg = checked;
         updateDisplayedImage();
     });
     outer->addWidget(m_btnCameraJpeg);
 
-    auto* sep = new QFrame(m_sidebar);
+    auto *sep = new QFrame(m_sidebar);
     sep->setFrameShape(QFrame::HLine);
     outer->addWidget(sep);
 
     // ── Metadata table (scrollable) ───────────────────────────────────────
-    auto* metaHeader = new QLabel("Metadata", m_sidebar);
+    auto *metaHeader = new QLabel("Metadata", m_sidebar);
     metaHeader->setProperty("role", "section");
     outer->addWidget(metaHeader);
 
-    auto* scroll = new QScrollArea(m_sidebar);
+    auto *scroll = new QScrollArea(m_sidebar);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
-    auto* table = new QWidget(scroll);
-    auto* form = new QFormLayout(table);
+    auto *table = new QWidget(scroll);
+    auto *form  = new QFormLayout(table);
     form->setContentsMargins(0, 0, 0, 0);
     form->setHorizontalSpacing(12);
     form->setVerticalSpacing(6);
@@ -177,19 +166,19 @@ void LoupeView::buildSidebar()
     form->setLabelAlignment(Qt::AlignRight | Qt::AlignTop);
     form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
 
-    auto addRow = [&](const QString& key, QLabel*& valSlot) {
-        auto* k = new QLabel(key, table);
+    auto addRow = [&](const QString &key, QLabel *&valSlot) {
+        auto *k = new QLabel(key, table);
         k->setProperty("role", "key");
         valSlot = new QLabel("—", table);
         valSlot->setWordWrap(true);
         form->addRow(k, valSlot);
     };
-    addRow("Camera",   m_valCamera);
-    addRow("Lens",     m_valLens);
-    addRow("ISO",      m_valIso);
-    addRow("Shutter",  m_valShutter);
+    addRow("Camera", m_valCamera);
+    addRow("Lens", m_valLens);
+    addRow("ISO", m_valIso);
+    addRow("Shutter", m_valShutter);
     addRow("Aperture", m_valAperture);
-    addRow("Focal",    m_valFocal);
+    addRow("Focal", m_valFocal);
     addRow("Captured", m_valDate);
     addRow("Color Temp", m_valTempK);
 
@@ -199,17 +188,14 @@ void LoupeView::buildSidebar()
     m_sidebar->raise();
 }
 
-void LoupeView::setProofImage(QImage proof)
-{
+void LoupeView::setProofImage(QImage proof) {
     m_proofImage = proof;
     // Reset the manual toggle so arriving proofs auto-display, but only if
     // the user hasn't explicitly requested Camera JPEG for this photo.
-    if (!m_userForcedCameraJpeg)
-        updateDisplayedImage();
+    if (!m_userForcedCameraJpeg) updateDisplayedImage();
 }
 
-void LoupeView::setCameraJpegImage(QImage jpeg)
-{
+void LoupeView::setCameraJpegImage(QImage jpeg) {
     m_cameraJpegImage = jpeg;
     // Reset per-photo toggle state when a new photo is loaded.
     m_userForcedCameraJpeg = false;
@@ -217,42 +203,33 @@ void LoupeView::setCameraJpegImage(QImage jpeg)
         QSignalBlocker sb(m_btnCameraJpeg);
         m_btnCameraJpeg->setChecked(false);
     }
-    m_proofImage = {};   // clear stale proof from previous photo
+    m_proofImage = {}; // clear stale proof from previous photo
     updateDisplayedImage();
 }
 
-void LoupeView::setProofingState(bool proofing)
-{
+void LoupeView::setProofingState(bool proofing) {
     m_proofingLabel->setVisible(proofing);
 }
 
-void LoupeView::setShowBefore(bool on)
-{
+void LoupeView::setShowBefore(bool on) {
     if (m_showBefore == on) return;
     m_showBefore = on;
     // Swap the displayed image without calling resetView() so the user's
     // current zoom/pan is preserved across the hold-and-release cycle.
-    const bool useProof = !m_proofImage.isNull()
-                          && !m_userForcedCameraJpeg
-                          && !m_showBefore;
-    m_image = useProof ? m_proofImage : m_cameraJpegImage;
+    const bool useProof = !m_proofImage.isNull() && !m_userForcedCameraJpeg && !m_showBefore;
+    m_image             = useProof ? m_proofImage : m_cameraJpegImage;
     update();
 }
 
-void LoupeView::updateDisplayedImage()
-{
+void LoupeView::updateDisplayedImage() {
     // Show the proof if available and the user hasn't forced camera view.
-    const bool useProof = !m_proofImage.isNull()
-                          && !m_userForcedCameraJpeg
-                          && !m_showBefore;
-    m_image = useProof ? m_proofImage : m_cameraJpegImage;
-    if (!m_image.isNull())
-        resetView();
+    const bool useProof = !m_proofImage.isNull() && !m_userForcedCameraJpeg && !m_showBefore;
+    m_image             = useProof ? m_proofImage : m_cameraJpegImage;
+    if (!m_image.isNull()) resetView();
     update();
 }
 
-void LoupeView::setMetadata(const ImageMetadata& meta)
-{
+void LoupeView::setMetadata(const ImageMetadata &meta) {
     m_valCamera->setText(formatCamera(meta));
     m_valLens->setText(formatLens(meta.lens));
     m_valIso->setText(formatIso(meta.isoSpeed));
@@ -263,8 +240,7 @@ void LoupeView::setMetadata(const ImageMetadata& meta)
     m_valTempK->setText(formatTempK(meta.colorTempK));
 }
 
-void LoupeView::setCurrentMark(GridView::Mark m)
-{
+void LoupeView::setCurrentMark(GridView::Mark m) {
     m_currentMark = m;
     // QSignalBlocker on each — setChecked() would otherwise fire clicked()
     // and bounce a markChanged back through emitMarkToggle.
@@ -274,29 +250,24 @@ void LoupeView::setCurrentMark(GridView::Mark m)
     m_btnDecline->setChecked(m == GridView::Mark::Decline);
 }
 
-void LoupeView::emitMarkToggle(GridView::Mark requested)
-{
-    const GridView::Mark next =
-        (m_currentMark == requested) ? GridView::Mark::None : requested;
+void LoupeView::emitMarkToggle(GridView::Mark requested) {
+    const GridView::Mark next = (m_currentMark == requested) ? GridView::Mark::None : requested;
     setCurrentMark(next);
     emit markChanged(next);
 }
 
-void LoupeView::resetView()
-{
-    m_zoom = 1.0f;
+void LoupeView::resetView() {
+    m_zoom   = 1.0f;
     m_centre = {0.5f, 0.5f};
     update();
 }
 
-QRect LoupeView::imageRect() const
-{
+QRect LoupeView::imageRect() const {
     const int w = std::max(0, width() - SIDEBAR_W);
     return QRect(0, 0, w, height());
 }
 
-float LoupeView::currentScale() const
-{
+float LoupeView::currentScale() const {
     if (m_image.isNull()) {
         return 1.0f;
     }
@@ -304,33 +275,29 @@ float LoupeView::currentScale() const
     const QRect r = imageRect();
     if (r.width() <= 0 || r.height() <= 0) return 1.0f;
 
-    const float fitScaleX = static_cast<float>(r.width())  / m_image.width();
+    const float fitScaleX = static_cast<float>(r.width()) / m_image.width();
     const float fitScaleY = static_cast<float>(r.height()) / m_image.height();
     const float fitScale  = std::min(fitScaleX, fitScaleY);
 
     return fitScale * m_zoom;
 }
 
-void LoupeView::clampCentre()
-{
+void LoupeView::clampCentre() {
     if (m_image.isNull()) {
         return;
     }
 
-    const QRect r = imageRect();
-    const float scale = currentScale();
-    const float scaledWidth  = m_image.width()  * scale;
+    const QRect r            = imageRect();
+    const float scale        = currentScale();
+    const float scaledWidth  = m_image.width() * scale;
     const float scaledHeight = m_image.height() * scale;
 
     // Compute the range of valid centres such that the scaled image stays
     // visible. If the scaled image is smaller than the image area, allow it
     // to be centred. Otherwise, clamp to prevent panning it entirely out.
-    const float maxCentreX = (scaledWidth >= r.width())
-        ? (1.0f - r.width()  / (2.0f * scale * m_image.width()))
-        : 0.5f;
-    const float maxCentreY = (scaledHeight >= r.height())
-        ? (1.0f - r.height() / (2.0f * scale * m_image.height()))
-        : 0.5f;
+    const float maxCentreX = (scaledWidth >= r.width()) ? (1.0f - r.width() / (2.0f * scale * m_image.width())) : 0.5f;
+    const float maxCentreY =
+        (scaledHeight >= r.height()) ? (1.0f - r.height() / (2.0f * scale * m_image.height())) : 0.5f;
     const float minCentreX = 1.0f - maxCentreX;
     const float minCentreY = 1.0f - maxCentreY;
 
@@ -338,9 +305,8 @@ void LoupeView::clampCentre()
     m_centre.setY(std::clamp(m_centre.y(), static_cast<qreal>(minCentreY), static_cast<qreal>(maxCentreY)));
 }
 
-void LoupeView::paintEvent(QPaintEvent* /*event*/)
-{
-    QPainter painter(this);
+void LoupeView::paintEvent(QPaintEvent * /*event*/) {
+    QPainter    painter(this);
     const QRect r = imageRect();
     painter.fillRect(r, palette().window());
 
@@ -351,15 +317,15 @@ void LoupeView::paintEvent(QPaintEvent* /*event*/)
     painter.setClipRect(r);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-    const float scale = currentScale();
-    const float scaledWidth  = m_image.width()  * scale;
+    const float scale        = currentScale();
+    const float scaledWidth  = m_image.width() * scale;
     const float scaledHeight = m_image.height() * scale;
 
     // Compute the top-left corner of the scaled image in widget space,
     // given the centre point in normalised image space.
     const float centrePixelX  = m_centre.x() * m_image.width();
     const float centrePixelY  = m_centre.y() * m_image.height();
-    const float centreWidgetX = r.width()  / 2.0f;
+    const float centreWidgetX = r.width() / 2.0f;
     const float centreWidgetY = r.height() / 2.0f;
 
     const float targetX = centreWidgetX - centrePixelX * scale;
@@ -369,25 +335,22 @@ void LoupeView::paintEvent(QPaintEvent* /*event*/)
     painter.drawImage(targetRect, m_image);
 }
 
-void LoupeView::resizeEvent(QResizeEvent* event)
-{
+void LoupeView::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     if (m_sidebar) {
         const int w = std::min(SIDEBAR_W, width());
         m_sidebar->setGeometry(width() - w, 0, w, height());
     }
     if (m_proofingLabel) {
-        const QRect imgR = imageRect();
-        const int margin = 8;
-        m_proofingLabel->move(imgR.right() - m_proofingLabel->width() - margin,
-                              imgR.top() + margin);
+        const QRect imgR   = imageRect();
+        const int   margin = 8;
+        m_proofingLabel->move(imgR.right() - m_proofingLabel->width() - margin, imgR.top() + margin);
     }
     clampCentre();
     update();
 }
 
-void LoupeView::wheelEvent(QWheelEvent* event)
-{
+void LoupeView::wheelEvent(QWheelEvent *event) {
     // Wheel inside the sidebar bounds belongs to the form scroll area; let
     // it propagate naturally instead of zooming the image.
     if (!imageRect().contains(event->position().toPoint())) {
@@ -395,32 +358,30 @@ void LoupeView::wheelEvent(QWheelEvent* event)
         return;
     }
 
-    const float delta = event->angleDelta().y() / 1200.0f;
-    m_zoom *= std::exp(delta);
-    m_zoom = std::clamp(m_zoom, 1.0f, 16.0f);
+    const float delta  = event->angleDelta().y() / 1200.0f;
+    m_zoom            *= std::exp(delta);
+    m_zoom             = std::clamp(m_zoom, 1.0f, 16.0f);
 
     clampCentre();
     update();
     event->accept();
 }
 
-void LoupeView::mousePressEvent(QMouseEvent* event)
-{
+void LoupeView::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && imageRect().contains(event->pos())) {
-        m_panning = true;
+        m_panning      = true;
         m_lastMousePos = event->pos();
         event->accept();
     }
 }
 
-void LoupeView::mouseMoveEvent(QMouseEvent* event)
-{
+void LoupeView::mouseMoveEvent(QMouseEvent *event) {
     if (m_panning && !m_image.isNull()) {
         const QPoint delta = event->pos() - m_lastMousePos;
-        const float scale = currentScale();
+        const float  scale = currentScale();
 
         // Delta in widget pixels maps to delta in normalised image space.
-        m_centre.setX(m_centre.x() - delta.x() / (m_image.width()  * scale));
+        m_centre.setX(m_centre.x() - delta.x() / (m_image.width() * scale));
         m_centre.setY(m_centre.y() - delta.y() / (m_image.height() * scale));
 
         clampCentre();
@@ -430,56 +391,53 @@ void LoupeView::mouseMoveEvent(QMouseEvent* event)
     }
 }
 
-void LoupeView::mouseReleaseEvent(QMouseEvent* event)
-{
+void LoupeView::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
         m_panning = false;
         event->accept();
     }
 }
 
-void LoupeView::mouseDoubleClickEvent(QMouseEvent* event)
-{
+void LoupeView::mouseDoubleClickEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && imageRect().contains(event->pos())) {
         emit developRequested();
         event->accept();
     }
 }
 
-void LoupeView::keyPressEvent(QKeyEvent* event)
-{
+void LoupeView::keyPressEvent(QKeyEvent *event) {
     switch (event->key()) {
-        case Qt::Key_Return:
-        case Qt::Key_Enter:
-            emit developRequested();
-            event->accept();
-            return;
-        case Qt::Key_F:
-            resetView();
-            event->accept();
-            return;
-        case Qt::Key_Left:
-            emit previousRequested();
-            event->accept();
-            return;
-        case Qt::Key_Right:
-            emit nextRequested();
-            event->accept();
-            return;
-        case Qt::Key_A:
-            emitMarkToggle(GridView::Mark::Accept);
-            event->accept();
-            return;
-        case Qt::Key_R:
-            emitMarkToggle(GridView::Mark::Refine);
-            event->accept();
-            return;
-        case Qt::Key_D:
-            emitMarkToggle(GridView::Mark::Decline);
-            event->accept();
-            return;
-        default:
-            QWidget::keyPressEvent(event);
-            return;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        emit developRequested();
+        event->accept();
+        return;
+    case Qt::Key_F:
+        resetView();
+        event->accept();
+        return;
+    case Qt::Key_Left:
+        emit previousRequested();
+        event->accept();
+        return;
+    case Qt::Key_Right:
+        emit nextRequested();
+        event->accept();
+        return;
+    case Qt::Key_A:
+        emitMarkToggle(GridView::Mark::Accept);
+        event->accept();
+        return;
+    case Qt::Key_R:
+        emitMarkToggle(GridView::Mark::Refine);
+        event->accept();
+        return;
+    case Qt::Key_D:
+        emitMarkToggle(GridView::Mark::Decline);
+        event->accept();
+        return;
+    default:
+        QWidget::keyPressEvent(event);
+        return;
     }
 }

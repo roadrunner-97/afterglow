@@ -24,7 +24,7 @@
 // around the orange/peach skin-tone hue band.  Don't clamp outputs — the
 // final pack kernel clamps once at readback.
 // ============================================================================
-static const char* PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
+static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC R"CL(
 __kernel void adjustSatVibrancyLinear(__global float4* pixels,
                                        int   w,
                                        int   h,
@@ -77,7 +77,7 @@ __kernel void adjustSatVibrancyLinear(__global float4* pixels,
 // IGpuEffect — shared pipeline interface
 // ============================================================================
 
-bool SaturationEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
+bool SaturationEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
     try {
         cl::Program prog(ctx, PIPELINE_KERNEL_SOURCE);
         prog.build({dev});
@@ -85,38 +85,31 @@ bool SaturationEffect::initGpuKernels(cl::Context& ctx, cl::Device& dev) {
         return true;
     }
     // GCOVR_EXCL_START
-    catch (const cl::Error& e) {
-        qWarning() << "[GpuPipeline] Saturation initGpuKernels failed:"
-                   << e.what() << "(err" << e.err() << ")";
+    catch (const cl::Error &e) {
+        qWarning() << "[GpuPipeline] Saturation initGpuKernels failed:" << e.what() << "(err" << e.err() << ")";
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-bool SaturationEffect::enqueueGpu(cl::CommandQueue& queue,
-                                   cl::Buffer& buf, cl::Buffer& /*aux*/,
-                                   int w, int h,
-                                   const QMap<QString, QVariant>& params) {
+bool SaturationEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
+                                  const QMap<QString, QVariant> &params) {
     const float saturationValue = float(params.value("saturation", 0.0).toDouble());
-    const float vibrancyValue   = float(params.value("vibrancy",   0.0).toDouble());
-    if (saturationValue == 0.0f && vibrancyValue == 0.0f) return true;  // no-op
+    const float vibrancyValue   = float(params.value("vibrancy", 0.0).toDouble());
+    if (saturationValue == 0.0f && vibrancyValue == 0.0f) return true; // no-op
 
     m_kernelLinear.setArg(0, buf);
     m_kernelLinear.setArg(1, w);
     m_kernelLinear.setArg(2, h);
     m_kernelLinear.setArg(3, saturationValue);
     m_kernelLinear.setArg(4, vibrancyValue);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
-                               cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
     return true;
 }
 
-SaturationEffect::SaturationEffect()
-    : controlsWidget(nullptr), saturationParam(nullptr), vibrancyParam(nullptr) {
-}
+SaturationEffect::SaturationEffect() : controlsWidget(nullptr), saturationParam(nullptr), vibrancyParam(nullptr) {}
 
-SaturationEffect::~SaturationEffect() {
-}
+SaturationEffect::~SaturationEffect() {}
 
 QString SaturationEffect::getName() const {
     return "Saturation & Vibrancy";
@@ -135,32 +128,25 @@ bool SaturationEffect::initialize() {
     return true;
 }
 
-QWidget* SaturationEffect::createControlsWidget() {
+QWidget *SaturationEffect::createControlsWidget() {
     if (controlsWidget) return controlsWidget;
 
-    controlsWidget = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(controlsWidget);
+    controlsWidget      = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(controlsWidget);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(10);
 
     saturationParam = new ParamSlider("Saturation", -100.0, 100.0, 0.1, 1);
     saturationParam->setToolTip("Globally boosts or reduces colour intensity across all hues equally.");
-    connect(saturationParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(saturationParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    connect(saturationParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(saturationParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(saturationParam);
 
     vibrancyParam = new ParamSlider("Vibrancy", -100.0, 100.0, 0.1, 1);
-    vibrancyParam->setToolTip("Selectively boosts dull colours while protecting already-saturated tones and skin tones (orange/peach hues).");
-    connect(vibrancyParam, &ParamSlider::editingFinished, this, [this]() {
-        emit parametersChanged();
-    });
-    connect(vibrancyParam, &ParamSlider::valueChanged, this, [this](double) {
-        emit liveParametersChanged();
-    });
+    vibrancyParam->setToolTip(
+        "Selectively boosts dull colours while protecting already-saturated tones and skin tones (orange/peach hues).");
+    connect(vibrancyParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    connect(vibrancyParam, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     layout->addWidget(vibrancyParam);
 
     layout->addStretch();
@@ -170,15 +156,14 @@ QWidget* SaturationEffect::createControlsWidget() {
 QMap<QString, QVariant> SaturationEffect::getParameters() const {
     QMap<QString, QVariant> params;
     params["saturation"] = saturationParam ? saturationParam->value() : 0.0;
-    params["vibrancy"]   = vibrancyParam   ? vibrancyParam->value()   : 0.0;
+    params["vibrancy"]   = vibrancyParam ? vibrancyParam->value() : 0.0;
     return params;
 }
 
-void SaturationEffect::applyParameters(const QMap<QString, QVariant>& parameters) {
+void SaturationEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
     if (saturationParam && parameters.contains("saturation"))
         saturationParam->setValue(parameters.value("saturation").toDouble());
     if (vibrancyParam && parameters.contains("vibrancy"))
         vibrancyParam->setValue(parameters.value("vibrancy").toDouble());
     emit parametersChanged();
 }
-

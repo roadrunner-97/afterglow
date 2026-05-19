@@ -24,10 +24,8 @@ public:
     //          never shared with the Develop pipeline.
     // defaults: parameter snapshot at application start (from snapshotDefaults).
     // cache: not owned; must outlive this Proofer.
-    Proofer(std::unique_ptr<EffectManager> effects,
-            SettingsImporter::Settings defaults,
-            ProofCache* cache,
-            QObject* parent = nullptr);
+    Proofer(std::unique_ptr<EffectManager> effects, SettingsImporter::Settings defaults, ProofCache *cache,
+            QObject *parent = nullptr);
     ~Proofer() override;
 
     // Replace the proof queue.  Caller should pre-filter already-proofed paths.
@@ -36,7 +34,7 @@ public:
     // Move path to the front of the queue.  If not currently in the queue
     // (e.g. photo was proofed earlier but sidecar changed since), it is added.
     // No-op if already at the head.
-    void promote(const QString& path);
+    void promote(const QString &path);
 
     // Stop dispatching new jobs.  Any in-progress job runs to completion.
     void pause();
@@ -50,7 +48,9 @@ public:
 
     // Number of photos waiting to be proofed (not counting the current job).
     // Exposed for unit-test inspection.
-    int pendingCount() const { return m_queue.size(); }
+    int pendingCount() const {
+        return m_queue.size();
+    }
 
 signals:
     void proofStarted(QString path);
@@ -60,13 +60,13 @@ signals:
 private:
     void dispatchNext();
 
-    QStringList                    m_queue;
-    bool                           m_paused = false;
-    bool                           m_busy   = false;
+    QStringList m_queue;
+    bool        m_paused = false;
+    bool        m_busy   = false;
 
     std::unique_ptr<EffectManager> m_effects;
     SettingsImporter::Settings     m_defaults;
-    ProofCache*                    m_cache;    // not owned
+    ProofCache                    *m_cache; // not owned
     std::shared_ptr<GpuPipeline>   m_pipeline;
 };
 

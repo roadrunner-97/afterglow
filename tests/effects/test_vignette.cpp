@@ -12,14 +12,14 @@ class TestVignette : public GpuTestBase {
     Q_OBJECT
 
 private:
-    GpuPipeline  m_pipeline;
+    GpuPipeline    m_pipeline;
     VignetteEffect m_pipelineVignette;
 
-    static ViewportRequest fullViewport(const QImage& img) {
+    static ViewportRequest fullViewport(const QImage &img) {
         ViewportRequest vp;
         vp.displaySize = img.size();
-        vp.zoom   = 1.0f;
-        vp.center = {0.5, 0.5};
+        vp.zoom        = 1.0f;
+        vp.center      = {0.5, 0.5};
         return vp;
     }
 
@@ -31,54 +31,52 @@ private slots:
 
     // amount=0 → identity: every pixel unchanged regardless of other params.
     void zeroAmount_isIdentity() {
-        VignetteEffect e;
-        QImage input = makeSolid(64, 64, 100, 120, 80);
+        VignetteEffect          e;
+        QImage                  input = makeSolid(64, 64, 100, 120, 80);
         QMap<QString, QVariant> params;
         params["amount"]    = 0;
         params["midpoint"]  = 50;
         params["feather"]   = 50;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
-        QVERIFY(allPixels(out, [](QRgb px) {
-            return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80;
-        }));
+        QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 100 && qGreen(px) == 120 && qBlue(px) == 80; }));
     }
 
     // Negative amount darkens corners relative to the centre on a solid image.
     void darkening_cornerDarkerThanCenter() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
-        QImage input = makeSolid(64, 64, 200, 200, 200);
+        VignetteEffect          e;
+        QImage                  input = makeSolid(64, 64, 200, 200, 200);
         QMap<QString, QVariant> params;
         params["amount"]    = -100;
         params["midpoint"]  = 30;
         params["feather"]   = 40;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int center = pixelR(out, 32, 32);
-        int corner = pixelR(out,  0,  0);
+        int corner = pixelR(out, 0, 0);
         QVERIFY2(center == 200, qPrintable(QString("centre=%1").arg(center)));
-        QVERIFY2(corner <  50,  qPrintable(QString("corner=%1").arg(corner)));
+        QVERIFY2(corner < 50, qPrintable(QString("corner=%1").arg(corner)));
     }
 
     // Positive amount lightens corners relative to the centre (within clamp).
     void lightening_cornerBrighterThanCenter() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
-        QImage input = makeSolid(64, 64, 100, 100, 100);
+        VignetteEffect          e;
+        QImage                  input = makeSolid(64, 64, 100, 100, 100);
         QMap<QString, QVariant> params;
         params["amount"]    = 100;
         params["midpoint"]  = 30;
         params["feather"]   = 40;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         int center = pixelR(out, 32, 32);
-        int corner = pixelR(out,  0,  0);
+        int corner = pixelR(out, 0, 0);
         QVERIFY(corner > center);
     }
 
@@ -86,14 +84,14 @@ private slots:
     // midpoint strongly affected.  midpoint=50 puts the edge halfway to corners.
     void hardEdge_featherZero() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
-        QImage input = makeSolid(64, 64, 180, 180, 180);
+        VignetteEffect          e;
+        QImage                  input = makeSolid(64, 64, 180, 180, 180);
         QMap<QString, QVariant> params;
         params["amount"]    = -100;
         params["midpoint"]  = 50;
         params["feather"]   = 0;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
         // centre untouched
@@ -107,24 +105,24 @@ private slots:
     // the corners, so the side midpoints stay nearly untouched.
     void roundness_shapesFalloff() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
+        VignetteEffect          e;
         QMap<QString, QVariant> params;
-        params["amount"]    = -100;
-        params["midpoint"]  = 20;
-        params["feather"]   = 20;
+        params["amount"]   = -100;
+        params["midpoint"] = 20;
+        params["feather"]  = 20;
 
-        QImage input = makeSolid(64, 64, 200, 200, 200);
+        QImage input        = makeSolid(64, 64, 200, 200, 200);
         params["roundness"] = -100;
-        QImage rect = runEffect(e, input, params);
-        params["roundness"] =  100;
-        QImage round = runEffect(e, input, params);
+        QImage rect         = runEffect(e, input, params);
+        params["roundness"] = 100;
+        QImage round        = runEffect(e, input, params);
         QVERIFY(!rect.isNull() && !round.isNull());
 
         // (0, 32) is the middle of the left edge — on a 64x64 image its
         // normalised coordinate is (|nx|=1, |ny|=0).  Under the rectangle
         // metric this point is at d_norm≈1 (fully darkened); under the round
         // metric it is well inside the falloff (much less darkening).
-        int rectSide  = pixelR(rect,  0, 32);
+        int rectSide  = pixelR(rect, 0, 32);
         int roundSide = pixelR(round, 0, 32);
         QVERIFY2(rectSide < roundSide - 20,
                  qPrintable(QString("rectSide=%1 roundSide=%2").arg(rectSide).arg(roundSide)));
@@ -141,20 +139,20 @@ private slots:
     // identically.
     void nonSquare_roundnessZero_isCircularThroughCorners() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
-        QImage input = makeSolid(128, 64, 200, 200, 200);
+        VignetteEffect          e;
+        QImage                  input = makeSolid(128, 64, 200, 200, 200);
         QMap<QString, QVariant> params;
         params["amount"]    = -100;
         params["midpoint"]  = 80;
         params["feather"]   = 20;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
-        int longEdgeMid  = pixelR(out,  0, 32);   // middle of left edge
-        int shortEdgeMid = pixelR(out, 64,  0);   // middle of top edge
+        int longEdgeMid  = pixelR(out, 0, 32); // middle of left edge
+        int shortEdgeMid = pixelR(out, 64, 0); // middle of top edge
 
-        QVERIFY2(longEdgeMid  < 20,  qPrintable(QString("longEdgeMid=%1").arg(longEdgeMid)));
+        QVERIFY2(longEdgeMid < 20, qPrintable(QString("longEdgeMid=%1").arg(longEdgeMid)));
         QVERIFY2(shortEdgeMid > 190, qPrintable(QString("shortEdgeMid=%1").arg(shortEdgeMid)));
     }
 
@@ -166,35 +164,34 @@ private slots:
     // and darkened unequally.
     void nonSquare_roundnessZero_isIsotropic() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
-        QImage input = makeSolid(128, 64, 200, 200, 200);
+        VignetteEffect          e;
+        QImage                  input = makeSolid(128, 64, 200, 200, 200);
         QMap<QString, QVariant> params;
         params["amount"]    = -100;
         params["midpoint"]  = 30;
         params["feather"]   = 30;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
 
-        int alongLong  = pixelR(out, 34, 32);  // 30 px left of centre (64,32)
-        int alongShort = pixelR(out, 64,  2);  // 30 px above centre
-        int diff = std::abs(alongLong - alongShort);
+        int alongLong  = pixelR(out, 34, 32); // 30 px left of centre (64,32)
+        int alongShort = pixelR(out, 64, 2);  // 30 px above centre
+        int diff       = std::abs(alongLong - alongShort);
         QVERIFY2(diff < 5,
-                 qPrintable(QString("alongLong=%1 alongShort=%2 diff=%3")
-                            .arg(alongLong).arg(alongShort).arg(diff)));
+                 qPrintable(QString("alongLong=%1 alongShort=%2 diff=%3").arg(alongLong).arg(alongShort).arg(diff)));
     }
 
     // 16-bit path: no crash and output is non-null when amount is non-zero.
     void darkening_16bit() {
         if (!m_hasGpu) QSKIP("No GPU");
-        VignetteEffect e;
-        QImage input = makeSolid16bit(64, 64, 200, 200, 200);
+        VignetteEffect          e;
+        QImage                  input = makeSolid16bit(64, 64, 200, 200, 200);
         QMap<QString, QVariant> params;
         params["amount"]    = -50;
         params["midpoint"]  = 40;
         params["feather"]   = 40;
         params["roundness"] = 0;
-        QImage out = runEffect(e, input, params);
+        QImage out          = runEffect(e, input, params);
         QVERIFY(!out.isNull());
     }
 
@@ -208,21 +205,21 @@ private slots:
 
     void defaultParameters_keysAndValues() {
         VignetteEffect e;
-        auto params = e.getParameters();
+        auto           params = e.getParameters();
         QVERIFY(params.contains("amount"));
         QVERIFY(params.contains("midpoint"));
         QVERIFY(params.contains("feather"));
         QVERIFY(params.contains("roundness"));
         // Widget not yet built → fall-through defaults
-        QCOMPARE(params["amount"].toInt(),    0);
-        QCOMPARE(params["midpoint"].toInt(),  50);
-        QCOMPARE(params["feather"].toInt(),   50);
+        QCOMPARE(params["amount"].toInt(), 0);
+        QCOMPARE(params["midpoint"].toInt(), 50);
+        QCOMPARE(params["feather"].toInt(), 50);
         QCOMPARE(params["roundness"].toInt(), 0);
     }
 
     void createControlsWidget_constructsAndCaches() {
         VignetteEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         QVERIFY(w != nullptr);
         QVERIFY(e.createControlsWidget() == w);
     }
@@ -232,38 +229,38 @@ private slots:
         VignetteEffect e;
         e.createControlsWidget();
         auto params = e.getParameters();
-        QCOMPARE(params["amount"].toInt(),    0);
-        QCOMPARE(params["midpoint"].toInt(),  50);
-        QCOMPARE(params["feather"].toInt(),   50);
+        QCOMPARE(params["amount"].toInt(), 0);
+        QCOMPARE(params["midpoint"].toInt(), 50);
+        QCOMPARE(params["feather"].toInt(), 50);
         QCOMPARE(params["roundness"].toInt(), 0);
     }
 
     // Fire every slider's editingFinished + valueChanged path.
     void connectSlider_signals_coverLambdaBodies() {
         VignetteEffect e;
-        QWidget* w = e.createControlsWidget();
+        QWidget       *w = e.createControlsWidget();
         QVERIFY(w);
 
         QSignalSpy spyChanged(&e, &PhotoEditorEffect::parametersChanged);
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
-        auto sliders = w->findChildren<ParamSlider*>();
+        auto sliders = w->findChildren<ParamSlider *>();
         QCOMPARE(sliders.size(), 4);
 
-        for (auto* ps : sliders) {
-            auto* qs = ps->findChild<QSlider*>();
+        for (auto *ps : sliders) {
+            auto *qs = ps->findChild<QSlider *>();
             QVERIFY(qs);
             qs->setValue(qs->value() + 1);
             QMetaObject::invokeMethod(qs, "sliderReleased");
         }
 
         QVERIFY(spyChanged.count() >= 4);
-        QVERIFY(spyLive.count()    >= 4);
+        QVERIFY(spyLive.count() >= 4);
     }
 
     // Heap-allocate so the destructor body is explicitly attributed.
     void destructor_heapAllocated_doesNotCrash() {
-        auto* e = new VignetteEffect();
+        auto *e = new VignetteEffect();
         e->createControlsWidget();
         delete e;
     }
@@ -291,7 +288,7 @@ private slots:
 
         // 64x64 uniform mid-grey source image.
         const int W = 64, H = 64;
-        QImage input = makeSolid(W, H, 128, 128, 128);
+        QImage    input = makeSolid(W, H, 128, 128, 128);
 
         // Effect params: strong darkening with tight midpoint so the crop
         // corners are clearly darkened.
@@ -310,14 +307,12 @@ private slots:
         // Inject pipeline keys as they would be in Commit mode (full-res,
         // no downsample: srcPPP=1, cropX0=cropY0=0, srcW/H=image size).
         p["_srcPixelsPerPreviewPixel"] = 1.0;
-        p["_cropX0"] = 0.0;
-        p["_cropY0"] = 0.0;
-        p["_srcW"] = W;
-        p["_srcH"] = H;
+        p["_cropX0"]                   = 0.0;
+        p["_cropY0"]                   = 0.0;
+        p["_srcW"]                     = W;
+        p["_srcH"]                     = H;
 
-        QImage out = m_pipeline.run(input,
-                                    {{&m_pipelineVignette, &m_pipelineVignette, p}},
-                                    fullViewport(input)).image;
+        QImage out = m_pipeline.run(input, {{&m_pipelineVignette, &m_pipelineVignette, p}}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
 
         // The crop corners (at 25%/75% of image dimensions) should be
@@ -331,21 +326,18 @@ private slots:
         // is crop-centred.
         const int cropCornerX = static_cast<int>(W * 0.25);
         const int cropCornerY = static_cast<int>(H * 0.25);
-        const int imgCornerR  = pixelR(out,  0,  0);
+        const int imgCornerR  = pixelR(out, 0, 0);
         const int cropCornerR = pixelR(out, cropCornerX, cropCornerY);
 
         // Both the image corner and the crop corner should be darkened (below
         // baseline of 128) — the vignette is centred on the crop, so points
         // outside the crop boundary are in the fully-dark region.
-        QVERIFY2(imgCornerR  < 20,
-                 qPrintable(QString("imgCornerR=%1 (expected < 20)").arg(imgCornerR)));
-        QVERIFY2(cropCornerR < 20,
-                 qPrintable(QString("cropCornerR=%1 (expected < 20)").arg(cropCornerR)));
+        QVERIFY2(imgCornerR < 20, qPrintable(QString("imgCornerR=%1 (expected < 20)").arg(imgCornerR)));
+        QVERIFY2(cropCornerR < 20, qPrintable(QString("cropCornerR=%1 (expected < 20)").arg(cropCornerR)));
 
         // The crop centre should be bright (unmolested inner zone).
         const int cropCentreR = pixelR(out, W / 2, H / 2);
-        QVERIFY2(cropCentreR > 120,
-                 qPrintable(QString("cropCentreR=%1 (expected > 120)").arg(cropCentreR)));
+        QVERIFY2(cropCentreR > 120, qPrintable(QString("cropCentreR=%1 (expected > 120)").arg(cropCentreR)));
     }
 
     // LiveDrag coordinate fix: when srcPPP=2 the vignette centre must land at
@@ -357,11 +349,11 @@ private slots:
 
         // 64×64 buffer representing a 128×128 source downsampled by srcPPP=2.
         const int W = 64, H = 64;
-        QImage input = makeSolid(W, H, 128, 128, 128);
+        QImage    input = makeSolid(W, H, 128, 128, 128);
 
         QMap<QString, QVariant> p;
         p["amount"]    = -100;
-        p["midpoint"]  = 50;   // transition centred at crop half-diagonal
+        p["midpoint"]  = 50; // transition centred at crop half-diagonal
         p["feather"]   = 20;
         p["roundness"] = 0;
 
@@ -373,14 +365,12 @@ private slots:
 
         // LiveDrag keys: buffer is downscaled by 2 from a 128×128 source.
         p["_srcPixelsPerPreviewPixel"] = 2.0;
-        p["_cropX0"] = 0.0;
-        p["_cropY0"] = 0.0;
-        p["_srcW"] = 128;
-        p["_srcH"] = 128;
+        p["_cropX0"]                   = 0.0;
+        p["_cropY0"]                   = 0.0;
+        p["_srcW"]                     = 128;
+        p["_srcH"]                     = 128;
 
-        QImage out = m_pipeline.run(input,
-                                    {{&m_pipelineVignette, &m_pipelineVignette, p}},
-                                    fullViewport(input)).image;
+        QImage out = m_pipeline.run(input, {{&m_pipelineVignette, &m_pipelineVignette, p}}, fullViewport(input)).image;
         QVERIFY(!out.isNull());
 
         // Buffer centre (32, 32) maps to source centre (64, 64): should be in
@@ -391,8 +381,7 @@ private slots:
 
         // Corners should be darkened (far from centre).
         const int cornerR = pixelR(out, 0, 0);
-        QVERIFY2(cornerR < 30,
-                 qPrintable(QString("cornerR=%1 (expected < 30)").arg(cornerR)));
+        QVERIFY2(cornerR < 30, qPrintable(QString("cornerR=%1 (expected < 30)").arg(cornerR)));
     }
 
     // Rotation fix: with a rectangular vignette (roundness=-50, p≈5.66) and a
@@ -403,32 +392,30 @@ private slots:
         if (!m_hasGpu) QSKIP("No GPU");
 
         const int W = 64, H = 64;
-        QImage input = makeSolid(W, H, 128, 128, 128);
+        QImage    input = makeSolid(W, H, 128, 128, 128);
 
         // Pixel A: 16px directly right of centre (axis-aligned).
         // Pixel B: approx same distance diagonally (11px right + 11px down).
-        const int axisX = 48, axisY = 32;   // (32+16, 32)
-        const int diagX = 43, diagY = 43;   // (32+11, 32+11) ≈ same radius
+        const int axisX = 48, axisY = 32; // (32+16, 32)
+        const int diagX = 43, diagY = 43; // (32+11, 32+11) ≈ same radius
 
         auto runAngle = [&](double angleDeg) {
             QMap<QString, QVariant> p;
-            p["amount"]    = -100;
-            p["midpoint"]  = 40;
-            p["feather"]   = 20;
-            p["roundness"] = -50;   // rectangular shape (p≈5.66)
-            p["_userCropX0"]             = 0.0;
-            p["_userCropY0"]             = 0.0;
-            p["_userCropX1"]             = 1.0;
-            p["_userCropY1"]             = 1.0;
-            p["_userCropAngle"]          = angleDeg;
+            p["amount"]                    = -100;
+            p["midpoint"]                  = 40;
+            p["feather"]                   = 20;
+            p["roundness"]                 = -50; // rectangular shape (p≈5.66)
+            p["_userCropX0"]               = 0.0;
+            p["_userCropY0"]               = 0.0;
+            p["_userCropX1"]               = 1.0;
+            p["_userCropY1"]               = 1.0;
+            p["_userCropAngle"]            = angleDeg;
             p["_srcPixelsPerPreviewPixel"] = 1.0;
-            p["_cropX0"] = 0.0;
-            p["_cropY0"] = 0.0;
-            p["_srcW"] = W;
-            p["_srcH"] = H;
-            return m_pipeline.run(input,
-                                  {{&m_pipelineVignette, &m_pipelineVignette, p}},
-                                  fullViewport(input)).image;
+            p["_cropX0"]                   = 0.0;
+            p["_cropY0"]                   = 0.0;
+            p["_srcW"]                     = W;
+            p["_srcH"]                     = H;
+            return m_pipeline.run(input, {{&m_pipelineVignette, &m_pipelineVignette, p}}, fullViewport(input)).image;
         };
 
         QImage out0  = runAngle(0.0);
@@ -436,8 +423,8 @@ private slots:
         QVERIFY(!out0.isNull());
         QVERIFY(!out45.isNull());
 
-        const int axis0  = pixelR(out0,  axisX, axisY);
-        const int diag0  = pixelR(out0,  diagX, diagY);
+        const int axis0  = pixelR(out0, axisX, axisY);
+        const int diag0  = pixelR(out0, diagX, diagY);
         const int axis45 = pixelR(out45, axisX, axisY);
         const int diag45 = pixelR(out45, diagX, diagY);
 

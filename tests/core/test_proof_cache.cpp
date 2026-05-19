@@ -8,7 +8,7 @@
 #include <memory>
 #include "ProofCache.h"
 
-static bool writeJpeg(const QString& path, QRgb colour = qRgb(100, 150, 200)) {
+static bool writeJpeg(const QString &path, QRgb colour = qRgb(100, 150, 200)) {
     QDir().mkpath(QFileInfo(path).absolutePath());
     QImage img(8, 8, QImage::Format_RGB32);
     img.fill(colour);
@@ -16,11 +16,10 @@ static bool writeJpeg(const QString& path, QRgb colour = qRgb(100, 150, 200)) {
 }
 
 // Create an empty file at path (creates parent dirs if needed).
-static void touchEmpty(const QString& path) {
+static void touchEmpty(const QString &path) {
     QDir().mkpath(QFileInfo(path).absolutePath());
     QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Append))
-        qFatal("touchEmpty: cannot open %s", qPrintable(path));
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Append)) qFatal("touchEmpty: cannot open %s", qPrintable(path));
     f.close();
 }
 
@@ -29,7 +28,7 @@ class TestProofCache : public QObject {
 
 private:
     std::unique_ptr<QTemporaryDir> m_dir;
-    QString m_img;
+    QString                        m_img;
 
 private slots:
     void init() {
@@ -87,7 +86,7 @@ private slots:
         // Push the proof's mtime 1 second ahead of the sidecar.
         const QDateTime sidecarMtime = QFileInfo(sidecar).lastModified();
         const QDateTime proofMtime   = sidecarMtime.addSecs(1);
-        QFile pf(proof);
+        QFile           pf(proof);
         QVERIFY(pf.open(QIODevice::ReadWrite));
         QVERIFY(pf.setFileTime(proofMtime, QFileDevice::FileModificationTime));
         pf.close();
@@ -106,7 +105,7 @@ private slots:
         // Push the sidecar's mtime 1 second ahead of the proof.
         const QDateTime proofMtime   = QFileInfo(proof).lastModified();
         const QDateTime sidecarMtime = proofMtime.addSecs(1);
-        QFile sc(sidecar);
+        QFile           sc(sidecar);
         QVERIFY(sc.open(QIODevice::ReadWrite));
         QVERIFY(sc.setFileTime(sidecarMtime, QFileDevice::FileModificationTime));
         sc.close();
@@ -149,7 +148,7 @@ private slots:
 
         ProofCache cache;
         cache.store(m_img, img);
-        cache.clear();  // evict in-memory; disk file survives
+        cache.clear(); // evict in-memory; disk file survives
 
         QVERIFY(!cache.proof(m_img).isNull());
     }
@@ -164,7 +163,7 @@ private slots:
 
         ProofCache cache;
         cache.store(m_img, img1);
-        cache.store(m_img, img2);  // update branch
+        cache.store(m_img, img2); // update branch
 
         QVERIFY(!cache.proof(m_img).isNull());
     }
@@ -217,8 +216,8 @@ private slots:
 
     void lru_evictsOldestWhenFull() {
         ProofCache cache;
-        const int OVER = 9;  // MAX_LRU is 8; inserting 9 evicts the first
-        QString img0;
+        const int  OVER = 9; // MAX_LRU is 8; inserting 9 evicts the first
+        QString    img0;
 
         for (int i = 0; i < OVER; ++i) {
             const QString src = m_dir->filePath(QString("lru%1.jpg").arg(i));

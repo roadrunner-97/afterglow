@@ -17,32 +17,31 @@ public:
     QString getName() const override;
     QString getDescription() const override;
     QString getVersion() const override;
-    bool initialize() override;
+    bool    initialize() override;
 
-    QWidget* createControlsWidget() override;
+    QWidget                *createControlsWidget() override;
     QMap<QString, QVariant> getParameters() const override;
-    void applyParameters(const QMap<QString, QVariant>& parameters) override;
+    void                    applyParameters(const QMap<QString, QVariant> &parameters) override;
 
-    bool initGpuKernels(cl::Context& ctx, cl::Device& dev) override;
-    bool enqueueGpu(cl::CommandQueue& queue, cl::Buffer& buf, cl::Buffer& aux,
-                    int w, int h,
-                    const QMap<QString, QVariant>& params) override;
+    bool initGpuKernels(cl::Context &ctx, cl::Device &dev) override;
+    bool enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
+                    const QMap<QString, QVariant> &params) override;
 
 private:
-    QWidget*     m_controls;
-    ParamSlider* m_strengthParam;       // 0–100: overall denoise blend
-    ParamSlider* m_shadowPreserveParam; // 0–100: protect dark regions
-    ParamSlider* m_colorNoiseParam;     // 0–100: chroma smoothing
-    QComboBox*   m_algorithmCombo;
-    int          m_algorithm;           // 0 = Gaussian blend, 1 = Bilateral
+    QWidget     *m_controls;
+    ParamSlider *m_strengthParam;       // 0–100: overall denoise blend
+    ParamSlider *m_shadowPreserveParam; // 0–100: protect dark regions
+    ParamSlider *m_colorNoiseParam;     // 0–100: chroma smoothing
+    QComboBox   *m_algorithmCombo;
+    int          m_algorithm; // 0 = Gaussian blend, 1 = Bilateral
 
-    cl::Context m_pipelineCtx;  // saved in initGpuKernels for temp buffer allocation
+    cl::Context m_pipelineCtx; // saved in initGpuKernels for temp buffer allocation
     // Pipeline (float4 linear) kernels.
-    cl::Kernel  m_kernelBlurHLinear;
-    cl::Kernel  m_kernelBlurVLinear;
-    cl::Kernel  m_kernelDenoiseBlendLinear;
-    cl::Kernel  m_kernelColorNoiseBlendLinear;
-    cl::Kernel  m_kernelBilateralDenoiseLinear;
+    cl::Kernel m_kernelBlurHLinear;
+    cl::Kernel m_kernelBlurVLinear;
+    cl::Kernel m_kernelDenoiseBlendLinear;
+    cl::Kernel m_kernelColorNoiseBlendLinear;
+    cl::Kernel m_kernelBilateralDenoiseLinear;
 };
 
 #endif // DENOISEEFFECT_H

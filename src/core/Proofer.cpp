@@ -14,30 +14,28 @@
 
 namespace {
 
-static QMap<QString, QVariant> buildCropInjection(ICropSource* src) {
+static QMap<QString, QVariant> buildCropInjection(ICropSource *src) {
     if (!src) return {};
     const QRectF r = src->userCropRect();
     return {
-        {"_userCropX0",    r.left()},
-        {"_userCropY0",    r.top()},
-        {"_userCropX1",    r.right()},
-        {"_userCropY1",    r.bottom()},
+        {"_userCropX0", r.left()},
+        {"_userCropY0", r.top()},
+        {"_userCropX1", r.right()},
+        {"_userCropY1", r.bottom()},
         {"_userCropAngle", static_cast<double>(src->userCropAngle())},
     };
 }
 
-static void mergeInto(QMap<QString, QVariant>& dst,
-                      const QMap<QString, QVariant>& src) {
+static void mergeInto(QMap<QString, QVariant> &dst, const QMap<QString, QVariant> &src) {
     for (auto it = src.constBegin(); it != src.constEnd(); ++it)
         dst.insert(it.key(), it.value());
 }
 
-static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager& effects) {
-    const QMap<QString, QVariant> cropInjected =
-        buildCropInjection(effects.activeCropSource());
-    QVector<GpuPipelineCall> calls;
+static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager &effects) {
+    const QMap<QString, QVariant> cropInjected = buildCropInjection(effects.activeCropSource());
+    QVector<GpuPipelineCall>      calls;
     calls.reserve(effects.entries().size());
-    for (const EffectEntry& entry : effects.entries()) {
+    for (const EffectEntry &entry : effects.entries()) {
         if (!entry.enabled || !entry.gpu) continue;
         QMap<QString, QVariant> params = entry.effect->getParameters();
         mergeInto(params, cropInjected);
@@ -46,27 +44,20 @@ static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager& effects) {
     return calls;
 }
 
-QImage scaleProof(const QImage& img) {
+QImage scaleProof(const QImage &img) {
     constexpr int MAX_LONG_EDGE = 4096;
-    const int longEdge = qMax(img.width(), img.height());
+    const int     longEdge      = qMax(img.width(), img.height());
     if (longEdge <= MAX_LONG_EDGE) return img;
-    const QSize scaled = img.size().scaled(
-        MAX_LONG_EDGE, MAX_LONG_EDGE, Qt::KeepAspectRatio);
+    const QSize scaled = img.size().scaled(MAX_LONG_EDGE, MAX_LONG_EDGE, Qt::KeepAspectRatio);
     return img.scaled(scaled, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 }
 
 } // namespace
 
-Proofer::Proofer(std::unique_ptr<EffectManager> effects,
-                 SettingsImporter::Settings defaults,
-                 ProofCache* cache,
-                 QObject* parent)
-    : QObject(parent)
-    , m_effects(std::move(effects))
-    , m_defaults(std::move(defaults))
-    , m_cache(cache)
-    , m_pipeline(std::make_shared<GpuPipeline>())
-{}
+Proofer::Proofer(std::unique_ptr<EffectManager> effects, SettingsImporter::Settings defaults, ProofCache *cache,
+                 QObject *parent)
+    : QObject(parent), m_effects(std::move(effects)), m_defaults(std::move(defaults)), m_cache(cache),
+      m_pipeline(std::make_shared<GpuPipeline>()) {}
 
 Proofer::~Proofer() = default;
 
@@ -75,9 +66,9 @@ void Proofer::setQueue(QStringList paths) {
     dispatchNext();
 }
 
-void Proofer::promote(const QString& path) {
+void Proofer::promote(const QString &path) {
     if (!m_queue.isEmpty() && m_queue.first() == path) return;
-    m_queue.removeOne(path);  // no-op if absent; move to front if present
+    m_queue.removeOne(path); // no-op if absent; move to front if present
     m_queue.prepend(path);
     dispatchNext();
 }
@@ -99,14 +90,14 @@ void Proofer::dispatchNext() {
     if (m_paused || m_busy || m_queue.isEmpty()) return;
 
     const QString path = m_queue.takeFirst();
-    m_busy = true;
+    m_busy             = true;
     emit proofStarted(path);
 
     SettingsImporter::applyToManager(m_defaults, *m_effects);
     const QString sidecar = ProofCache::sidecarPath(path);
     if (QFile::exists(sidecar)) {
         SettingsImporter::Settings parsed;
-        QString err;
+        QString                    err;
         if (SettingsImporter::readYaml(sidecar, &parsed, &err))
             SettingsImporter::applyToManager(parsed, *m_effects);
         else
@@ -115,9 +106,8 @@ void Proofer::dispatchNext() {
 
     QVector<GpuPipelineCall> calls = buildGpuCalls(*m_effects);
 
-    auto* watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this,
-            [this, watcher, path]() {
+    auto *watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path]() {
         QImage result = watcher->result();
         if (!result.isNull()) {
             m_cache->store(path, result);
@@ -130,23 +120,21 @@ void Proofer::dispatchNext() {
         dispatchNext();
     });
 
-    const bool isRaw = RawLoader::isRawFile(path);
-    auto pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run(
-        [path, calls = std::move(calls), pipeline, isRaw]() -> QImage {
-            QImage img;
-            if (isRaw) img = RawLoader::load(path);
-            if (img.isNull()) {
-                QImageReader reader(path);
-                reader.setAutoTransform(true);
-                img = reader.read();
-            }
-            if (img.isNull()) return {};
-            QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
-            if (result.isNull()) return {};
-            return scaleProof(result);
+    const bool isRaw    = RawLoader::isRawFile(path);
+    auto       pipeline = m_pipeline;
+    watcher->setFuture(QtConcurrent::run([path, calls = std::move(calls), pipeline, isRaw]() -> QImage {
+        QImage img;
+        if (isRaw) img = RawLoader::load(path);
+        if (img.isNull()) {
+            QImageReader reader(path);
+            reader.setAutoTransform(true);
+            img = reader.read();
         }
-    ));
+        if (img.isNull()) return {};
+        QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
+        if (result.isNull()) return {};
+        return scaleProof(result);
+    }));
 }
 
 // GCOVR_EXCL_STOP

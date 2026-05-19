@@ -19,17 +19,15 @@
 // 16-bit RGBX64 inputs are decoded internally and the test sees an RGB32
 // preview-sized result.
 // ============================================================================
-inline QImage runEffect(PhotoEditorEffect& effect,
-                        const QImage& input,
-                        const QMap<QString, QVariant>& params = {}) {
+inline QImage runEffect(PhotoEditorEffect &effect, const QImage &input, const QMap<QString, QVariant> &params = {}) {
     if (input.isNull()) return {};
-    auto* gpu = dynamic_cast<IGpuEffect*>(&effect);
+    auto *gpu = dynamic_cast<IGpuEffect *>(&effect);
     Q_ASSERT(gpu);
     // Fresh pipeline per call: tests construct stack-local effect instances
     // whose addresses get reused across test methods.  Sharing a pipeline
     // would make m_initializedEffects mis-cache the new (uninitialised)
     // effect under an old pointer.
-    GpuPipeline pipeline;
+    GpuPipeline              pipeline;
     QVector<GpuPipelineCall> calls{{&effect, gpu, params}};
     return pipeline.run(input, calls, ViewportRequest{}, RunMode::Commit).image;
 }
@@ -56,9 +54,9 @@ inline QImage makeSolid16bit(int w, int h, int r, int g, int b) {
 inline QImage makeGradient(int w, int h) {
     QImage img(w, h, QImage::Format_RGB32);
     for (int y = 0; y < h; ++y) {
-        auto* row = reinterpret_cast<QRgb*>(img.scanLine(y));
+        auto *row = reinterpret_cast<QRgb *>(img.scanLine(y));
         for (int x = 0; x < w; ++x) {
-            int v = (w > 1) ? (x * 255 / (w - 1)) : 0;
+            int v  = (w > 1) ? (x * 255 / (w - 1)) : 0;
             row[x] = qRgb(v, v, v);
         }
     }
@@ -69,21 +67,18 @@ inline QImage makeGradient(int w, int h) {
 inline QImage makeCheckerboard(int w, int h, int cellSize = 8) {
     QImage img(w, h, QImage::Format_RGB32);
     for (int y = 0; y < h; ++y) {
-        auto* row = reinterpret_cast<QRgb*>(img.scanLine(y));
+        auto *row = reinterpret_cast<QRgb *>(img.scanLine(y));
         for (int x = 0; x < w; ++x)
-            row[x] = ((x / cellSize + y / cellSize) % 2) ? qRgb(255, 255, 255)
-                                                          : qRgb(0,   0,   0);
+            row[x] = ((x / cellSize + y / cellSize) % 2) ? qRgb(255, 255, 255) : qRgb(0, 0, 0);
     }
     return img;
 }
 
 // Left/right split: left half (rL,gL,bL), right half (rR,gR,bR).
-inline QImage makeSplit(int w, int h,
-                        int rL, int gL, int bL,
-                        int rR, int gR, int bR) {
+inline QImage makeSplit(int w, int h, int rL, int gL, int bL, int rR, int gR, int bR) {
     QImage img(w, h, QImage::Format_RGB32);
     for (int y = 0; y < h; ++y) {
-        auto* row = reinterpret_cast<QRgb*>(img.scanLine(y));
+        auto *row = reinterpret_cast<QRgb *>(img.scanLine(y));
         for (int x = 0; x < w; ++x)
             row[x] = (x < w / 2) ? qRgb(rL, gL, bL) : qRgb(rR, gR, bR);
     }
@@ -94,14 +89,14 @@ inline QImage makeSplit(int w, int h,
 // Pixel accessors
 // ============================================================================
 
-inline int pixelR(const QImage& img, int x, int y) {
-    return qRed(reinterpret_cast<const QRgb*>(img.constScanLine(y))[x]);
+inline int pixelR(const QImage &img, int x, int y) {
+    return qRed(reinterpret_cast<const QRgb *>(img.constScanLine(y))[x]);
 }
-inline int pixelG(const QImage& img, int x, int y) {
-    return qGreen(reinterpret_cast<const QRgb*>(img.constScanLine(y))[x]);
+inline int pixelG(const QImage &img, int x, int y) {
+    return qGreen(reinterpret_cast<const QRgb *>(img.constScanLine(y))[x]);
 }
-inline int pixelB(const QImage& img, int x, int y) {
-    return qBlue(reinterpret_cast<const QRgb*>(img.constScanLine(y))[x]);
+inline int pixelB(const QImage &img, int x, int y) {
+    return qBlue(reinterpret_cast<const QRgb *>(img.constScanLine(y))[x]);
 }
 
 // ============================================================================
@@ -109,9 +104,9 @@ inline int pixelB(const QImage& img, int x, int y) {
 // ============================================================================
 
 // Returns true iff every pixel satisfies pred.
-inline bool allPixels(const QImage& img, std::function<bool(QRgb)> pred) {
+inline bool allPixels(const QImage &img, std::function<bool(QRgb)> pred) {
     for (int y = 0; y < img.height(); ++y) {
-        const auto* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+        const auto *row = reinterpret_cast<const QRgb *>(img.constScanLine(y));
         for (int x = 0; x < img.width(); ++x)
             if (!pred(row[x])) return false;
     }

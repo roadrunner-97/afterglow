@@ -11,14 +11,9 @@ namespace {
 // Send a QMouseEvent with a fixed timestamp (the velocity-gain drag math
 // divides by Δt, so we need deterministic values across runs).  Keeps the
 // event on the stack — QMouseEvent's copy/move constructors are deleted.
-void sendMouseEvent(QObject* target, QEvent::Type type, QPoint pos,
-                    Qt::MouseButton button,
-                    Qt::KeyboardModifiers mods,
+void sendMouseEvent(QObject *target, QEvent::Type type, QPoint pos, Qt::MouseButton button, Qt::KeyboardModifiers mods,
                     qulonglong tsMs) {
-    QMouseEvent ev(type, QPointF(pos), QPointF(pos),
-                   button,
-                   button == Qt::NoButton ? Qt::LeftButton : button,
-                   mods);
+    QMouseEvent ev(type, QPointF(pos), QPointF(pos), button, button == Qt::NoButton ? Qt::LeftButton : button, mods);
     ev.setTimestamp(tsMs);
     QApplication::sendEvent(target, &ev);
 }
@@ -79,21 +74,21 @@ private slots:
     // setValue() must not emit — callers use it to restore state silently
     void setValue_doesNotEmitValueChanged() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spy(&s, &ParamSlider::valueChanged);
+        QSignalSpy  spy(&s, &ParamSlider::valueChanged);
         s.setValue(50.0);
         QCOMPARE(spy.count(), 0);
     }
 
     void setValue_doesNotEmitEditingFinished() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spy(&s, &ParamSlider::editingFinished);
+        QSignalSpy  spy(&s, &ParamSlider::editingFinished);
         s.setValue(50.0);
         QCOMPARE(spy.count(), 0);
     }
 
     void setValue_multipleTimesNoSignals() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spy(&s, &ParamSlider::valueChanged);
+        QSignalSpy  spy(&s, &ParamSlider::valueChanged);
         s.setValue(10.0);
         s.setValue(-10.0);
         s.setValue(0.0);
@@ -114,8 +109,8 @@ private slots:
     // QSlider::valueChanged lambda: syncs spinbox, updates label, emits valueChanged
     void sliderValueChanged_emitsValueChangedAndSyncsSpinbox() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spy(&s, &ParamSlider::valueChanged);
-        auto* slider = s.findChild<QSlider*>();
+        QSignalSpy  spy(&s, &ParamSlider::valueChanged);
+        auto       *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         slider->setValue(50);
         QCOMPARE(spy.count(), 1);
@@ -126,8 +121,8 @@ private slots:
     // QSlider::valueChanged lambda with fractional scale factor
     void sliderValueChanged_fractionalStep_scaledCorrectly() {
         ParamSlider s("Test", -20.0, 20.0, 0.1, 1);
-        QSignalSpy spy(&s, &ParamSlider::valueChanged);
-        auto* slider = s.findChild<QSlider*>();
+        QSignalSpy  spy(&s, &ParamSlider::valueChanged);
+        auto       *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         // scaleFactor = 10; int value 35 → 3.5
         slider->setValue(35);
@@ -139,8 +134,8 @@ private slots:
     // QSlider::sliderReleased lambda: emits editingFinished
     void sliderReleased_emitsEditingFinished() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spy(&s, &ParamSlider::editingFinished);
-        auto* slider = s.findChild<QSlider*>();
+        QSignalSpy  spy(&s, &ParamSlider::editingFinished);
+        auto       *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QMetaObject::invokeMethod(slider, "sliderReleased");
         QCOMPARE(spy.count(), 1);
@@ -149,9 +144,9 @@ private slots:
     // QDoubleSpinBox::valueChanged lambda: syncs slider, does NOT emit ParamSlider::valueChanged
     void spinboxValueChanged_syncsSliderAndNoSignal() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spyValue(&s, &ParamSlider::valueChanged);
-        auto* spinbox = s.findChild<QDoubleSpinBox*>();
-        auto* slider  = s.findChild<QSlider*>();
+        QSignalSpy  spyValue(&s, &ParamSlider::valueChanged);
+        auto       *spinbox = s.findChild<QDoubleSpinBox *>();
+        auto       *slider  = s.findChild<QSlider *>();
         QVERIFY(spinbox);
         QVERIFY(slider);
         spinbox->setValue(30.0);
@@ -164,9 +159,9 @@ private slots:
     // QDoubleSpinBox::editingFinished lambda: emits both valueChanged and editingFinished
     void spinboxEditingFinished_emitsBothSignals() {
         ParamSlider s("Test", -100.0, 100.0);
-        QSignalSpy spyValue(&s, &ParamSlider::valueChanged);
-        QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
-        auto* spinbox = s.findChild<QDoubleSpinBox*>();
+        QSignalSpy  spyValue(&s, &ParamSlider::valueChanged);
+        QSignalSpy  spyEdit(&s, &ParamSlider::editingFinished);
+        auto       *spinbox = s.findChild<QDoubleSpinBox *>();
         QVERIFY(spinbox);
         spinbox->setValue(25.0);
         // Invoke editingFinished signal directly (simulates user pressing Enter)
@@ -185,7 +180,7 @@ private slots:
         s.setValue(75.0);
         QSignalSpy spyValue(&s, &ParamSlider::valueChanged);
         QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
-        auto* slider = s.findChild<QSlider*>();
+        auto      *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QTest::mouseDClick(slider, Qt::LeftButton);
         QCOMPARE(s.value(), 0.0);
@@ -200,7 +195,7 @@ private slots:
         s.show();
         s.setValue(75.0);
         QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
-        auto* slider = s.findChild<QSlider*>();
+        auto      *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QTest::mouseDClick(slider, Qt::RightButton);
         // Value unchanged, no editingFinished from eventFilter path
@@ -215,12 +210,11 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
-        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(50, 10),
-                       Qt::RightButton, Qt::NoModifier, 100);
-        QCOMPARE(spyEdit.count(), 0);  // never started a drag
+        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(50, 10), Qt::RightButton, Qt::NoModifier, 100);
+        QCOMPARE(spyEdit.count(), 0); // never started a drag
     }
 
     // MouseMove with no prior press is a no-op (handleDragMove early-out).
@@ -228,12 +222,11 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         const int before = slider->value();
-        sendMouseEvent(slider, QEvent::MouseMove, QPoint(80, 10),
-                       Qt::NoButton, Qt::NoModifier, 100);
-        QCOMPARE(slider->value(), before);  // untouched
+        sendMouseEvent(slider, QEvent::MouseMove, QPoint(80, 10), Qt::NoButton, Qt::NoModifier, 100);
+        QCOMPARE(slider->value(), before); // untouched
     }
 
     // Press → fast move → release.  A wide horizontal drag at gain≥1 sweeps
@@ -242,25 +235,22 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         slider->resize(180, 20);
         s.setValue(0.0);
 
         QSignalSpy spyValue(&s, &ParamSlider::valueChanged);
-        QSignalSpy spyEdit (&s, &ParamSlider::editingFinished);
+        QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
 
-        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10),
-                       Qt::LeftButton, Qt::NoModifier, 100);
+        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10), Qt::LeftButton, Qt::NoModifier, 100);
         // 60-px sweep over 100 ms → ~600 px/s → gain ≈ 1.25×.
-        sendMouseEvent(slider, QEvent::MouseMove, QPoint(80, 10),
-                       Qt::NoButton, Qt::NoModifier, 200);
-        sendMouseEvent(slider, QEvent::MouseButtonRelease, QPoint(80, 10),
-                       Qt::LeftButton, Qt::NoModifier, 210);
+        sendMouseEvent(slider, QEvent::MouseMove, QPoint(80, 10), Qt::NoButton, Qt::NoModifier, 200);
+        sendMouseEvent(slider, QEvent::MouseButtonRelease, QPoint(80, 10), Qt::LeftButton, Qt::NoModifier, 210);
 
-        QVERIFY(s.value() > 0.0);          // moved positively
-        QVERIFY(spyValue.count() >= 1);     // at least one tick
-        QCOMPARE(spyEdit.count(), 1);       // released after motion
+        QVERIFY(s.value() > 0.0);       // moved positively
+        QVERIFY(spyValue.count() >= 1); // at least one tick
+        QCOMPARE(spyEdit.count(), 1);   // released after motion
     }
 
     // Same-pixel MouseMove (dx == 0) is the early-out branch — it must
@@ -269,19 +259,16 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         slider->resize(180, 20);
         s.setValue(0.0);
 
-        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(50, 10),
-                       Qt::LeftButton, Qt::NoModifier, 100);
-        sendMouseEvent(slider, QEvent::MouseMove, QPoint(50, 10),
-                       Qt::NoButton, Qt::NoModifier, 200);
+        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(50, 10), Qt::LeftButton, Qt::NoModifier, 100);
+        sendMouseEvent(slider, QEvent::MouseMove, QPoint(50, 10), Qt::NoButton, Qt::NoModifier, 200);
         QCOMPARE(s.value(), 0.0);
 
         // Now a real dx — should advance from the updated timestamp baseline.
-        sendMouseEvent(slider, QEvent::MouseMove, QPoint(70, 10),
-                       Qt::NoButton, Qt::NoModifier, 250);
+        sendMouseEvent(slider, QEvent::MouseMove, QPoint(70, 10), Qt::NoButton, Qt::NoModifier, 250);
         QVERIFY(s.value() > 0.0);
     }
 
@@ -292,21 +279,19 @@ private slots:
             ParamSlider s("Test", -100.0, 100.0);
             s.show();
             s.resize(200, 30);
-            auto* slider = s.findChild<QSlider*>();
+            auto *slider = s.findChild<QSlider *>();
             slider->resize(180, 20);
             s.setValue(0.0);
-            sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10),
-                           Qt::LeftButton, Qt::NoModifier, 100);
-            sendMouseEvent(slider, QEvent::MouseMove, QPoint(80, 10),
-                           Qt::NoButton, mods, 200);
+            sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10), Qt::LeftButton, Qt::NoModifier, 100);
+            sendMouseEvent(slider, QEvent::MouseMove, QPoint(80, 10), Qt::NoButton, mods, 200);
             return s.value();
         };
         const double unshifted = runDrag(Qt::NoModifier);
         const double shifted   = runDrag(Qt::ShiftModifier);
         QVERIFY(unshifted > 0.0);
-        QVERIFY(shifted   > 0.0);
-        QVERIFY(shifted < unshifted);            // Shift compressed the move
-        QVERIFY(shifted < 0.5 * unshifted);      // by a meaningful margin
+        QVERIFY(shifted > 0.0);
+        QVERIFY(shifted < unshifted);       // Shift compressed the move
+        QVERIFY(shifted < 0.5 * unshifted); // by a meaningful margin
     }
 
     // Release without prior motion (a "click that didn't drag") must NOT
@@ -315,14 +300,12 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         slider->resize(180, 20);
 
         QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
-        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(50, 10),
-                       Qt::LeftButton, Qt::NoModifier, 100);
-        sendMouseEvent(slider, QEvent::MouseButtonRelease, QPoint(50, 10),
-                       Qt::LeftButton, Qt::NoModifier, 110);
+        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(50, 10), Qt::LeftButton, Qt::NoModifier, 100);
+        sendMouseEvent(slider, QEvent::MouseButtonRelease, QPoint(50, 10), Qt::LeftButton, Qt::NoModifier, 110);
         QCOMPARE(spyEdit.count(), 0);
     }
 
@@ -331,10 +314,9 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto      *slider = s.findChild<QSlider *>();
         QSignalSpy spyEdit(&s, &ParamSlider::editingFinished);
-        sendMouseEvent(slider, QEvent::MouseButtonRelease, QPoint(50, 10),
-                       Qt::RightButton, Qt::NoModifier, 100);
+        sendMouseEvent(slider, QEvent::MouseButtonRelease, QPoint(50, 10), Qt::RightButton, Qt::NoModifier, 100);
         QCOMPARE(spyEdit.count(), 0);
     }
 
@@ -344,14 +326,12 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         slider->resize(180, 20);
         s.setValue(0.0);
 
-        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10),
-                       Qt::LeftButton, Qt::NoModifier, 100);
-        sendMouseEvent(slider, QEvent::MouseMove, QPoint(40, 10),
-                       Qt::NoButton, Qt::NoModifier, 100);  // Δt = 0
+        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10), Qt::LeftButton, Qt::NoModifier, 100);
+        sendMouseEvent(slider, QEvent::MouseMove, QPoint(40, 10), Qt::NoButton, Qt::NoModifier, 100); // Δt = 0
         // Should still produce a finite, positive value bounded by max gain.
         QVERIFY(s.value() > 0.0);
         QVERIFY(s.value() <= 100.0);
@@ -363,15 +343,13 @@ private slots:
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
         s.resize(200, 30);
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         slider->resize(180, 20);
         s.setValue(80.0);
 
-        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10),
-                       Qt::LeftButton, Qt::NoModifier, 100);
+        sendMouseEvent(slider, QEvent::MouseButtonPress, QPoint(20, 10), Qt::LeftButton, Qt::NoModifier, 100);
         // Huge fast drag → would exceed max without clamping.
-        sendMouseEvent(slider, QEvent::MouseMove, QPoint(180, 10),
-                       Qt::NoButton, Qt::NoModifier, 110);
+        sendMouseEvent(slider, QEvent::MouseMove, QPoint(180, 10), Qt::NoButton, Qt::NoModifier, 110);
         QCOMPARE(s.value(), 100.0);
     }
 
@@ -380,10 +358,10 @@ private slots:
     void eventFilter_otherEventType_fallsThrough() {
         ParamSlider s("Test", -100.0, 100.0);
         s.show();
-        auto* slider = s.findChild<QSlider*>();
+        auto *slider = s.findChild<QSlider *>();
         QVERIFY(slider);
         QEvent ev(QEvent::FocusIn);
-        QApplication::sendEvent(slider, &ev);  // shouldn't crash
+        QApplication::sendEvent(slider, &ev); // shouldn't crash
         QVERIFY(true);
     }
 };

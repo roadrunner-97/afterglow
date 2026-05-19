@@ -19,8 +19,8 @@
 class IGpuEffect;
 
 struct GpuPipelineCall {
-    PhotoEditorEffect*      effect;
-    IGpuEffect*             gpu;     // pre-resolved interface pointer; never null
+    PhotoEditorEffect      *effect;
+    IGpuEffect             *gpu; // pre-resolved interface pointer; never null
     QMap<QString, QVariant> params;
 };
 
@@ -78,51 +78,51 @@ public:
     // Commit so callers like exportImageAsync() get a full-fidelity pass
     // without opt-in.  The returned image contains only visible image pixels;
     // letterbox padding is the viewport widget's responsibility.
-    GpuPipelineResult run(const QImage& image, const QVector<GpuPipelineCall>& calls,
-                          const ViewportRequest& viewport, RunMode mode = RunMode::Commit);
+    GpuPipelineResult run(const QImage &image, const QVector<GpuPipelineCall> &calls, const ViewportRequest &viewport,
+                          RunMode mode = RunMode::Commit);
 
 private:
     // All must be called with m_mutex held.
     bool initContext();
     bool initDownsampleKernels();
-    void uploadImageLocked(const QImage& image);
+    void uploadImageLocked(const QImage &image);
     // Decode srcBuf → processedBuf at full resolution.  Allocates processedBuf
     // and fullAuxBuf on first use or when the image dimensions change.
     bool decodeFullResLocked();
     // float4 → uint sRGB pack + readback from the given source buffer.
-    QImage packAndReadbackLocked(cl::Buffer& src, int w, int h);
+    QImage packAndReadbackLocked(cl::Buffer &src, int w, int h);
 
     std::mutex       m_mutex;
     cl::Context      m_context;
     cl::CommandQueue m_queue;
     cl::Device       m_device;
 
-    cl::Buffer m_srcBuf;        // persistent original — written once per image load
-    cl::Buffer m_processedBuf;  // full-res cl_float4 linear post-effect cache
-    cl::Buffer m_fullAuxBuf;    // full-res cl_float4 scratch for effect ping-pong
-    cl::Buffer m_workBuf;       // preview-sized cl_float4 linear; sampled or edited by effects
-    cl::Buffer m_auxBuf;        // preview-sized cl_float4 scratch (blur, unsharp ping-pong)
-    cl::Buffer m_packedBuf;     // preview-sized uint (RGB32 sRGB) — final pack target, read back to CPU
+    cl::Buffer m_srcBuf;       // persistent original — written once per image load
+    cl::Buffer m_processedBuf; // full-res cl_float4 linear post-effect cache
+    cl::Buffer m_fullAuxBuf;   // full-res cl_float4 scratch for effect ping-pong
+    cl::Buffer m_workBuf;      // preview-sized cl_float4 linear; sampled or edited by effects
+    cl::Buffer m_auxBuf;       // preview-sized cl_float4 scratch (blur, unsharp ping-pong)
+    cl::Buffer m_packedBuf;    // preview-sized uint (RGB32 sRGB) — final pack target, read back to CPU
 
     // Downsample kernels — output float4 linear sRGB (scene-linear, unclamped).
-    cl::Kernel m_downsampleKernel8Srgb;     //  8-bit sRGB uint  → float4 linear (sRGB decode)
-    cl::Kernel m_downsampleKernel16Srgb;    // 16-bit sRGB ushort → float4 linear (sRGB decode)
-    cl::Kernel m_downsampleKernel16Linear;  // 16-bit linear ushort → float4 linear (divide by 65535)
-    cl::Kernel m_downsampleKernelFloat4;    // float4 linear → float4 linear (crop + box average)
-    cl::Kernel m_decodeKernel8Srgb;         // 1:1 decode:  8-bit sRGB uint   → float4 linear
-    cl::Kernel m_decodeKernel16Srgb;        // 1:1 decode: 16-bit sRGB ushort → float4 linear
-    cl::Kernel m_decodeKernel16Linear;      // 1:1 decode: 16-bit linear ushort → float4 linear
-    cl::Kernel m_packKernel;                // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
+    cl::Kernel m_downsampleKernel8Srgb;    //  8-bit sRGB uint  → float4 linear (sRGB decode)
+    cl::Kernel m_downsampleKernel16Srgb;   // 16-bit sRGB ushort → float4 linear (sRGB decode)
+    cl::Kernel m_downsampleKernel16Linear; // 16-bit linear ushort → float4 linear (divide by 65535)
+    cl::Kernel m_downsampleKernelFloat4;   // float4 linear → float4 linear (crop + box average)
+    cl::Kernel m_decodeKernel8Srgb;        // 1:1 decode:  8-bit sRGB uint   → float4 linear
+    cl::Kernel m_decodeKernel16Srgb;       // 1:1 decode: 16-bit sRGB ushort → float4 linear
+    cl::Kernel m_decodeKernel16Linear;     // 1:1 decode: 16-bit linear ushort → float4 linear
+    cl::Kernel m_packKernel;               // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
 
-    int        m_previewW = 0;
-    int        m_previewH = 0;
+    int m_previewW = 0;
+    int m_previewH = 0;
 
-    int    m_width    = 0;
-    int    m_height   = 0;
-    int    m_stride   = 0;
-    size_t m_bufBytes = 0;
-    bool   m_is16bit  = false;
-    bool   m_inputIsLinear = false;  // true if source is scene-linear (RAW via LibRaw gamm=1)
+    int    m_width         = 0;
+    int    m_height        = 0;
+    int    m_stride        = 0;
+    size_t m_bufBytes      = 0;
+    bool   m_is16bit       = false;
+    bool   m_inputIsLinear = false; // true if source is scene-linear (RAW via LibRaw gamm=1)
 
     // Full-res cache state.  m_processedBytes tracks the current allocation so
     // we can reallocate when a new image of a different size is loaded.
@@ -131,12 +131,12 @@ private:
 
     bool        m_available = false;
     int         m_revision  = -1;
-    const void* m_lastBits  = nullptr;  // detect image changes between runs
+    const void *m_lastBits  = nullptr; // detect image changes between runs
 
     // Tracks which IGpuEffect instances have had initGpuKernels() called for
     // the current context.  Cleared on device change so re-enabled effects
     // get lazily re-compiled on their next appearance in a calls list.
-    std::unordered_set<void*> m_initializedEffects;
+    std::unordered_set<void *> m_initializedEffects;
 };
 
 #endif // GPUPIPELINE_H

@@ -27,7 +27,7 @@ public:
     // Compile kernels into ctx and store them as member variables.
     // Effects that need to allocate temporary buffers in enqueueGpu()
     // should store a copy of ctx here.
-    virtual bool initGpuKernels(cl::Context& ctx, cl::Device& dev) = 0;
+    virtual bool initGpuKernels(cl::Context &ctx, cl::Device &dev) = 0;
 
     // Enqueue this effect's GPU work onto queue.
     //   buf   — main working buffer; cl_float4 linear sRGB, in-place.  Nominal
@@ -38,10 +38,8 @@ public:
     //   w, h  — preview dimensions; buffers are tightly packed, so stride = w.
     // Do NOT call queue.finish() — GpuPipeline calls it once after all effects.
     // Return false on error (pipeline aborts; no CPU fallback).
-    virtual bool enqueueGpu(cl::CommandQueue& queue,
-                             cl::Buffer& buf, cl::Buffer& aux,
-                             int w, int h,
-                             const QMap<QString, QVariant>& params) = 0;
+    virtual bool enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
+                            const QMap<QString, QVariant> &params) = 0;
 };
 
 #endif // IGPUEFFECT_H

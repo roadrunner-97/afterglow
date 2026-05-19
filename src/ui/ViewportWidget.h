@@ -24,7 +24,7 @@ class ViewportWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
 
 public:
-    explicit ViewportWidget(QWidget* parent = nullptr);
+    explicit ViewportWidget(QWidget *parent = nullptr);
     ~ViewportWidget() override;
 
     // Called by PhotoEditorApp when a new image is opened (before first render).
@@ -43,7 +43,7 @@ public:
 
     // Set the currently active interactive effect (nullptr to clear).
     // Triggers an immediate repaint so the overlay appears/disappears.
-    void setActiveInteractiveEffect(IInteractiveEffect* effect);
+    void setActiveInteractiveEffect(IInteractiveEffect *effect);
 
     // Rotation applied to the displayed image (and the overlay, which uses
     // the same pivot so handles stay anchored to the image content).  Pivot
@@ -60,37 +60,37 @@ protected:
     void resizeGL(int w, int h) override;
     void paintGL() override;
 
-    void keyPressEvent(QKeyEvent* event) override;
-    void wheelEvent(QWheelEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
 
 private:
-    void createOrResizeTexture(int w, int h);
-    void clampCenter();
+    void              createOrResizeTexture(int w, int h);
+    void              clampCenter();
     ViewportTransform currentTransform() const;
 
     // GL resources
-    GLuint                    m_glTexture = 0;
-    QSize                     m_textureSize;   // current texture allocation
-    QOpenGLVertexArrayObject  m_vao;
-    QOpenGLBuffer             m_vbo{QOpenGLBuffer::VertexBuffer};
-    QOpenGLShaderProgram*     m_shader    = nullptr;
-    bool                  m_hasContent = false;
+    GLuint                   m_glTexture = 0;
+    QSize                    m_textureSize; // current texture allocation
+    QOpenGLVertexArrayObject m_vao;
+    QOpenGLBuffer            m_vbo{QOpenGLBuffer::VertexBuffer};
+    QOpenGLShaderProgram    *m_shader     = nullptr;
+    bool                     m_hasContent = false;
 
     // Position of the image within the widget (top-left, widget pixels).
     // Drives the quad-rect uniform so the image lands at the correct sub-rect
     // and the GL clear shows through as letterbox.
-    QPoint                m_imageOffset;
-    QSize                 m_renderedSize;
+    QPoint m_imageOffset;
+    QSize  m_renderedSize;
 
     // setImage() can be called before the widget has ever been shown — for
     // example when the user goes Loupe → Develop and the develop page's GL
     // context hasn't been created yet.  Stash the image here and apply it
     // from initializeGL() once the context is up.
-    QImage                m_pendingImage;
-    QPoint                m_pendingOffset;
+    QImage m_pendingImage;
+    QPoint m_pendingOffset;
 
     // Pan/zoom state
     QSize   m_imageSize;
@@ -100,7 +100,7 @@ private:
     bool    m_panning = false;
 
     // Optional overlay / event consumer
-    IInteractiveEffect* m_active = nullptr;
+    IInteractiveEffect *m_active = nullptr;
 
     // Image rotation (degrees, CCW-positive on screen) applied in the GL
     // quad's vertex shader.  Pivot is normalised source coords.

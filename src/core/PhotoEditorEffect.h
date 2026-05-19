@@ -22,10 +22,10 @@ class PhotoEditorEffect : public QObject {
 public:
     virtual ~PhotoEditorEffect() = default; // GCOVR_EXCL_LINE
 
-    virtual QString getName() const = 0;
+    virtual QString getName() const        = 0;
     virtual QString getDescription() const = 0;
-    virtual QString getVersion() const = 0;
-    virtual bool initialize() = 0;
+    virtual QString getVersion() const     = 0;
+    virtual bool    initialize()           = 0;
 
     // Stable identifier used to key sidecar YAML entries.  Default
     // implementation snake-cases getName() (lowercase, spaces→_, drops
@@ -35,8 +35,10 @@ public:
         QString id;
         id.reserve(getName().size());
         for (QChar c : getName()) {
-            if (c.isLetterOrNumber()) id.append(c.toLower());
-            else if (c.isSpace())     id.append('_');
+            if (c.isLetterOrNumber())
+                id.append(c.toLower());
+            else if (c.isSpace())
+                id.append('_');
             // any other character (punctuation, &) is dropped
         }
         // Collapse runs of underscores left behind by dropped punctuation.
@@ -46,18 +48,22 @@ public:
         return id;
     }
 
-    virtual QWidget* createControlsWidget() { return nullptr; }
-    virtual QMap<QString, QVariant> getParameters() const { return {}; }
+    virtual QWidget *createControlsWidget() {
+        return nullptr;
+    }
+    virtual QMap<QString, QVariant> getParameters() const {
+        return {};
+    }
 
     // Reverse of getParameters(): pushes a previously-saved parameter map back
     // onto the effect's controls.  Default no-op so effects without parameters
     // (or that haven't yet implemented load support) don't have to override.
     // Implementations should ignore unknown keys and tolerate missing ones.
-    virtual void applyParameters(const QMap<QString, QVariant>& /*parameters*/) {} // GCOVR_EXCL_LINE
+    virtual void applyParameters(const QMap<QString, QVariant> & /*parameters*/) {} // GCOVR_EXCL_LINE
 
     // Called after a new image is loaded.  Effects that want to adapt their
     // defaults to the image's metadata (e.g. white balance) override this.
-    virtual void onImageLoaded(const ImageMetadata& /*meta*/) {}
+    virtual void onImageLoaded(const ImageMetadata & /*meta*/) {}
 
 signals:
     void parametersChanged();     // committed change (slider release / spinbox commit)

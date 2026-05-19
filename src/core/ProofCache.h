@@ -17,27 +17,27 @@
 class ProofCache : public QObject {
     Q_OBJECT
 public:
-    explicit ProofCache(QObject* parent = nullptr);
+    explicit ProofCache(QObject *parent = nullptr);
 
     // Returns the on-disk proof path for a source image.
-    static QString proofPath(const QString& imagePath);
+    static QString proofPath(const QString &imagePath);
 
     // Returns the expected sidecar (.yml) path for a source image.
-    static QString sidecarPath(const QString& imagePath);
+    static QString sidecarPath(const QString &imagePath);
 
     // True if the proof file exists on disk and is at least as new as the
     // sidecar.  If no sidecar exists the proof is always considered fresh.
-    bool isProofed(const QString& imagePath) const;
+    bool isProofed(const QString &imagePath) const;
 
     // Returns the cached proof (from in-memory LRU or disk).
     // Returns a null QImage if the proof does not exist or is stale.
-    QImage proof(const QString& imagePath);
+    QImage proof(const QString &imagePath);
 
     // Write JPEG to disk (quality 90) and populate the in-memory LRU.
-    void store(const QString& imagePath, const QImage& proof);
+    void store(const QString &imagePath, const QImage &proof);
 
     // Delete the on-disk proof and evict from the in-memory LRU.
-    void invalidate(const QString& imagePath);
+    void invalidate(const QString &imagePath);
 
     // Clear the in-memory LRU.  Disk files are left intact so re-opening the
     // same folder doesn't re-proof already-cached photos.
@@ -46,11 +46,11 @@ public:
 private:
     static const int MAX_LRU = 8;
 
-    void lruInsert(const QString& key, const QImage& img);
-    void lruPromote(const QString& key);
+    void lruInsert(const QString &key, const QImage &img);
+    void lruPromote(const QString &key);
     void lruEvict();
 
-    QList<QString>         m_lruOrder;  // front = most recently used
+    QList<QString>         m_lruOrder; // front = most recently used
     QHash<QString, QImage> m_lruCache;
 };
 

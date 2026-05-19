@@ -11,13 +11,23 @@ namespace {
 class FakeEffect : public PhotoEditorEffect {
     Q_OBJECT
 public:
-    FakeEffect(QString name, QMap<QString, QVariant> params)
-        : m_name(std::move(name)), m_params(std::move(params)) {}
-    QString getName()        const override { return m_name; }
-    QString getDescription() const override { return ""; }
-    QString getVersion()     const override { return "1.0"; }
-    bool    initialize()           override { return true; }
-    QMap<QString, QVariant> getParameters() const override { return m_params; }
+    FakeEffect(QString name, QMap<QString, QVariant> params) : m_name(std::move(name)), m_params(std::move(params)) {}
+    QString getName() const override {
+        return m_name;
+    }
+    QString getDescription() const override {
+        return "";
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
+    QMap<QString, QVariant> getParameters() const override {
+        return m_params;
+    }
+
 private:
     QString                 m_name;
     QMap<QString, QVariant> m_params;
@@ -49,7 +59,7 @@ private slots:
     }
 
     void serialisesScalarKinds() {
-        EffectManager mgr;
+        EffectManager           mgr;
         QMap<QString, QVariant> params;
         params["i"] = 42;
         params["d"] = 1.5;
@@ -95,7 +105,7 @@ private slots:
 
     void serialisesStringValuedParameter() {
         // Exercises the QString fallback in formatScalar for non-numeric values.
-        EffectManager mgr;
+        EffectManager           mgr;
         QMap<QString, QVariant> params;
         params["mode"] = QString("auto");
         mgr.addEffect(std::make_unique<FakeEffect>("Mode", params));
@@ -126,10 +136,9 @@ private slots:
 
     void writeYaml_returnsFalseOnUnwritablePath() {
         EffectManager mgr;
-        QString error;
+        QString       error;
         // Path under a non-existent directory — open() must fail.
-        const bool ok = SettingsExporter::writeYaml(
-            "/nonexistent_dir_xyz/__nope__/out.yml", mgr, {}, &error);
+        const bool ok = SettingsExporter::writeYaml("/nonexistent_dir_xyz/__nope__/out.yml", mgr, {}, &error);
         QVERIFY(!ok);
         QVERIFY(!error.isEmpty());
     }

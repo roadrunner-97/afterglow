@@ -12,11 +12,10 @@
 
 namespace {
 
-QString unquote(const QString& token) {
-    if (token.size() < 2 || !token.startsWith('"') || !token.endsWith('"'))
-        return token;
+QString unquote(const QString &token) {
+    if (token.size() < 2 || !token.startsWith('"') || !token.endsWith('"')) return token;
     const QString inner = token.mid(1, token.size() - 2);
-    QString out;
+    QString       out;
     out.reserve(inner.size());
     for (int i = 0; i < inner.size(); ++i) {
         const QChar c = inner[i];
@@ -26,33 +25,45 @@ QString unquote(const QString& token) {
         }
         const QChar n = inner[++i];
         switch (n.unicode()) {
-            case '"':  out.append('"');  break;
-            case '\\': out.append('\\'); break;
-            case 'n':  out.append('\n'); break;
-            case 'r':  out.append('\r'); break;
-            case 't':  out.append('\t'); break;
-            case 'x': {
-                if (i + 2 < inner.size()) {
-                    bool ok = false;
-                    const int code = inner.mid(i + 1, 2).toInt(&ok, 16);
-                    if (ok) {
-                        out.append(QChar(static_cast<char16_t>(code)));
-                        i += 2;
-                        break;
-                    }
+        case '"':
+            out.append('"');
+            break;
+        case '\\':
+            out.append('\\');
+            break;
+        case 'n':
+            out.append('\n');
+            break;
+        case 'r':
+            out.append('\r');
+            break;
+        case 't':
+            out.append('\t');
+            break;
+        case 'x': {
+            if (i + 2 < inner.size()) {
+                bool      ok   = false;
+                const int code = inner.mid(i + 1, 2).toInt(&ok, 16);
+                if (ok) {
+                    out.append(QChar(static_cast<char16_t>(code)));
+                    i += 2;
+                    break;
                 }
-                out.append(n);
-                break;
             }
-            default: out.append(n); break;
+            out.append(n);
+            break;
+        }
+        default:
+            out.append(n);
+            break;
         }
     }
     return out;
 }
 
-QVariant parseScalar(const QString& s) {
+QVariant parseScalar(const QString &s) {
     const QString t = s.trimmed();
-    if (t == QStringLiteral("true"))  return true;
+    if (t == QStringLiteral("true")) return true;
     if (t == QStringLiteral("false")) return false;
     if (t.startsWith('"')) return unquote(t);
 
@@ -60,8 +71,7 @@ QVariant parseScalar(const QString& s) {
     if (!t.contains('.') && !t.contains('e') && !t.contains('E')) {
         const long long ll = t.toLongLong(&ok);
         if (ok) {
-            if (ll >= INT_MIN && ll <= INT_MAX)
-                return static_cast<int>(ll);
+            if (ll >= INT_MIN && ll <= INT_MAX) return static_cast<int>(ll);
             return ll;
         }
     }
@@ -70,13 +80,14 @@ QVariant parseScalar(const QString& s) {
     return t; // unrecognised — keep as raw string
 }
 
-int leadingSpaces(const QString& line) {
+int leadingSpaces(const QString &line) {
     int i = 0;
-    while (i < line.size() && line[i] == ' ') ++i;
+    while (i < line.size() && line[i] == ' ')
+        ++i;
     return i;
 }
 
-bool splitKeyValue(const QString& s, QString* k, QString* v) {
+bool splitKeyValue(const QString &s, QString *k, QString *v) {
     const int colon = s.indexOf(':');
     if (colon < 0) return false;
     *k = s.left(colon).trimmed();
@@ -88,19 +99,20 @@ bool splitKeyValue(const QString& s, QString* k, QString* v) {
 
 namespace SettingsImporter {
 
-bool fromYaml(const QString& yaml, Settings* out, QString* error) {
+bool fromYaml(const QString &yaml, Settings *out, QString *error) {
     out->image.clear();
     out->effects.clear();
     if (error) error->clear();
 
-    EffectSettings* current = nullptr;
-    const QStringList lines = yaml.split('\n');
+    EffectSettings   *current = nullptr;
+    const QStringList lines   = yaml.split('\n');
 
     int lineNo = 0;
-    for (const QString& raw : lines) {
+    for (const QString &raw : lines) {
         ++lineNo;
         QString line = raw;
-        while (!line.isEmpty() && line.back().isSpace()) line.chop(1);
+        while (!line.isEmpty() && line.back().isSpace())
+            line.chop(1);
         if (line.isEmpty()) continue;
 
         // Tabs in leading whitespace silently confused the indent-based
@@ -108,21 +120,21 @@ bool fromYaml(const QString& yaml, Settings* out, QString* error) {
         // Reject up front with a concrete diagnostic.
         for (QChar c : line) {
             if (c == '\t') {
-                if (error) *error = QString("line %1: tabs are not allowed in leading whitespace; use spaces").arg(lineNo);
+                if (error)
+                    *error = QString("line %1: tabs are not allowed in leading whitespace; use spaces").arg(lineNo);
                 return false;
             }
             if (c != ' ') break;
         }
 
-        const int indent = leadingSpaces(line);
-        const QString rest = line.mid(indent);
+        const int     indent = leadingSpaces(line);
+        const QString rest   = line.mid(indent);
         if (rest.startsWith('#')) continue;
 
         QString k, v;
         if (indent == 0) {
             if (!splitKeyValue(rest, &k, &v)) continue;
-            if (k == QStringLiteral("image"))
-                out->image = parseScalar(v).toString();
+            if (k == QStringLiteral("image")) out->image = parseScalar(v).toString();
             // "effects:" header is implicit — its children appear at indent 2+
         } else if (indent == 2) {
             if (!rest.startsWith(QStringLiteral("- "))) continue;
@@ -155,7 +167,7 @@ bool fromYaml(const QString& yaml, Settings* out, QString* error) {
     return true;
 }
 
-bool readYaml(const QString& path, Settings* out, QString* error) {
+bool readYaml(const QString &path, Settings *out, QString *error) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         if (error) *error = f.errorString();
@@ -165,8 +177,8 @@ bool readYaml(const QString& path, Settings* out, QString* error) {
     return fromYaml(yaml, out, error);
 }
 
-void applyToManager(const Settings& s, EffectManager& mgr) {
-    const auto& entries = mgr.entries();
+void applyToManager(const Settings &s, EffectManager &mgr) {
+    const auto &entries = mgr.entries();
 
     // Two parallel hashes: prefer matching by stable id, fall back to
     // display name for older sidecars saved before the id migration.
@@ -184,7 +196,7 @@ void applyToManager(const Settings& s, EffectManager& mgr) {
     // pass.  Without this, every applyParameters() call would queue a full
     // pipeline reprocess; the caller is expected to fire one definitive
     // reprocess after this returns.
-    for (const auto& want : s.effects) {
+    for (const auto &want : s.effects) {
         int i = -1;
         if (!want.id.isEmpty()) {
             const auto it = indexById.constFind(want.id);
@@ -195,7 +207,7 @@ void applyToManager(const Settings& s, EffectManager& mgr) {
             if (it != indexByName.constEnd()) i = it.value();
         }
         if (i < 0) continue;
-        PhotoEditorEffect* effect = entries[i].effect;
+        PhotoEditorEffect *effect = entries[i].effect;
         mgr.setEnabled(i, want.enabled);
         QSignalBlocker block(effect);
         effect->applyParameters(want.parameters);

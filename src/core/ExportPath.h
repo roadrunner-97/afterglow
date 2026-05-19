@@ -13,9 +13,7 @@ namespace ExportPath {
 //   {n}    → batchIndex zero-padded to 3 digits (1 → "001")
 //   {date} → today as ISO yyyy-MM-dd
 // `today` is injected so tests are deterministic; defaults to the current date.
-QString resolvePattern(const QString& pattern,
-                       const QString& sourcePath,
-                       int batchIndex,
+QString resolvePattern(const QString &pattern, const QString &sourcePath, int batchIndex,
                        QDate today = QDate::currentDate());
 
 // Builds the final destination path: destinationDir / resolvePattern(...) +
@@ -26,10 +24,8 @@ QString resolvePattern(const QString& pattern,
 //
 // `exists` is the existence predicate; defaults to QFile::exists.  Tests
 // inject a stub so they don't touch the real filesystem.
-QString chooseDestination(const ExportOptions::Options& opts,
-                          const QString& sourcePath,
-                          int batchIndex,
-                          std::function<bool(const QString&)> exists = {});
+QString chooseDestination(const ExportOptions::Options &opts, const QString &sourcePath, int batchIndex,
+                          std::function<bool(const QString &)> exists = {});
 
 } // namespace ExportPath
 
