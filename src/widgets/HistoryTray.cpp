@@ -39,7 +39,7 @@ HistoryTray::HistoryTray(QWidget* parent)
     m_list->setMaximumHeight(200);
     outerLayout->addWidget(m_list);
 
-    setFixedWidth(fontMetrics().averageCharWidth() * 22);
+    setFixedWidth(fontMetrics().averageCharWidth() * 26);
 
     connect(m_collapseBtn, &QToolButton::clicked, this, &HistoryTray::toggleCollapsed);
     connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {

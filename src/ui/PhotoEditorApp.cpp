@@ -65,7 +65,7 @@ QString entryLabel(const UndoHistory::Entry& e, const QString& effectName)
             const auto it = e.params.cbegin();
             const QString f = it.value().from.isValid() ? it.value().from.toString() : "set";
             const QString t = it.value().to.isValid()   ? it.value().to.toString()   : "removed";
-            paramPart = it.key() + " " + f + " → " + t;
+            paramPart = f + " → " + t;
         } else {
             paramPart = "(" + QString::number(e.params.size()) + " changes)";
         }
