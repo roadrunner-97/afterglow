@@ -262,22 +262,29 @@ void PhotoEditorApp::setupUI() {
     connect(m_viewport, &ViewportWidget::viewportResized,
             this, &PhotoEditorApp::repositionHistoryTray);
     connect(m_historyTray, &HistoryTray::rowActivated, this, [this](int index) {
-        const int target = index;   // 0 = Original (cursor 0), k = cursor k
-        m_history->setApplying(true);
-        while (m_history->cursor() > target) {
-            if (auto e = m_history->undo())
-                applyHistoryEntry(*e, /*applyFrom=*/true);
-            else break;
-        }
-        while (m_history->cursor() < target) {
-            if (auto e = m_history->redo())
-                applyHistoryEntry(*e, /*applyFrom=*/false);
-            else break;
-        }
-        m_history->setApplying(false);
-        syncViewportRotation();
-        triggerReprocess();
-        writeSidecar();
+        // Defer the jump to the next event-loop iteration.  itemClicked fires
+        // inside QListWidget's mouseReleaseEvent; if we call m_list->clear()
+        // (via refreshHistoryTray) synchronously, QListWidget never finishes
+        // its release path and its implicit mouse grab stays active — breaking
+        // subsequent viewport panning.
+        QTimer::singleShot(0, this, [this, index]() {
+            const int target = index;
+            m_history->setApplying(true);
+            while (m_history->cursor() > target) {
+                if (auto e = m_history->undo())
+                    applyHistoryEntry(*e, /*applyFrom=*/true);
+                else break;
+            }
+            while (m_history->cursor() < target) {
+                if (auto e = m_history->redo())
+                    applyHistoryEntry(*e, /*applyFrom=*/false);
+                else break;
+            }
+            m_history->setApplying(false);
+            syncViewportRotation();
+            triggerReprocess();
+            writeSidecar();
+        });
     });
 
     QWidget* rightPanel = new QWidget();
