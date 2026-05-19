@@ -1573,6 +1573,121 @@ private slots:
                  qPrintable(QString("EdgeH aspect drifted: %1 vs %2").arg(newAspect).arg(startAspect)));
     }
 
+    // Helper: make a portrait crop (0,0,0.2,0.6), lock aspect, return startAspect.
+    // Portrait crop (0,0,0.5,0.8): 50px wide so top/bottom midpoints are 25px
+    // from corners, well beyond HIT_RADIUS=10 so the edge handle is always detected.
+    static double makePortraitLocked(CropRotateEffect &e, ViewportTransform &vt) {
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {50.0, 80.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {50.0, 80.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+        e.mouseRelease(&r, vt);
+        const QRectF base = e.userCropRect();
+        e.setLockAspect(true);
+        return (base.width() * 100.0) / (base.height() * 100.0);
+    }
+
+    // Landscape crop (0,0,0.8,0.5): 50px tall so left/right midpoints are 25px
+    // from corners, well beyond HIT_RADIUS=10 so the edge handle is always detected.
+    static double makeLandscapeLocked(CropRotateEffect &e, ViewportTransform &vt) {
+        auto p = makeMouseEvent(QEvent::MouseButtonPress, {100.0, 100.0});
+        auto m = makeMouseEvent(QEvent::MouseMove, {80.0, 50.0});
+        auto r = makeMouseEvent(QEvent::MouseButtonRelease, {80.0, 50.0});
+        e.mousePress(&p, vt);
+        e.mouseMove(&m, vt);
+        e.mouseRelease(&r, vt);
+        const QRectF base = e.userCropRect();
+        e.setLockAspect(true);
+        return (base.width() * 100.0) / (base.height() * 100.0);
+    }
+
+    // EdgeH top-edge drag on portrait crop hits the wn<MIN_CROP_SIZE guard.
+    // Crop (0,0,0.5,0.8): aspectN=0.625. Top midpoint at (25,0). Drag down 77px
+    // → hn clamped to 0.05, wn=0.05*0.625=0.03125 < MIN_CROP_SIZE → guard fires.
+    void lockAspect_edgeHTop_minSize_clampsCorrectly() {
+        CropRotateEffect  e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        const double      startAspect = makePortraitLocked(e, vt);
+        const QPointF     tm(25.0, 0.0);
+        auto              p2 = makeMouseEvent(QEvent::MouseButtonPress, tm);
+        auto              m2 = makeMouseEvent(QEvent::MouseMove, tm + QPointF(0, 77));
+        auto              r2 = makeMouseEvent(QEvent::MouseButtonRelease, tm + QPointF(0, 77));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("EdgeH-top minSize aspect: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // EdgeH bottom-edge drag on portrait crop hits the wn<MIN_CROP_SIZE guard.
+    // Bottom midpoint at (25,80). Drag up 77px → hn clamped to 0.05 → guard fires.
+    void lockAspect_edgeHBottom_minSize_clampsCorrectly() {
+        CropRotateEffect  e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        const double      startAspect = makePortraitLocked(e, vt);
+        const QPointF     bm(25.0, 80.0);
+        auto              p2 = makeMouseEvent(QEvent::MouseButtonPress, bm);
+        auto              m2 = makeMouseEvent(QEvent::MouseMove, bm - QPointF(0, 77));
+        auto              r2 = makeMouseEvent(QEvent::MouseButtonRelease, bm - QPointF(0, 77));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("EdgeH-bot minSize aspect: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // EdgeV right-edge drag on landscape crop hits the hn<MIN_CROP_SIZE guard.
+    // Crop (0,0,0.8,0.5): aspectN=1.6. Right midpoint at (80,25). Drag left 77px
+    // → wn clamped to 0.05, hn=0.05/1.6=0.03125 < MIN_CROP_SIZE → guard fires.
+    void lockAspect_edgeVRight_minSize_clampsCorrectly() {
+        CropRotateEffect  e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        const double      startAspect = makeLandscapeLocked(e, vt);
+        const QPointF     rm(80.0, 25.0);
+        auto              p2 = makeMouseEvent(QEvent::MouseButtonPress, rm);
+        auto              m2 = makeMouseEvent(QEvent::MouseMove, rm - QPointF(77, 0));
+        auto              r2 = makeMouseEvent(QEvent::MouseButtonRelease, rm - QPointF(77, 0));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("EdgeV-right minSize aspect: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
+    // EdgeV left-edge drag on landscape crop hits the hn<MIN_CROP_SIZE guard.
+    // Left midpoint at (0,25). Drag right 77px → wn clamped to 0.05 → guard fires.
+    void lockAspect_edgeVLeft_minSize_clampsCorrectly() {
+        CropRotateEffect  e;
+        e.setSourceImageSize({100, 100});
+        e.createControlsWidget();
+        ViewportTransform vt          = makeVT();
+        const double      startAspect = makeLandscapeLocked(e, vt);
+        const QPointF     lm(0.0, 25.0);
+        auto              p2 = makeMouseEvent(QEvent::MouseButtonPress, lm);
+        auto              m2 = makeMouseEvent(QEvent::MouseMove, lm + QPointF(77, 0));
+        auto              r2 = makeMouseEvent(QEvent::MouseButtonRelease, lm + QPointF(77, 0));
+        e.mousePress(&p2, vt);
+        e.mouseMove(&m2, vt);
+        e.mouseRelease(&r2, vt);
+        const QRectF after     = e.userCropRect();
+        const double newAspect = (after.width() * 100.0) / (after.height() * 100.0);
+        QVERIFY2(std::abs(newAspect - startAspect) < 1e-3,
+                 qPrintable(QString("EdgeV-left minSize aspect: %1 vs %2").arg(newAspect).arg(startAspect)));
+    }
+
     // Reset Crop clears the aspect lock as part of restoring defaults.
     void lockAspect_resetCrop_clearsLock() {
         CropRotateEffect e;

@@ -43,7 +43,7 @@ public:
         while (id.contains(QStringLiteral("__"))) id.replace(QStringLiteral("__"), QStringLiteral("_"));
         if (id.endsWith('_')) id.chop(1);
         return id;
-    }
+    } // GCOVR_EXCL_LINE — compiler emits no code here; return above handles stack cleanup
 
     virtual QWidget *createControlsWidget() {
         return nullptr;

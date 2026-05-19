@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QListWidget>
 #include <QTest>
+#include <QToolButton>
 #include "HistoryTray.h"
 
 static QVector<HistoryTray::Row> makeRows(const QStringList &labels) {
@@ -12,6 +13,10 @@ static QVector<HistoryTray::Row> makeRows(const QStringList &labels) {
 // Find the QListWidget inside the tray
 static QListWidget *listOf(HistoryTray *t) {
     return t->findChild<QListWidget *>();
+}
+
+static QToolButton *collapseBtn(HistoryTray *t) {
+    return t->findChild<QToolButton *>();
 }
 
 class TestHistoryTray : public QObject {
@@ -83,6 +88,18 @@ private slots:
         // Simulate click on third entry (index 3)
         emit list->itemClicked(list->item(3));
         QCOMPARE(lastActivated, 3);
+    }
+
+    void toggleCollapsed_hidesAndShowsList() {
+        HistoryTray  tray;
+        tray.setHistory(makeRows({"A", "B"}), 2);
+        QListWidget  *list = listOf(&tray);
+        QToolButton  *btn  = collapseBtn(&tray);
+        QVERIFY(list->isVisibleTo(&tray));
+        emit btn->clicked();
+        QVERIFY(!list->isVisibleTo(&tray));
+        emit btn->clicked();
+        QVERIFY(list->isVisibleTo(&tray));
     }
 
     void rebuildPreservesCorrectCount() {

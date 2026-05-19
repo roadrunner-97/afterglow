@@ -69,9 +69,9 @@ void HistoryTray::setHistory(const QVector<Row> &rows, int cursor) {
     }
 }
 
-void HistoryTray::toggleCollapsed() { // GCOVR_EXCL_START
+void HistoryTray::toggleCollapsed() {
     m_collapsed = !m_collapsed;
     m_list->setVisible(!m_collapsed);
     m_collapseBtn->setText(m_collapsed ? u8"▼" : u8"▲"); // ▼ / ▲
     adjustSize();
-} // GCOVR_EXCL_STOP
+}

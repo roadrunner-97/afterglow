@@ -71,9 +71,9 @@ void GpuDeviceRegistry::enumerate() {
                 GpuDeviceInfo info;
                 try {
                     info.name = QString::fromStdString(d.getInfo<CL_DEVICE_NAME>()).trimmed();
-                } catch (...) { // GCOVR_EXCL_START
-                    info.name = "Unknown Device";
-                } // GCOVR_EXCL_STOP
+                } catch (...) { // GCOVR_EXCL_LINE
+                    info.name = "Unknown Device"; // GCOVR_EXCL_LINE
+                } // GCOVR_EXCL_LINE
                 info.platformName = QString::fromStdString(pname).trimmed();
                 info.typeName     = deviceTypeName(t);
                 entries.push_back({info, deviceTypeRank(t)});
@@ -120,9 +120,9 @@ static std::vector<std::pair<cl::Platform, cl::Device>> enumerateAllOCLDevices()
     std::vector<cl::Platform>                        platforms;
     try {
         cl::Platform::get(&platforms);
-    } catch (...) { // GCOVR_EXCL_START
-        return result;
-    } // GCOVR_EXCL_STOP
+    } catch (...) { // GCOVR_EXCL_LINE
+        return result; // GCOVR_EXCL_LINE
+    } // GCOVR_EXCL_LINE
 
     struct Entry {
         cl::Platform p;

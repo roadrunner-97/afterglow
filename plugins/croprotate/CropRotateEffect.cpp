@@ -695,7 +695,7 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
             x0 += dnx;
             y1 += dny;
             break;
-        default:
+        default: // GCOVR_EXCL_LINE
             break; // GCOVR_EXCL_LINE
         }
         const bool lockOk = m_lockAspect && m_imageSize.width() > 0 && m_imageSize.height() > 0;
@@ -735,7 +735,7 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
                 x0 = x1 - wn;
                 y1 = y0 + hn;
                 break;
-            default:
+            default: // GCOVR_EXCL_LINE
                 break; // GCOVR_EXCL_LINE
             }
         } else {
