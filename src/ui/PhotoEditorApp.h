@@ -14,6 +14,7 @@
 #include "ProofCache.h"
 #include "Proofer.h"
 #include "SettingsImporter.h"
+#include "UndoHistory.h"
 #include "ViewportWidget.h"
 
 class QVBoxLayout;
@@ -64,6 +65,10 @@ private:
     void setupMenuBar();
     void setupGpuSelector(QVBoxLayout* rightLayout);
     void setupEffectPanels(QVBoxLayout* rightLayout);
+    QVector<SettingsImporter::EffectSettings> currentSnapshot() const;
+    QString historySidecarPathFor(const QString& imagePath) const;
+    void flushHistorySidecar();
+    void applyHistoryEntry(const UndoHistory::Entry& e, bool applyFrom);
     void triggerReprocess();        // Commit: rebuild full-res post-effect cache
     void triggerLiveReprocess();    // LiveDrag: preview-sized pipeline, bypasses cache
     void triggerViewportUpdate();   // PanZoom: throttled entry; coalesces mouseMove bursts
@@ -88,6 +93,11 @@ private:
     QString sidecarPathFor(const QString& imagePath) const;
     void writeSidecar();
     void snapshotDefaults();
+
+    UndoHistory*    m_history          = nullptr;
+    QAction*        m_undoAct          = nullptr;
+    QAction*        m_redoAct          = nullptr;
+    QVector<QAction*> m_effectMenuActions;
 
     EffectManager*  m_effects;
     ImageProcessor* m_processor;

@@ -1,5 +1,6 @@
 #include "PhotoEditorApp.h"
 #include "ExportDialog.h"
+#include "HistorySerializer.h"
 #include "ExportPath.h"
 #include "ExportResize.h"
 #include "LoupeView.h"
@@ -64,6 +65,7 @@ PhotoEditorApp::PhotoEditorApp(EffectManager* effectManager, QWidget* parent)
     , m_processor(new ImageProcessor(this))
     , m_resizeDebounce(new QTimer(this))
 {
+    m_history = new UndoHistory(200, this);
     connect(m_processor, &ImageProcessor::processingComplete,
             this, &PhotoEditorApp::onProcessingComplete);
     connect(m_processor, &ImageProcessor::processingStarted,
@@ -278,19 +280,55 @@ void PhotoEditorApp::setupMenuBar() {
     exitAct->setShortcut(QKeySequence("Ctrl+Q"));
     connect(exitAct, &QAction::triggered, this, &QWidget::close);
 
+    // Edit → Undo / Redo
+    QMenu* editMenu = menuBar()->addMenu("Edit");
+
+    m_undoAct = editMenu->addAction("Undo");
+    m_undoAct->setShortcut(QKeySequence::Undo);
+    m_undoAct->setEnabled(false);
+    connect(m_undoAct, &QAction::triggered, this, [this]() {
+        m_history->setApplying(true);
+        if (auto entry = m_history->undo()) {
+            applyHistoryEntry(*entry, /*applyFrom=*/true);
+            syncViewportRotation();
+            triggerReprocess();
+            writeSidecar();
+        }
+        m_history->setApplying(false);
+    });
+    connect(m_history, &UndoHistory::canUndoChanged, m_undoAct, &QAction::setEnabled);
+
+    m_redoAct = editMenu->addAction("Redo");
+    m_redoAct->setShortcuts({QKeySequence::Redo, QKeySequence("Ctrl+Y")});
+    m_redoAct->setEnabled(false);
+    connect(m_redoAct, &QAction::triggered, this, [this]() {
+        m_history->setApplying(true);
+        if (auto entry = m_history->redo()) {
+            applyHistoryEntry(*entry, /*applyFrom=*/false);
+            syncViewportRotation();
+            triggerReprocess();
+            writeSidecar();
+        }
+        m_history->setApplying(false);
+    });
+    connect(m_history, &UndoHistory::canRedoChanged, m_redoAct, &QAction::setEnabled);
+
     // View → Effects — enable/disable individual effects
     QMenu* viewMenu = menuBar()->addMenu("View");
     QMenu* effectsMenu = viewMenu->addMenu("Effects");
 
     const auto& entries = m_effects->entries();
+    m_effectMenuActions.clear();
     for (int i = 0; i < entries.size(); ++i) {
         QAction* act = effectsMenu->addAction(entries[i].effect->getName());
         act->setCheckable(true);
         act->setChecked(entries[i].enabled);
+        m_effectMenuActions.append(act);
         connect(act, &QAction::toggled, this, [this, i](bool on) {
             m_effects->setEnabled(i, on);
             triggerReprocess();
             writeSidecar();
+            m_history->recordFromCurrent(currentSnapshot());
         });
     }
 
@@ -438,6 +476,9 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
         return;
     }
 
+    // Flush history for the outgoing image before we replace m_developedPath.
+    flushHistorySidecar();
+
     m_originalImage = img;
     m_currentImagePath = path;
     m_developedPath = path;
@@ -470,6 +511,22 @@ void PhotoEditorApp::loadFullImage(const QString& path) {
             qWarning() << "Sidecar parse failed for" << sidecar << ":" << error;
     } else {
         writeSidecar();
+    }
+
+    // Load or seed undo history for the new image.
+    const QString histPath = historySidecarPathFor(path);
+    if (QFile::exists(histPath)) {
+        HistorySerializer::HistoryData hdata;
+        QString hErr;
+        if (HistorySerializer::readYaml(histPath, &hdata, &hErr))
+            m_history->load(std::move(hdata.entries), hdata.cursor,
+                            std::move(hdata.shadow));
+        else {
+            qWarning() << "History parse failed for" << histPath << ":" << hErr;
+            m_history->seed(currentSnapshot());
+        }
+    } else {
+        m_history->seed(currentSnapshot());
     }
 
     syncViewportRotation();
@@ -686,6 +743,7 @@ void PhotoEditorApp::onParametersChanged() {
     syncViewportRotation();
     triggerReprocess();
     writeSidecar();
+    m_history->recordFromCurrent(currentSnapshot());
 }
 
 void PhotoEditorApp::onLiveParametersChanged() {
@@ -820,12 +878,16 @@ void PhotoEditorApp::closeEvent(QCloseEvent* event) {
     QSettings settings("Afterglow", "Afterglow");
     settings.setValue("geometry", saveGeometry());
     settings.setValue("lastDir",  m_lastDir);
+    flushHistorySidecar();
     QMainWindow::closeEvent(event);
 }
 
 // ─── Gallery / Loupe / Develop mode switching ───────────────────────────────
 
 void PhotoEditorApp::setMode(Mode m) {
+    if (m_stack->currentIndex() == static_cast<int>(Mode::Develop)
+            && m != Mode::Develop)
+        flushHistorySidecar();
     m_stack->setCurrentIndex(static_cast<int>(m));
     for (QAction* a : m_modeGroup->actions()) {
         if (a->data().toInt() == static_cast<int>(m)) {
@@ -1018,6 +1080,70 @@ void PhotoEditorApp::onMarkChanged(const QString& path, GridView::Mark mark) {
 QString PhotoEditorApp::sidecarPathFor(const QString& imagePath) const {
     const QFileInfo fi(imagePath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
+}
+
+QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() const {
+    const auto& entries = m_effects->entries();
+    QVector<SettingsImporter::EffectSettings> snap;
+    snap.reserve(entries.size());
+    for (const auto& e : entries) {
+        if (!e.effect) continue;
+        SettingsImporter::EffectSettings es;
+        es.id         = e.effect->getId();
+        es.name       = e.effect->getName();
+        es.enabled    = e.enabled;
+        es.parameters = e.effect->getParameters();
+        snap.append(es);
+    }
+    return snap;
+}
+
+QString PhotoEditorApp::historySidecarPathFor(const QString& imagePath) const {
+    const QFileInfo fi(imagePath);
+    return fi.absoluteDir().filePath(fi.completeBaseName() + ".history.yml");
+}
+
+void PhotoEditorApp::flushHistorySidecar() {
+    if (m_developedPath.isEmpty() || m_history->entries().isEmpty()) return;
+    const QString path = historySidecarPathFor(m_developedPath);
+    QString error;
+    if (!HistorySerializer::writeYaml(path,
+            m_history->entries(), m_history->cursor(),
+            currentSnapshot(), &error))
+        qWarning() << "History sidecar write failed for" << path << ":" << error;
+}
+
+void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry& e, bool applyFrom) {
+    const auto& entries = m_effects->entries();
+    for (int i = 0; i < entries.size(); ++i) {
+        if (!entries[i].effect || entries[i].effect->getId() != e.effectId)
+            continue;
+
+        PhotoEditorEffect* effect = entries[i].effect;
+
+        if (e.enabled) {
+            const bool val = applyFrom ? e.enabled->first : e.enabled->second;
+            m_effects->setEnabled(i, val);
+            if (i < m_effectMenuActions.size()) {
+                QSignalBlocker block(m_effectMenuActions[i]);
+                m_effectMenuActions[i]->setChecked(val);
+            }
+        }
+
+        if (!e.params.isEmpty()) {
+            auto params = effect->getParameters();
+            for (auto pit = e.params.cbegin(); pit != e.params.cend(); ++pit) {
+                const QVariant& val = applyFrom ? pit.value().from : pit.value().to;
+                if (val.isValid())
+                    params.insert(pit.key(), val);
+                else
+                    params.remove(pit.key());
+            }
+            QSignalBlocker block(effect);
+            effect->applyParameters(params);
+        }
+        break;
+    }
 }
 
 void PhotoEditorApp::snapshotDefaults() {

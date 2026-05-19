@@ -115,6 +115,10 @@ add_library(photoeditor_core STATIC
     src/core/ExportPath.h
     src/core/ExportResize.cpp
     src/core/ExportResize.h
+    src/core/UndoHistory.cpp
+    src/core/UndoHistory.h
+    src/core/HistorySerializer.cpp
+    src/core/HistorySerializer.h
 )
 
 target_link_libraries(photoeditor_core

@@ -241,6 +241,40 @@ set_tests_properties(LogarithmParamSlider PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
+# UndoHistory tests — pure CPU, no GPU/display required (GUILESS)
+# ---------------------------------------------------------------------------
+add_executable(test_undo_history
+    core/test_undo_history.cpp
+)
+target_link_libraries(test_undo_history
+    PRIVATE
+        photoeditor_core
+        Qt6::Test Qt6::Core Qt6::Gui
+)
+set_target_properties(test_undo_history PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME UndoHistory COMMAND test_undo_history)
+
+# ---------------------------------------------------------------------------
+# HistorySerializer tests — pure CPU, no GPU/display required (GUILESS)
+# ---------------------------------------------------------------------------
+add_executable(test_history_serializer
+    core/test_history_serializer.cpp
+)
+target_link_libraries(test_history_serializer
+    PRIVATE
+        photoeditor_core
+        Qt6::Test Qt6::Core Qt6::Gui
+)
+set_target_properties(test_history_serializer PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME HistorySerializer COMMAND test_history_serializer)
+
+# ---------------------------------------------------------------------------
 # Effect integration tests — GPU (OpenCL) required; skip gracefully if absent
 # ---------------------------------------------------------------------------
 add_subdirectory(effects)
