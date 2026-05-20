@@ -3,7 +3,7 @@
 # Build (ccache + ninja), run tests, and verify line coverage meets threshold.
 #
 # Skip entirely by creating:    .git/check-coverage-skip
-# Threshold override:           COVERAGE_MIN_LINES env var (default 99.0).
+# Threshold override:           COVERAGE_MIN_LINES env var (default 100.0).
 
 set -euo pipefail
 
@@ -17,7 +17,7 @@ if [[ -f "$PROJECT_DIR/.git/check-coverage-skip" ]]; then
 fi
 
 BUILD_DIR="build-coverage"
-THRESHOLD="${COVERAGE_MIN_LINES:-99.0}"
+THRESHOLD="${COVERAGE_MIN_LINES:-100.0}"
 
 echo "=== check-coverage: configure ==="
 cmake -B "$BUILD_DIR" \
