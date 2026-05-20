@@ -91,10 +91,10 @@ private slots:
     }
 
     void toggleCollapsed_hidesAndShowsList() {
-        HistoryTray  tray;
+        HistoryTray tray;
         tray.setHistory(makeRows({"A", "B"}), 2);
-        QListWidget  *list = listOf(&tray);
-        QToolButton  *btn  = collapseBtn(&tray);
+        QListWidget *list = listOf(&tray);
+        QToolButton *btn  = collapseBtn(&tray);
         QVERIFY(list->isVisibleTo(&tray));
         emit btn->clicked();
         QVERIFY(!list->isVisibleTo(&tray));

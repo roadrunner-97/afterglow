@@ -1478,8 +1478,8 @@ private slots:
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
-        ViewportTransform vt          = makeVT();
-        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        ViewportTransform vt     = makeVT();
+        auto [base, startAspect] = shrinkAndLock(e, vt);
         const QPointF tl(base.left() * 100.0, base.top() * 100.0);
         auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, tl);
         auto          m2 = makeMouseEvent(QEvent::MouseMove, tl + QPointF(20, 10));
@@ -1498,8 +1498,8 @@ private slots:
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
-        ViewportTransform vt          = makeVT();
-        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        ViewportTransform vt     = makeVT();
+        auto [base, startAspect] = shrinkAndLock(e, vt);
         const QPointF tr(base.right() * 100.0, base.top() * 100.0);
         auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, tr);
         auto          m2 = makeMouseEvent(QEvent::MouseMove, tr + QPointF(-20, 10));
@@ -1518,8 +1518,8 @@ private slots:
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
-        ViewportTransform vt          = makeVT();
-        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        ViewportTransform vt     = makeVT();
+        auto [base, startAspect] = shrinkAndLock(e, vt);
         const QPointF bl(base.left() * 100.0, base.bottom() * 100.0);
         auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, bl);
         auto          m2 = makeMouseEvent(QEvent::MouseMove, bl + QPointF(10, -20));
@@ -1538,8 +1538,8 @@ private slots:
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
-        ViewportTransform vt          = makeVT();
-        auto [base, startAspect]      = shrinkAndLock(e, vt);
+        ViewportTransform vt     = makeVT();
+        auto [base, startAspect] = shrinkAndLock(e, vt);
         const QPointF br(base.right() * 100.0, base.bottom() * 100.0);
         auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, br);
         auto          m2 = makeMouseEvent(QEvent::MouseMove, br - QPointF(2, 30));
@@ -1558,12 +1558,12 @@ private slots:
         CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
-        ViewportTransform vt          = makeVT();
-        auto [base, startAspect]      = shrinkAndLock(e, vt);
-        const QPointF    tm((base.left() + base.right()) * 50.0, base.top() * 100.0);
-        auto             p2 = makeMouseEvent(QEvent::MouseButtonPress, tm);
-        auto             m2 = makeMouseEvent(QEvent::MouseMove, tm + QPointF(0, 10));
-        auto             r2 = makeMouseEvent(QEvent::MouseButtonRelease, tm + QPointF(0, 10));
+        ViewportTransform vt     = makeVT();
+        auto [base, startAspect] = shrinkAndLock(e, vt);
+        const QPointF tm((base.left() + base.right()) * 50.0, base.top() * 100.0);
+        auto          p2 = makeMouseEvent(QEvent::MouseButtonPress, tm);
+        auto          m2 = makeMouseEvent(QEvent::MouseMove, tm + QPointF(0, 10));
+        auto          r2 = makeMouseEvent(QEvent::MouseButtonRelease, tm + QPointF(0, 10));
         e.mousePress(&p2, vt);
         e.mouseMove(&m2, vt);
         e.mouseRelease(&r2, vt);
@@ -1606,7 +1606,7 @@ private slots:
     // Crop (0,0,0.5,0.8): aspectN=0.625. Top midpoint at (25,0). Drag down 77px
     // → hn clamped to 0.05, wn=0.05*0.625=0.03125 < MIN_CROP_SIZE → guard fires.
     void lockAspect_edgeHTop_minSize_clampsCorrectly() {
-        CropRotateEffect  e;
+        CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
         ViewportTransform vt          = makeVT();
@@ -1627,7 +1627,7 @@ private slots:
     // EdgeH bottom-edge drag on portrait crop hits the wn<MIN_CROP_SIZE guard.
     // Bottom midpoint at (25,80). Drag up 77px → hn clamped to 0.05 → guard fires.
     void lockAspect_edgeHBottom_minSize_clampsCorrectly() {
-        CropRotateEffect  e;
+        CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
         ViewportTransform vt          = makeVT();
@@ -1649,7 +1649,7 @@ private slots:
     // Crop (0,0,0.8,0.5): aspectN=1.6. Right midpoint at (80,25). Drag left 77px
     // → wn clamped to 0.05, hn=0.05/1.6=0.03125 < MIN_CROP_SIZE → guard fires.
     void lockAspect_edgeVRight_minSize_clampsCorrectly() {
-        CropRotateEffect  e;
+        CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
         ViewportTransform vt          = makeVT();
@@ -1670,7 +1670,7 @@ private slots:
     // EdgeV left-edge drag on landscape crop hits the hn<MIN_CROP_SIZE guard.
     // Left midpoint at (0,25). Drag right 77px → wn clamped to 0.05 → guard fires.
     void lockAspect_edgeVLeft_minSize_clampsCorrectly() {
-        CropRotateEffect  e;
+        CropRotateEffect e;
         e.setSourceImageSize({100, 100});
         e.createControlsWidget();
         ViewportTransform vt          = makeVT();
