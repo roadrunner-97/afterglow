@@ -282,7 +282,13 @@ void PhotoEditorApp::setupUI() {
 
     m_metadataTray = new MetadataTray();
     leftLayout->addWidget(m_metadataTray);
-    leftLayout->addStretch();
+
+    auto *leftSep = new QFrame();
+    leftSep->setFrameShape(QFrame::HLine);
+    leftLayout->addWidget(leftSep);
+
+    m_historyTray = new HistoryTray();
+    leftLayout->addWidget(m_historyTray, 1);
 
     mainLayout->addWidget(leftPanel);
 
@@ -290,12 +296,7 @@ void PhotoEditorApp::setupUI() {
     connect(m_viewport, &ViewportWidget::viewportChanged, this, &PhotoEditorApp::triggerViewportUpdate);
     mainLayout->addWidget(m_viewport, 3);
 
-    // History tray — child of viewport so it overlays the GL surface
-    m_historyTray = new HistoryTray(m_viewport);
-    m_historyTray->hide();
-    m_historyTray->raise();
     connect(m_history, &UndoHistory::historyChanged, this, &PhotoEditorApp::refreshHistoryTray);
-    connect(m_viewport, &ViewportWidget::viewportResized, this, &PhotoEditorApp::repositionHistoryTray);
     connect(m_historyTray, &HistoryTray::rowActivated, this, [this](int index) {
         // Defer the jump to the next event-loop iteration.  itemClicked fires
         // inside QListWidget's mouseReleaseEvent; if we call m_list->clear()
@@ -609,9 +610,6 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     } else {
         m_history->seed(currentSnapshot());
     }
-
-    m_historyTray->show();
-    repositionHistoryTray();
 
     m_metadataTray->setInfo(buildMetadataInfo(path, img.size(), meta));
 
@@ -1152,17 +1150,8 @@ void PhotoEditorApp::refreshHistoryTray() {
         rows.append({entryLabel(e, effectName)});
     }
     m_historyTray->setHistory(rows, m_history->cursor());
-    repositionHistoryTray();
 }
 
-void PhotoEditorApp::repositionHistoryTray() {
-    if (!m_historyTray || !m_viewport) return;
-    constexpr int margin = 8;
-    const QSize   ts     = m_historyTray->sizeHint();
-    const int     x      = margin;
-    const int     y      = qMax(0, m_viewport->height() - ts.height() - margin);
-    m_historyTray->move(x, qBound(0, y, m_viewport->height() - 1));
-}
 
 QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() const {
     const auto                               &entries = m_effects->entries();

@@ -78,7 +78,6 @@ private:
     void syncViewportRotation();   // push the user's crop angle/centre to the viewport
 
     void refreshHistoryTray();
-    void repositionHistoryTray();
 
     void setMode(Mode m);
     // Backslash-held "before edits" preview: bypass the pipeline in Develop

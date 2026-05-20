@@ -53,7 +53,6 @@ public:
 
 signals:
     void viewportChanged();
-    void viewportResized();
 
 protected:
     void initializeGL() override;
