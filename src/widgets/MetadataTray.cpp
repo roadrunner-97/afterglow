@@ -30,7 +30,7 @@ MetadataTray::MetadataTray(QWidget *parent) : QWidget(parent) {
     fl->setLabelAlignment(Qt::AlignRight | Qt::AlignTop);
 
     auto addRow = [&](const QString &key, QLabel *&valSlot) {
-        auto *k = new QLabel(key);
+        auto *k  = new QLabel(key);
         QFont kf = k->font();
         kf.setPointSizeF(kf.pointSizeF() * 0.9);
         k->setFont(kf);

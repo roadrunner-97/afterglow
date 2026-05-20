@@ -76,15 +76,13 @@ static QString fmtIso(float iso) {
 
 static QString fmtCamera(const ImageMetadata &m) {
     if (m.cameraMake.isEmpty() && m.cameraModel.isEmpty()) return "\xe2\x80\x94";
-    if (!m.cameraMake.isEmpty() && m.cameraModel.startsWith(m.cameraMake, Qt::CaseInsensitive))
-        return m.cameraModel;
+    if (!m.cameraMake.isEmpty() && m.cameraModel.startsWith(m.cameraMake, Qt::CaseInsensitive)) return m.cameraModel;
     if (m.cameraMake.isEmpty()) return m.cameraModel;
     if (m.cameraModel.isEmpty()) return m.cameraMake;
     return m.cameraMake + " " + m.cameraModel;
 }
 
-static MetadataTray::Info buildMetadataInfo(const QString &path, const QSize &size,
-                                             const ImageMetadata &meta) {
+static MetadataTray::Info buildMetadataInfo(const QString &path, const QSize &size, const ImageMetadata &meta) {
     MetadataTray::Info info;
     info.filename   = QFileInfo(path).fileName();
     info.dimensions = QString("%1 \xc3\x97 %2").arg(size.width()).arg(size.height());
@@ -97,9 +95,8 @@ static MetadataTray::Info buildMetadataInfo(const QString &path, const QSize &si
     if (meta.aperture > 0.0f) exp << fmtAperture(meta.aperture);
     info.exposure = exp.isEmpty() ? QString("\xe2\x80\x94") : exp.join(" \xc2\xb7 ");
 
-    info.captured = meta.captureTime.isValid()
-                        ? QLocale::system().toString(meta.captureTime, QLocale::ShortFormat)
-                        : QString("\xe2\x80\x94");
+    info.captured = meta.captureTime.isValid() ? QLocale::system().toString(meta.captureTime, QLocale::ShortFormat)
+                                               : QString("\xe2\x80\x94");
     return info;
 }
 
