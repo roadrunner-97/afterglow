@@ -16,8 +16,8 @@ inline float linearToSrgb(float v) {
 static const std::array<float, 256> &srgb8ToLinearLut() {
     static const std::array<float, 256> lut = [] {
         std::array<float, 256> t{};
-        for (int i = 0; i < 256; ++i) {
-            float v = i / 255.0f;
+        for (std::size_t i = 0; i < 256; ++i) {
+            float v = static_cast<float>(i) / 255.0f;
             t[i]    = (v <= 0.04045f) ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
         }
         return t;
@@ -44,12 +44,12 @@ void fill8bit(const QImage &img, std::vector<uint32_t> &bins) {
         const auto *row = reinterpret_cast<const QRgb *>(img.constScanLine(y));
         for (int x = 0; x < w; ++x) {
             QRgb  px  = row[x];
-            float lin = kRLum * lut[qRed(px)] + kGLum * lut[qGreen(px)] + kBLum * lut[qBlue(px)];
+            float lin = kRLum * lut[static_cast<std::size_t>(qRed(px))] + kGLum * lut[static_cast<std::size_t>(qGreen(px))] + kBLum * lut[static_cast<std::size_t>(qBlue(px))];
             float L   = linearToSrgb(lin);
-            int   bin = int(L * 256.0f);
+            int   bin = static_cast<int>(L * 256.0f);
             if (bin < 0) bin = 0;
             else if (bin > 255) bin = 255;
-            ++bins[bin];
+            ++bins[static_cast<std::size_t>(bin)];
         }
     }
 }
@@ -63,10 +63,10 @@ void fill16bit(const QImage &img, std::vector<uint32_t> &bins) {
             const uint16_t *p = row + 4 * x; // RGBX64: 4 × uint16 per pixel
             float lin = kRLum * srgb16ToLinear(p[0]) + kGLum * srgb16ToLinear(p[1]) + kBLum * srgb16ToLinear(p[2]);
             float L   = linearToSrgb(lin);
-            int   bin = int(L * 256.0f);
+            int   bin = static_cast<int>(L * 256.0f);
             if (bin < 0) bin = 0;
             else if (bin > 255) bin = 255;
-            ++bins[bin];
+            ++bins[static_cast<std::size_t>(bin)];
         }
     }
 }

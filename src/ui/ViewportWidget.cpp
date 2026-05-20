@@ -261,8 +261,8 @@ void ViewportWidget::keyPressEvent(QKeyEvent *event) {
 
     // Ctrl+1: 100% (one image pixel per screen pixel)
     if (ctrl && key == Qt::Key_1) {
-        const float W = m_imageSize.width(), H = m_imageSize.height();
-        const float Vw = width(), Vh = height();
+        const float W = static_cast<float>(m_imageSize.width()), H = static_cast<float>(m_imageSize.height());
+        const float Vw = static_cast<float>(width()), Vh = static_cast<float>(height());
         const float fitScale = std::min(Vw / W, Vh / H);
         m_zoom               = std::clamp(1.0f / fitScale, 1.0f, 64.0f);
         m_center             = {0.5, 0.5};
@@ -311,23 +311,23 @@ void ViewportWidget::wheelEvent(QWheelEvent *event) {
     }
 
     const QPointF mousePos = event->position();
-    const float   Vw = width(), Vh = height();
-    const float   W = m_imageSize.width(), H = m_imageSize.height();
+    const float   Vw = static_cast<float>(width()), Vh = static_cast<float>(height());
+    const float   W = static_cast<float>(m_imageSize.width()), H = static_cast<float>(m_imageSize.height());
 
     float fitScale     = std::min(Vw / W, Vh / H);
     float displayScale = fitScale * m_zoom;
     float regionW = Vw / displayScale, regionH = Vh / displayScale;
-    float x0 = (float)m_center.x() * W - regionW * 0.5f;
-    float y0 = (float)m_center.y() * H - regionH * 0.5f;
+    float x0 = static_cast<float>(m_center.x()) * W - regionW * 0.5f;
+    float y0 = static_cast<float>(m_center.y()) * H - regionH * 0.5f;
 
-    float imgX = x0 + (mousePos.x() / Vw) * regionW;
-    float imgY = y0 + (mousePos.y() / Vh) * regionH;
+    float imgX = x0 + static_cast<float>(mousePos.x()) / Vw * regionW;
+    float imgY = y0 + static_cast<float>(mousePos.y()) / Vh * regionH;
 
     float newDisplayScale = fitScale * newZoom;
     float newRegionW = Vw / newDisplayScale, newRegionH = Vh / newDisplayScale;
 
-    float newX0 = imgX - (mousePos.x() / Vw) * newRegionW;
-    float newY0 = imgY - (mousePos.y() / Vh) * newRegionH;
+    float newX0 = imgX - static_cast<float>(mousePos.x()) / Vw * newRegionW;
+    float newY0 = imgY - static_cast<float>(mousePos.y()) / Vh * newRegionH;
 
     m_zoom = newZoom;
     m_center.setX((newX0 + newRegionW * 0.5f) / W);
@@ -391,13 +391,13 @@ void ViewportWidget::mouseMoveEvent(QMouseEvent *event) {
         return;
     }
 
-    const float W = m_imageSize.width(), H = m_imageSize.height();
-    const float Vw = width(), Vh = height();
+    const float W = static_cast<float>(m_imageSize.width()), H = static_cast<float>(m_imageSize.height());
+    const float Vw = static_cast<float>(width()), Vh = static_cast<float>(height());
     float       fitScale     = std::min(Vw / W, Vh / H);
     float       displayScale = fitScale * m_zoom;
 
-    m_center.rx() -= delta.x() / displayScale / W;
-    m_center.ry() -= delta.y() / displayScale / H;
+    m_center.rx() -= static_cast<float>(delta.x()) / displayScale / W;
+    m_center.ry() -= static_cast<float>(delta.y()) / displayScale / H;
     clampCenter();
 
     event->accept();
@@ -424,8 +424,8 @@ void ViewportWidget::mouseReleaseEvent(QMouseEvent *event) {
 void ViewportWidget::clampCenter() {
     if (m_imageSize.isEmpty() || width() == 0 || height() == 0) return;
 
-    const float W = m_imageSize.width(), H = m_imageSize.height();
-    const float Vw = width(), Vh = height();
+    const float W = static_cast<float>(m_imageSize.width()), H = static_cast<float>(m_imageSize.height());
+    const float Vw = static_cast<float>(width()), Vh = static_cast<float>(height());
     float       fitScale = std::min(Vw / W, Vh / H);
 
     float halfW = Vw / (2.0f * fitScale * m_zoom * W);
@@ -434,12 +434,12 @@ void ViewportWidget::clampCenter() {
     if (halfW >= 0.5f) {
         m_center.setX(0.5);
     } else {
-        m_center.setX(std::clamp(m_center.x(), (double)halfW, 1.0 - (double)halfW));
+        m_center.setX(std::clamp(m_center.x(), static_cast<double>(halfW), 1.0 - static_cast<double>(halfW)));
     }
 
     if (halfH >= 0.5f) {
         m_center.setY(0.5);
     } else {
-        m_center.setY(std::clamp(m_center.y(), (double)halfH, 1.0 - (double)halfH));
+        m_center.setY(std::clamp(m_center.y(), static_cast<double>(halfH), 1.0 - static_cast<double>(halfH)));
     }
 }

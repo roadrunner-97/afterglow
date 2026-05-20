@@ -104,7 +104,7 @@ void GpuDeviceRegistry::setDevice(int index) {
     m_currentIndex = index;
     m_revision.fetch_add(1, std::memory_order_relaxed);
     qDebug() << "[GpuRegistry] Switched to device" << index
-             << (index < static_cast<int>(m_devices.size()) ? m_devices[index].name : "?");
+             << (index < static_cast<int>(m_devices.size()) ? m_devices[static_cast<size_t>(index)].name : "?");
 }
 
 // ============================================================================
@@ -156,8 +156,8 @@ bool getSelectedDevice(cl::Device &outDevice, cl::Platform &outPlatform) {
     if (devs.empty()) return false;
     int idx = GpuDeviceRegistry::instance().currentIndex();
     if (idx < 0 || idx >= static_cast<int>(devs.size())) idx = 0;
-    outDevice   = devs[idx].second;
-    outPlatform = devs[idx].first;
+    outDevice   = devs[static_cast<size_t>(idx)].second;
+    outPlatform = devs[static_cast<size_t>(idx)].first;
     return true;
 }
 

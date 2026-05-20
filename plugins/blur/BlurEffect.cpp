@@ -46,7 +46,7 @@ bool BlurEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer
     int          radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
     const int         isGaussian = (params.value("blurType", 0).toInt() == 0) ? 1 : 0;
-    const cl::NDRange global(w, h);
+    const cl::NDRange global(static_cast<size_t>(w), static_cast<size_t>(h));
 
     // Horizontal: buf → aux
     m_kernelBlurHLinear.setArg(0, buf);

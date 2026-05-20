@@ -210,9 +210,9 @@ bool DenoiseEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buf
     int lumRadius    = std::max(1, static_cast<int>(lumRadiusSrc * invScale + 0.5));
     int chromaRadius = std::max(2, static_cast<int>(chromaRadiusSrc * invScale + 0.5));
 
-    const size_t      f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    const size_t      f4Bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_float4);
     cl::Buffer        tempBuf(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
-    const cl::NDRange global(w, h);
+    const cl::NDRange global(static_cast<size_t>(w), static_cast<size_t>(h));
 
     // Phase 1: luma denoising
     if (strength > 0.0f) {

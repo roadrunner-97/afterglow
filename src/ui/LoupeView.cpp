@@ -275,8 +275,8 @@ float LoupeView::currentScale() const {
     const QRect r = imageRect();
     if (r.width() <= 0 || r.height() <= 0) return 1.0f;
 
-    const float fitScaleX = static_cast<float>(r.width()) / m_image.width();
-    const float fitScaleY = static_cast<float>(r.height()) / m_image.height();
+    const float fitScaleX = static_cast<float>(r.width()) / static_cast<float>(m_image.width());
+    const float fitScaleY = static_cast<float>(r.height()) / static_cast<float>(m_image.height());
     const float fitScale  = std::min(fitScaleX, fitScaleY);
 
     return fitScale * m_zoom;
@@ -289,15 +289,15 @@ void LoupeView::clampCentre() {
 
     const QRect r            = imageRect();
     const float scale        = currentScale();
-    const float scaledWidth  = m_image.width() * scale;
-    const float scaledHeight = m_image.height() * scale;
+    const float scaledWidth  = static_cast<float>(m_image.width()) * scale;
+    const float scaledHeight = static_cast<float>(m_image.height()) * scale;
 
     // Compute the range of valid centres such that the scaled image stays
     // visible. If the scaled image is smaller than the image area, allow it
     // to be centred. Otherwise, clamp to prevent panning it entirely out.
-    const float maxCentreX = (scaledWidth >= r.width()) ? (1.0f - r.width() / (2.0f * scale * m_image.width())) : 0.5f;
+    const float maxCentreX = (scaledWidth >= static_cast<float>(r.width())) ? (1.0f - static_cast<float>(r.width()) / (2.0f * scale * static_cast<float>(m_image.width()))) : 0.5f;
     const float maxCentreY =
-        (scaledHeight >= r.height()) ? (1.0f - r.height() / (2.0f * scale * m_image.height())) : 0.5f;
+        (scaledHeight >= static_cast<float>(r.height())) ? (1.0f - static_cast<float>(r.height()) / (2.0f * scale * static_cast<float>(m_image.height()))) : 0.5f;
     const float minCentreX = 1.0f - maxCentreX;
     const float minCentreY = 1.0f - maxCentreY;
 
@@ -318,15 +318,15 @@ void LoupeView::paintEvent(QPaintEvent * /*event*/) {
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     const float scale        = currentScale();
-    const float scaledWidth  = m_image.width() * scale;
-    const float scaledHeight = m_image.height() * scale;
+    const float scaledWidth  = static_cast<float>(m_image.width()) * scale;
+    const float scaledHeight = static_cast<float>(m_image.height()) * scale;
 
     // Compute the top-left corner of the scaled image in widget space,
     // given the centre point in normalised image space.
-    const float centrePixelX  = m_centre.x() * m_image.width();
-    const float centrePixelY  = m_centre.y() * m_image.height();
-    const float centreWidgetX = r.width() / 2.0f;
-    const float centreWidgetY = r.height() / 2.0f;
+    const float centrePixelX  = static_cast<float>(m_centre.x()) * static_cast<float>(m_image.width());
+    const float centrePixelY  = static_cast<float>(m_centre.y()) * static_cast<float>(m_image.height());
+    const float centreWidgetX = static_cast<float>(r.width()) / 2.0f;
+    const float centreWidgetY = static_cast<float>(r.height()) / 2.0f;
 
     const float targetX = centreWidgetX - centrePixelX * scale;
     const float targetY = centreWidgetY - centrePixelY * scale;
@@ -358,7 +358,7 @@ void LoupeView::wheelEvent(QWheelEvent *event) {
         return;
     }
 
-    const float delta  = event->angleDelta().y() / 1200.0f;
+    const float delta  = static_cast<float>(event->angleDelta().y()) / 1200.0f;
     m_zoom            *= std::exp(delta);
     m_zoom             = std::clamp(m_zoom, 1.0f, 16.0f);
 
@@ -381,8 +381,8 @@ void LoupeView::mouseMoveEvent(QMouseEvent *event) {
         const float  scale = currentScale();
 
         // Delta in widget pixels maps to delta in normalised image space.
-        m_centre.setX(m_centre.x() - delta.x() / (m_image.width() * scale));
-        m_centre.setY(m_centre.y() - delta.y() / (m_image.height() * scale));
+        m_centre.setX(m_centre.x() - static_cast<float>(delta.x()) / (static_cast<float>(m_image.width()) * scale));
+        m_centre.setY(m_centre.y() - static_cast<float>(delta.y()) / (static_cast<float>(m_image.height()) * scale));
 
         clampCentre();
         m_lastMousePos = event->pos();

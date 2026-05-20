@@ -102,14 +102,14 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buf
     const double scale  = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
     int          radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
 
-    const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    const size_t f4Bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_float4);
     if (m_blurBufW != w || m_blurBufH != h) {
         m_blurBuf  = cl::Buffer(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
         m_blurBufW = w;
         m_blurBufH = h;
     }
 
-    const cl::NDRange global(w, h);
+    const cl::NDRange global(static_cast<size_t>(w), static_cast<size_t>(h));
 
     // H blur: buf → aux
     m_kernelBlurHLinear.setArg(0, buf);

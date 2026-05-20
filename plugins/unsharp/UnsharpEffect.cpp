@@ -99,17 +99,17 @@ bool UnsharpEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buf
 
     // Threshold slider is defined in 0..20 of 0..255 sRGB-byte units.  Scale
     // to normalised sRGB [0,1] for comparison with linear_to_srgb() output.
-    const float threshold_srgb = thresholdInt / 255.0f;
+    const float threshold_srgb = static_cast<float>(thresholdInt) / 255.0f;
 
     // Scratch buffer for the blurred image (reused across calls).
-    const size_t f4Bytes = static_cast<size_t>(w) * h * sizeof(cl_float4);
+    const size_t f4Bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_float4);
     if (m_blurBufW != w || m_blurBufH != h) {
         m_blurBuf  = cl::Buffer(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
         m_blurBufW = w;
         m_blurBufH = h;
     }
 
-    const cl::NDRange global(w, h);
+    const cl::NDRange global(static_cast<size_t>(w), static_cast<size_t>(h));
 
     // H blur: buf → aux
     m_kernelBlurHLinear.setArg(0, buf);

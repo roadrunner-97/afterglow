@@ -253,14 +253,14 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         // Mirrors the pan/zoom math in ViewportWidget exactly.  Letterbox
         // padding shows up here as cropX0<0 / cropX1>srcW (the visible region
         // extends past the image into empty viewport space).
-        const float W = m_width, H = m_height;
-        const float Vw = previewW, Vh = previewH;
+        const float W = static_cast<float>(m_width), H = static_cast<float>(m_height);
+        const float Vw = static_cast<float>(previewW), Vh = static_cast<float>(previewH);
         const float fitScale     = std::min(Vw / W, Vh / H);
         const float displayScale = fitScale * viewport.zoom;
         const float regionW      = Vw / displayScale;
         const float regionH      = Vh / displayScale;
-        const float cropX0       = (float)viewport.center.x() * W - regionW * 0.5f;
-        const float cropY0       = (float)viewport.center.y() * H - regionH * 0.5f;
+        const float cropX0       = static_cast<float>(viewport.center.x()) * W - regionW * 0.5f;
+        const float cropY0       = static_cast<float>(viewport.center.y()) * H - regionH * 0.5f;
 
         // Clip the crop region to the actual image bounds.  Effects only run
         // on real image pixels; the viewport widget renders the result inside
@@ -276,18 +276,18 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
 
         // Preview-pixel range that covers the clipped source region.  Round
         // to nearest pixel so the boundary lands consistently across runs.
-        const int imgX0 = (int)std::lround((clipX0 - cropX0) / regionW * Vw);
-        const int imgY0 = (int)std::lround((clipY0 - cropY0) / regionH * Vh);
-        const int imgX1 = (int)std::lround((clipX1 - cropX0) / regionW * Vw);
-        const int imgY1 = (int)std::lround((clipY1 - cropY0) / regionH * Vh);
+        const int imgX0 = static_cast<int>(std::lround((clipX0 - cropX0) / regionW * Vw));
+        const int imgY0 = static_cast<int>(std::lround((clipY0 - cropY0) / regionH * Vh));
+        const int imgX1 = static_cast<int>(std::lround((clipX1 - cropX0) / regionW * Vw));
+        const int imgY1 = static_cast<int>(std::lround((clipY1 - cropY0) / regionH * Vh));
         const int imgW  = imgX1 - imgX0;
         const int imgH  = imgY1 - imgY0;
         if (imgW <= 0 || imgH <= 0) return {}; // GCOVR_EXCL_LINE
 
         // Reallocate work/aux/packed buffers when the visible region size changes.
         if (m_previewW != imgW || m_previewH != imgH) {
-            const size_t f4Bytes     = static_cast<size_t>(imgW) * imgH * sizeof(cl_float4);
-            const size_t packedBytes = static_cast<size_t>(imgW) * imgH * sizeof(cl_uint);
+            const size_t f4Bytes     = static_cast<size_t>(imgW) * static_cast<size_t>(imgH) * sizeof(cl_float4);
+            const size_t packedBytes = static_cast<size_t>(imgW) * static_cast<size_t>(imgH) * sizeof(cl_uint);
             m_workBuf                = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
             m_auxBuf                 = cl::Buffer(m_context, CL_MEM_READ_WRITE, f4Bytes);
             m_packedBuf              = cl::Buffer(m_context, CL_MEM_READ_WRITE, packedBytes);
@@ -313,7 +313,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
             ds.setArg(8, clipY0);
             ds.setArg(9, clipX1);
             ds.setArg(10, clipY1);
-            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(imgW, imgH));
+            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
             return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
         }
 
@@ -355,7 +355,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
             ds.setArg(8, clipY0);
             ds.setArg(9, clipX1);
             ds.setArg(10, clipY1);
-            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(imgW, imgH));
+            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
 
             return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
         }
@@ -382,7 +382,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         dsKernel->setArg(8, clipY0);
         dsKernel->setArg(9, clipX1);
         dsKernel->setArg(10, clipY1);
-        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange, cl::NDRange(imgW, imgH));
+        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange, cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
         m_queue.finish();
 
         const float srcPixelsPerPreviewPixel = (clipX1 - clipX0) / static_cast<float>(imgW);
@@ -416,7 +416,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
 }
 
 bool GpuPipeline::decodeFullResLocked() {
-    const size_t bytes = static_cast<size_t>(m_width) * m_height * sizeof(cl_float4);
+    const size_t bytes = static_cast<size_t>(m_width) * static_cast<size_t>(m_height) * sizeof(cl_float4);
     if (m_processedBytes != bytes) {
         m_processedBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE, bytes);
         m_fullAuxBuf     = cl::Buffer(m_context, CL_MEM_READ_WRITE, bytes);
@@ -433,7 +433,7 @@ bool GpuPipeline::decodeFullResLocked() {
     k->setArg(2, m_width);
     k->setArg(3, m_height);
     k->setArg(4, m_stride);
-    m_queue.enqueueNDRangeKernel(*k, cl::NullRange, cl::NDRange(m_width, m_height));
+    m_queue.enqueueNDRangeKernel(*k, cl::NullRange, cl::NDRange(static_cast<size_t>(m_width), static_cast<size_t>(m_height)));
     m_queue.finish();
     return true;
 }
@@ -443,10 +443,10 @@ QImage GpuPipeline::packAndReadbackLocked(cl::Buffer &src, int w, int h) {
     m_packKernel.setArg(1, m_packedBuf);
     m_packKernel.setArg(2, w);
     m_packKernel.setArg(3, h);
-    m_queue.enqueueNDRangeKernel(m_packKernel, cl::NullRange, cl::NDRange(w, h));
+    m_queue.enqueueNDRangeKernel(m_packKernel, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)));
 
     QImage result(w, h, QImage::Format_RGB32);
-    m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0, static_cast<size_t>(w) * h * sizeof(cl_uint), result.bits());
+    m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0, static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_uint), result.bits());
     return result;
 }
 
@@ -520,8 +520,8 @@ void GpuPipeline::uploadImageLocked(const QImage &image) {
 
     m_width    = src.width();
     m_height   = src.height();
-    m_stride   = src.bytesPerLine() / bpp;
-    m_bufBytes = static_cast<size_t>(src.bytesPerLine()) * m_height;
+    m_stride   = static_cast<int>(src.bytesPerLine() / bpp);
+    m_bufBytes = static_cast<size_t>(src.bytesPerLine()) * static_cast<size_t>(m_height);
     m_is16bit  = is16bit;
     // RawLoader tags linear 16-bit inputs; any other QImage (JPEG/PNG/convertTo)
     // is sRGB-gamma encoded.  Read tag from the original image, not the converted

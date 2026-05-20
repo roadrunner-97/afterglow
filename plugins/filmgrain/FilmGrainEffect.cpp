@@ -284,6 +284,6 @@ bool FilmGrainEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::B
     m_kernelLinear.setArg(7, a.srcX0);
     m_kernelLinear.setArg(8, a.srcY0);
     m_kernelLinear.setArg(9, a.srcPPP);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }

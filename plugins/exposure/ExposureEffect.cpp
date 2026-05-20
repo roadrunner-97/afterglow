@@ -111,7 +111,7 @@ protected:
         p.setRenderHint(QPainter::Antialiasing);
 
         const QRectF r = plotRect();
-        const float  W = r.width(), H = r.height();
+        const float  W = static_cast<float>(r.width()), H = static_cast<float>(r.height());
         auto         toScreen = [&](float L, float out) -> QPointF { return {r.left() + L * W, r.bottom() - out * H}; };
 
         // Background gradient
@@ -174,12 +174,12 @@ protected:
 
                 for (int i = 0; i < drawBins; ++i) {
 
-                    float xL = (i + 0.5f) / float(drawBins);
+                    float xL = (static_cast<float>(i) + 0.5f) / static_cast<float>(drawBins);
                     // Input luminance that maps to xL after global EV
                     float inL    = cpuLinearToSrgb(cpuSrgbToLinear(xL) * invGlobalFac);
                     inL          = std::max(0.0f, std::min(1.0f, inL));
                     int   srcBin = std::max(0, std::min(nBins - 1, int(inL * float(nBins))));
-                    float hN     = std::log1p(float(m_histogram[srcBin])) * invLogPk;
+                    float hN     = std::log1p(static_cast<float>(m_histogram[static_cast<std::size_t>(srcBin)])) * invLogPk;
                     hist << toScreen(xL, hN);
                 }
                 hist << toScreen(1.0f, 0.0f);
@@ -362,7 +362,7 @@ private:
 
     float screenToZoneEv(int zone, QPointF pos, const QRectF &r) const {
 
-        float out    = 1.0f - float(pos.y() - r.top()) / r.height();
+        float out    = 1.0f - static_cast<float>(pos.y() - r.top()) / static_cast<float>(r.height());
         out          = std::max(0.001f, std::min(0.999f, out));
         float linOut = cpuSrgbToLinear(out);
         float linIn  = cpuSrgbToLinear(ZONE_X[zone]);
@@ -372,7 +372,7 @@ private:
 
     float screenToGlobalEv(QPointF pos, const QRectF &r) const {
 
-        float frac = 1.0f - float(pos.y() - r.top()) / r.height();
+        float frac = 1.0f - static_cast<float>(pos.y() - r.top()) / static_cast<float>(r.height());
         frac       = std::max(0.0f, std::min(1.0f, frac));
         return std::max(-5.0f, std::min(5.0f, frac * 10.0f - 5.0f));
     }
@@ -656,6 +656,6 @@ bool ExposureEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Bu
     m_kernelLinear.setArg(5, shadowsEv);
     m_kernelLinear.setArg(6, highlightsEv);
     m_kernelLinear.setArg(7, whitesEv);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }

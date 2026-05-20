@@ -49,7 +49,7 @@ public:
     // Number of photos waiting to be proofed (not counting the current job).
     // Exposed for unit-test inspection.
     int pendingCount() const {
-        return m_queue.size();
+        return static_cast<int>(m_queue.size());
     }
 
 signals:

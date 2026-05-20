@@ -241,6 +241,6 @@ bool SplitToningEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl:
     m_kernelLinear.setArg(5, a.highlightHue);
     m_kernelLinear.setArg(6, a.highlightSat);
     m_kernelLinear.setArg(7, a.balance);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }

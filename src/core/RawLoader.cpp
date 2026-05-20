@@ -184,7 +184,7 @@ QImage RawLoader::load(const QString &filePath, ImageMetadata *meta) {
     const int height = static_cast<int>(img->height);
     for (int y = 0; y < height; ++y) {
         uint16_t       *dst    = reinterpret_cast<uint16_t *>(result.scanLine(y));
-        const uint16_t *srcRow = src + static_cast<size_t>(y) * width * 3;
+        const uint16_t *srcRow = src + static_cast<size_t>(y) * static_cast<size_t>(width) * 3;
         for (int x = 0; x < width; ++x) {
             dst[4 * x + 0] = srcRow[3 * x + 0];
             dst[4 * x + 1] = srcRow[3 * x + 1];

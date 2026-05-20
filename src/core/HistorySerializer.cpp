@@ -107,9 +107,9 @@ QString unquoteStr(const QString &token) {
             break;
         }
         // GCOVR_EXCL_STOP
-        default: // GCOVR_EXCL_LINE
+        default:           // GCOVR_EXCL_LINE
             out.append(n); // GCOVR_EXCL_LINE
-            break; // GCOVR_EXCL_LINE
+            break;         // GCOVR_EXCL_LINE
         }
     }
     return out;
@@ -135,7 +135,7 @@ QVariant parseScalarV(const QString &s) {
 }
 
 bool splitKV(const QString &s, QString *k, QString *v) {
-    const int colon = s.indexOf(':');
+    const qsizetype colon = s.indexOf(':');
     if (colon < 0) return false;
     *k = s.left(colon).trimmed();
     *v = s.mid(colon + 1).trimmed();

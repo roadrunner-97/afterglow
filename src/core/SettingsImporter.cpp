@@ -87,7 +87,7 @@ int leadingSpaces(const QString &line) {
 }
 
 bool splitKeyValue(const QString &s, QString *k, QString *v) {
-    const int colon = s.indexOf(':');
+    const qsizetype colon = s.indexOf(':');
     if (colon < 0) return false;
     *k = s.left(colon).trimmed();
     *v = s.mid(colon + 1).trimmed();

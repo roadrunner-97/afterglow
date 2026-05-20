@@ -10,6 +10,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC \
     -Wimplicit-fallthrough \
     -Wduplicated-cond \
     -Wduplicated-branches \
+    -Wconversion \
+    -Wsign-conversion \
+    -Wold-style-cast \
     -Werror")
 
 # Coverage instrumentation — overrides -O3 with -O0 for accurate results

@@ -348,7 +348,7 @@ private slots:
 
         ImageMetadata meta;
         meta.luminanceHistogram.assign(256, 0);
-        for (int i = 0; i < 256; ++i) meta.luminanceHistogram[i] = uint32_t(i * 10 + 1);
+        for (std::size_t i = 0; i < 256; ++i) meta.luminanceHistogram[i] = uint32_t(i * 10 + 1);
         e.onImageLoaded(meta);
 
         w->show();

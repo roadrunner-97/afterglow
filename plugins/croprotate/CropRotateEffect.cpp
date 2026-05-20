@@ -695,7 +695,7 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
             x0 += dnx;
             y1 += dny;
             break;
-        default: // GCOVR_EXCL_LINE
+        default:   // GCOVR_EXCL_LINE
             break; // GCOVR_EXCL_LINE
         }
         const bool lockOk = m_lockAspect && m_imageSize.width() > 0 && m_imageSize.height() > 0;
@@ -720,22 +720,22 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
             // Re-anchor the opposite corner.
             switch (m_dragIndex) {
             case 0:
-                x0 = x1 - wn;
-                y0 = y1 - hn;
+                x0 = static_cast<float>(x1 - wn);
+                y0 = static_cast<float>(y1 - hn);
                 break;
             case 1:
-                x1 = x0 + wn;
-                y0 = y1 - hn;
+                x1 = static_cast<float>(x0 + wn);
+                y0 = static_cast<float>(y1 - hn);
                 break;
             case 2:
-                x1 = x0 + wn;
-                y1 = y0 + hn;
+                x1 = static_cast<float>(x0 + wn);
+                y1 = static_cast<float>(y0 + hn);
                 break;
             case 3:
-                x0 = x1 - wn;
-                y1 = y0 + hn;
+                x0 = static_cast<float>(x1 - wn);
+                y1 = static_cast<float>(y0 + hn);
                 break;
-            default: // GCOVR_EXCL_LINE
+            default:   // GCOVR_EXCL_LINE
                 break; // GCOVR_EXCL_LINE
             }
         } else {
@@ -771,12 +771,12 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
                 wn             *= s;
                 hn             *= s;
                 // Push the moved edge so the new height is consistent.
-                if (m_dragIndex == 0) y0 = y1 - hn;
-                else y1 = y0 + hn;
+                if (m_dragIndex == 0) y0 = static_cast<float>(y1 - hn);
+                else y1 = static_cast<float>(y0 + hn);
             }
             const double cxn = m_dragCropStart.x() + m_dragCropStart.width() * 0.5;
-            x0               = cxn - wn * 0.5;
-            x1               = cxn + wn * 0.5;
+            x0               = static_cast<float>(cxn - wn * 0.5);
+            x1               = static_cast<float>(cxn + wn * 0.5);
         }
         m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5, x1 - x0, y1 - y0);
     } else if (m_dragKind == DragKind::EdgeV) {
@@ -796,12 +796,12 @@ bool CropRotateEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt
                 const double s  = MIN_CROP_SIZE / hn;
                 wn             *= s;
                 hn             *= s;
-                if (m_dragIndex == 0) x0 = x1 - wn;
-                else x1 = x0 + wn;
+                if (m_dragIndex == 0) x0 = static_cast<float>(x1 - wn);
+                else x1 = static_cast<float>(x0 + wn);
             }
             const double cyn = m_dragCropStart.y() + m_dragCropStart.height() * 0.5;
-            y0               = cyn - hn * 0.5;
-            y1               = cyn + hn * 0.5;
+            y0               = static_cast<float>(cyn - hn * 0.5);
+            y1               = static_cast<float>(cyn + hn * 0.5);
         }
         m_crop = clampToImageBounds((x0 + x1) * 0.5, (y0 + y1) * 0.5, x1 - x0, y1 - y0);
     }

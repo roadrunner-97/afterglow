@@ -1052,7 +1052,7 @@ void PhotoEditorApp::onDevelopRequested() {
 
 void PhotoEditorApp::onLoupeNavigate(int direction) {
     if (m_currentPaths.isEmpty() || m_currentImagePath.isEmpty()) return;
-    const int idx  = m_currentPaths.indexOf(m_currentImagePath);
+    const int idx  = static_cast<int>(m_currentPaths.indexOf(m_currentImagePath));
     const int next = idx + direction;
     if (idx < 0 || next < 0 || next >= m_currentPaths.size()) return;
     onPhotoActivated(m_currentPaths[next]);

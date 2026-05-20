@@ -55,7 +55,7 @@ void UndoHistory::recordFromCurrent(const QVector<SettingsImporter::EffectSettin
     if (m_cursor < m_entries.size()) m_entries.resize(m_cursor);
 
     for (auto &e : newEntries) m_entries.append(std::move(e));
-    m_cursor = m_entries.size();
+    m_cursor = static_cast<int>(m_entries.size());
 
     // Enforce capacity — drop from front, keep cursor in bounds
     while (m_entries.size() > m_capacity) {
@@ -148,7 +148,7 @@ void UndoHistory::load(QVector<Entry> entries, int cursor, QVector<SettingsImpor
     const bool prevRedo = canRedo();
 
     m_entries = std::move(entries);
-    m_cursor  = qBound(0, cursor, m_entries.size());
+    m_cursor  = qBound(0, cursor, static_cast<int>(m_entries.size()));
     m_shadow  = buildShadow(shadow);
 
     if (canUndo() != prevUndo) emit canUndoChanged(canUndo());
