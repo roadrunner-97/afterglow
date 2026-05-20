@@ -40,7 +40,10 @@ public:
         }
 
         constexpr int R = 5;
-        const QPoint  centre(option.rect.right() - R - 5, option.rect.bottom() - R - 5);
+        const QSize   iconSz   = option.decorationSize;
+        const int     iconLeft = option.rect.left() + (option.rect.width() - iconSz.width()) / 2;
+        const QRect   iconRect(iconLeft, option.rect.top(), iconSz.width(), iconSz.height());
+        const QPoint  centre(iconRect.right() - R - 5, iconRect.bottom() - R - 5);
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
         painter->setPen(Qt::NoPen);
