@@ -1152,7 +1152,6 @@ void PhotoEditorApp::refreshHistoryTray() {
     m_historyTray->setHistory(rows, m_history->cursor());
 }
 
-
 QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() const {
     const auto                               &entries = m_effects->entries();
     QVector<SettingsImporter::EffectSettings> snap;
