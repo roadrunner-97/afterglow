@@ -5,20 +5,33 @@
 #include <QPainter>
 #include <QStyledItemDelegate>
 #include <QStyleOptionViewItem>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QKeyEvent>
 #include <QFileInfo>
 #include <QPixmap>
 
+#include <algorithm>
+#include <cmath>
+
 namespace {
 
-// Paints the base list item then overlays a small status circle in the
-// bottom-right corner of each thumbnail to show proof state.
-class ProofStatusDelegate : public QStyledItemDelegate {
+constexpr float kPi = 3.14159265358979323846f;
+
+// Draws a glowing colored ring around the thumbnail border.
+// Red = NotProofed, orange-pulsing = Proofing, orange-fading = Proofed.
+class ProofRingDelegate : public QStyledItemDelegate {
 public:
-    explicit ProofStatusDelegate(const QHash<QString, GridView::ProofStatus> *status, QObject *parent = nullptr)
-        : QStyledItemDelegate(parent), m_status(status) {}
+    explicit ProofRingDelegate(
+        const QHash<QString, GridView::ProofStatus> *status,
+        const QHash<QString, float>                 *fadeOpacity,
+        const float                                 *pulsePhase,
+        QObject                                     *parent = nullptr)
+        : QStyledItemDelegate(parent)
+        , m_status(status)
+        , m_fadeOpacity(fadeOpacity)
+        , m_pulsePhase(pulsePhase) {}
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
         QStyledItemDelegate::paint(painter, option, index);
@@ -26,41 +39,65 @@ public:
         const QString               path   = index.data(Qt::UserRole).toString();
         const GridView::ProofStatus status = m_status->value(path, GridView::ProofStatus::NotProofed);
 
-        QColor color;
+        QColor baseColor;
+        float  opacity = 1.0f;
+
         switch (status) {
         case GridView::ProofStatus::NotProofed:
-            color = QColor(130, 130, 130, 200);
+            baseColor = QColor(210, 50, 50);
             break;
         case GridView::ProofStatus::Proofing:
-            color = QColor(255, 195, 40, 220);
+            baseColor = QColor(255, 155, 25);
+            // Pulse opacity 0.45 → 1.0 → 0.45 on a sine wave
+            opacity = 0.45f + 0.55f * (0.5f + 0.5f * std::sin(*m_pulsePhase * 2.0f * kPi));
             break;
-        case GridView::ProofStatus::Proofed:
-            color = QColor(72, 200, 100, 220);
+        case GridView::ProofStatus::Proofed: {
+            float fade = m_fadeOpacity->value(path, 0.0f);
+            if (fade <= 0.0f) return;
+            baseColor = QColor(255, 155, 25);
+            opacity   = fade;
             break;
         }
+        }
 
-        constexpr int R        = 5;
-        const QSize   iconSz   = option.decorationSize;
-        const int     iconLeft = option.rect.left() + (option.rect.width() - iconSz.width()) / 2;
-        const QRect   iconRect(iconLeft, option.rect.top(), iconSz.width(), iconSz.height());
-        const QPoint  centre(iconRect.right() - R - 5, iconRect.bottom() - R - 5);
+        const QSize iconSz  = option.decorationSize;
+        const int   iLeft   = option.rect.left() + (option.rect.width()  - iconSz.width())  / 2;
+        const int   iTop    = option.rect.top()  + (option.rect.height() - iconSz.height()) / 2;
+        const QRect iconRect(iLeft, iTop, iconSz.width(), iconSz.height());
+
         painter->save();
-        painter->setRenderHint(QPainter::Antialiasing);
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(color);
-        painter->drawEllipse(centre, R, R);
+        painter->setBrush(Qt::NoBrush);
+
+        // Glow halos: 3 progressively wider, progressively more transparent rects
+        const float glowAlphas[] = {0.35f, 0.18f, 0.08f};
+        for (int i = 0; i < 3; ++i) {
+            QColor g = baseColor;
+            g.setAlphaF(opacity * glowAlphas[i]);
+            painter->setPen(QPen(g, 1));
+            const int d = i + 1;
+            painter->drawRect(iconRect.adjusted(-d, -d, d, d));
+        }
+
+        // Main ring
+        QColor ring = baseColor;
+        ring.setAlphaF(opacity * 0.90f);
+        painter->setPen(QPen(ring, 2));
+        painter->drawRect(iconRect.adjusted(-1, -1, 1, 1));
+
         painter->restore();
     }
 
 private:
     const QHash<QString, GridView::ProofStatus> *m_status;
+    const QHash<QString, float>                 *m_fadeOpacity;
+    const float                                 *m_pulsePhase;
 };
 
 } // namespace
 
 GridView::GridView(QWidget *parent) : QWidget(parent) {
     m_list = new QListWidget(this);
-    m_list->setItemDelegate(new ProofStatusDelegate(&m_proofStatus, this));
+    m_list->setItemDelegate(new ProofRingDelegate(&m_proofStatus, &m_fadeOpacity, &m_pulsePhase, this));
     m_list->setViewMode(QListView::IconMode);
     m_list->setResizeMode(QListView::Adjust);
     m_list->setMovement(QListView::Static);
@@ -68,14 +105,10 @@ GridView::GridView(QWidget *parent) : QWidget(parent) {
     m_list->setFocusPolicy(Qt::StrongFocus);
     m_list->setFocusProxy(m_list);
 
-    // Connect item double-click to photoActivated signal
     connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
-        QString path = item->data(Qt::UserRole).toString();
-        emit    photoActivated(path);
+        emit photoActivated(item->data(Qt::UserRole).toString());
     });
 
-    // Track selection changes so the host can sync m_currentImagePath as
-    // the user clicks or arrow-keys through the grid.
     connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *current, QListWidgetItem *) {
         emit currentPathChanged(current ? current->data(Qt::UserRole).toString() : QString());
     });
@@ -93,18 +126,14 @@ void GridView::setPhotos(const QStringList &paths) {
     m_list->clear();
     m_marks.clear();
     m_proofStatus.clear();
+    m_fadeOpacity.clear();
 
     for (const QString &path : paths) {
         QListWidgetItem *item = new QListWidgetItem(m_list);
-        item->setText(QFileInfo(path).fileName());
         item->setData(Qt::UserRole, path);
-        // Set a placeholder icon (empty icon until setThumbnail is called)
         item->setIcon(QIcon());
     }
 
-    // Default the cursor to the first item so the toolbar's Develop /
-    // Loupe buttons have something to act on without the user having to
-    // click first.
     if (m_list->count() > 0) m_list->setCurrentRow(0);
 }
 
@@ -112,8 +141,7 @@ void GridView::setThumbnail(const QString &path, const QImage &thumb) {
     for (int i = 0; i < m_list->count(); ++i) {
         QListWidgetItem *item = m_list->item(i);
         if (item->data(Qt::UserRole).toString() == path) {
-            QPixmap pixmap = QPixmap::fromImage(thumb);
-            item->setIcon(QIcon(pixmap));
+            item->setIcon(QIcon(QPixmap::fromImage(thumb)));
             break;
         }
     }
@@ -122,23 +150,14 @@ void GridView::setThumbnail(const QString &path, const QImage &thumb) {
 void GridView::setMark(const QString &path, Mark m) {
     m_marks[path] = m;
 
-    // Find and update the item's background color based on the mark
     for (int i = 0; i < m_list->count(); ++i) {
         QListWidgetItem *item = m_list->item(i);
         if (item->data(Qt::UserRole).toString() == path) {
             switch (m) {
-            case Mark::Accept:
-                item->setBackground(QColor(144, 238, 144, 100)); // light green
-                break;
-            case Mark::Refine:
-                item->setBackground(QColor(240, 210, 120, 110)); // warm amber
-                break;
-            case Mark::Decline:
-                item->setBackground(QColor(255, 127, 127, 100)); // light red
-                break;
-            case Mark::None:
-                item->setBackground(QColor(255, 255, 255, 0)); // transparent
-                break;
+            case Mark::Accept:  item->setBackground(QColor(144, 238, 144, 100)); break;
+            case Mark::Refine:  item->setBackground(QColor(240, 210, 120, 110)); break;
+            case Mark::Decline: item->setBackground(QColor(255, 127, 127, 100)); break;
+            case Mark::None:    item->setBackground(QColor(255, 255, 255,   0)); break;
             }
             break;
         }
@@ -150,7 +169,16 @@ GridView::Mark GridView::mark(const QString &path) const {
 }
 
 void GridView::setProofStatus(const QString &path, ProofStatus status) {
-    m_proofStatus[path] = status;
+    const ProofStatus prev = m_proofStatus.value(path, ProofStatus::NotProofed);
+    m_proofStatus[path]    = status;
+
+    if (status == ProofStatus::Proofing) {
+        ensureAnimTimer();
+    } else if (status == ProofStatus::Proofed && prev != ProofStatus::Proofed) {
+        m_fadeOpacity[path] = 1.0f;
+        ensureAnimTimer();
+    }
+
     for (int i = 0; i < m_list->count(); ++i) {
         QListWidgetItem *item = m_list->item(i);
         if (item->data(Qt::UserRole).toString() == path) {
@@ -162,14 +190,41 @@ void GridView::setProofStatus(const QString &path, ProofStatus status) {
 
 void GridView::applyIconSize() {
     m_list->setIconSize(QSize(m_iconPx, m_iconPx));
-    m_list->setGridSize(QSize(m_iconPx + 16, m_iconPx + 32));
+    m_list->setGridSize(QSize(m_iconPx + 16, m_iconPx + 16));
+}
+
+void GridView::ensureAnimTimer() {
+    if (!m_animTimer) {
+        m_animTimer = new QTimer(this);
+        m_animTimer->setInterval(33); // ~30 fps
+        connect(m_animTimer, &QTimer::timeout, this, &GridView::onAnimTick);
+    }
+    if (!m_animTimer->isActive()) m_animTimer->start();
+}
+
+void GridView::onAnimTick() {
+    m_pulsePhase = std::fmod(m_pulsePhase + 0.025f, 1.0f); // ~1.3 s per cycle
+
+    for (auto it = m_fadeOpacity.begin(); it != m_fadeOpacity.end();) {
+        it.value() -= 0.04f; // fade over ~25 ticks ≈ 825 ms
+        if (it.value() <= 0.0f)
+            it = m_fadeOpacity.erase(it);
+        else
+            ++it;
+    }
+
+    const bool hasProofing = std::any_of(m_proofStatus.cbegin(), m_proofStatus.cend(),
+        [](ProofStatus s) { return s == ProofStatus::Proofing; });
+
+    if (!hasProofing && m_fadeOpacity.isEmpty()) m_animTimer->stop();
+
+    m_list->viewport()->update();
 }
 
 void GridView::wheelEvent(QWheelEvent *event) {
     if (event->modifiers() & Qt::ControlModifier) {
-        int delta  = event->angleDelta().y() / 8;
-        m_iconPx  += delta;
-        m_iconPx   = qBound(48, m_iconPx, 512);
+        int delta = event->angleDelta().y() / 8;
+        m_iconPx  = qBound(48, m_iconPx + delta, 512);
         applyIconSize();
         event->accept();
     } else {
@@ -184,12 +239,9 @@ void GridView::keyPressEvent(QKeyEvent *event) {
         return;
     }
 
-    QString currentPath = currentItem->data(Qt::UserRole).toString();
+    const QString currentPath = currentItem->data(Qt::UserRole).toString();
 
     auto applyMark = [&](Mark requested) {
-        // Pressing the same letter as the current mark toggles it off
-        // (back to None) — matches the "exclusive but defaults to none"
-        // behaviour the Loupe sidebar buttons present.
         const Mark next = (mark(currentPath) == requested) ? Mark::None : requested;
         setMark(currentPath, next);
         emit markChanged(currentPath, next);
@@ -197,16 +249,14 @@ void GridView::keyPressEvent(QKeyEvent *event) {
         event->accept();
     };
 
-    if (event->key() == Qt::Key_A) {
+    if (event->key() == Qt::Key_A)
         applyMark(Mark::Accept);
-    } else if (event->key() == Qt::Key_R) {
+    else if (event->key() == Qt::Key_R)
         applyMark(Mark::Refine);
-    } else if (event->key() == Qt::Key_D) {
+    else if (event->key() == Qt::Key_D)
         applyMark(Mark::Decline);
-    } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+    else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
         emit photoActivated(currentPath);
-        event->accept();
-    } else {
+    else
         QWidget::keyPressEvent(event);
-    }
 }

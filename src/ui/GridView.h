@@ -1,13 +1,14 @@
 #ifndef GRIDVIEW_H
 #define GRIDVIEW_H
 
-#include <QWidget>
-#include <QString>
-#include <QImage>
 #include <QHash>
+#include <QImage>
+#include <QString>
+#include <QWidget>
 
 class QListWidget;
 class QListWidgetItem;
+class QTimer;
 
 class GridView : public QWidget {
     Q_OBJECT
@@ -16,7 +17,6 @@ public:
     // Pressing the same key twice cycles back to None (the resting state).
     enum class Mark : char { None = 0, Accept = 'A', Refine = 'R', Decline = 'D' };
 
-    // Proof status shown as a small dot in each thumbnail's corner.
     enum class ProofStatus { NotProofed, Proofing, Proofed };
 
     explicit GridView(QWidget *parent = nullptr);
@@ -30,22 +30,16 @@ public:
     void setThumbnail(const QString &path, const QImage &thumb);
 
     // Set/get a photo's triage mark. Caller persists this — GridView only
-    // displays it (colored border).
+    // displays it (colored background).
     void setMark(const QString &path, Mark m);
     Mark mark(const QString &path) const;
 
-    // Update the proof status dot for a single photo.
+    // Update the proof-status ring for a single photo.
     void setProofStatus(const QString &path, ProofStatus status);
 
 signals:
-    // Emitted on double-click or Enter on a cell.
     void photoActivated(const QString &path);
-
-    // Emitted when the user presses P/X/U with a cell selected.
     void markChanged(const QString &path, Mark m);
-
-    // Emitted as the user moves the selection cursor (single click or
-    // arrow keys).  Empty path when nothing is selected.
     void currentPathChanged(const QString &path);
 
 protected:
@@ -53,11 +47,18 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
 
 private:
-    QListWidget                *m_list;
+    void applyIconSize();
+    void ensureAnimTimer();
+    void onAnimTick();
+
+    QListWidget                *m_list     = nullptr;
+    int                         m_iconPx   = 160;
+    float                       m_pulsePhase = 0.0f;
+    QTimer                     *m_animTimer  = nullptr;
+
     QHash<QString, Mark>        m_marks;
     QHash<QString, ProofStatus> m_proofStatus;
-    int                         m_iconPx = 160; // initial cell edge in pixels
-    void                        applyIconSize();
+    QHash<QString, float>       m_fadeOpacity;
 };
 
 #endif // GRIDVIEW_H
