@@ -32,7 +32,7 @@ class TestMetadataTray : public QObject {
 
 private slots:
     void constructsWithDashPlaceholders() {
-        MetadataTray tray;
+        MetadataTray      tray;
         const QStringList vals = valueTexts(&tray);
         QCOMPARE(vals.size(), 6);
         const QString dash = QString::fromUtf8("\xe2\x80\x94");
@@ -40,7 +40,7 @@ private slots:
     }
 
     void setInfoPopulatesAllFields() {
-        MetadataTray tray;
+        MetadataTray       tray;
         MetadataTray::Info info;
         info.filename   = "DSC_0042.jpg";
         info.dimensions = "6000 x 4000";
@@ -61,7 +61,7 @@ private slots:
     }
 
     void clearResetsToDashes() {
-        MetadataTray tray;
+        MetadataTray       tray;
         MetadataTray::Info info;
         info.filename = "photo.jpg";
         tray.setInfo(info);
@@ -73,7 +73,7 @@ private slots:
     }
 
     void setInfoEmptyStringsShowDash() {
-        MetadataTray    tray;
+        MetadataTray       tray;
         MetadataTray::Info info; // all fields empty
         tray.setInfo(info);
 
