@@ -15,6 +15,7 @@
 #include "Proofer.h"
 #include "SettingsImporter.h"
 #include "HistoryTray.h"
+#include "MetadataTray.h"
 #include "UndoHistory.h"
 #include "ViewportWidget.h"
 
@@ -98,8 +99,9 @@ private:
     void    writeSidecar();
     void    snapshotDefaults();
 
-    HistoryTray       *m_historyTray = nullptr;
-    UndoHistory       *m_history     = nullptr;
+    MetadataTray      *m_metadataTray = nullptr;
+    HistoryTray       *m_historyTray  = nullptr;
+    UndoHistory       *m_history      = nullptr;
     QAction           *m_undoAct     = nullptr;
     QAction           *m_redoAct     = nullptr;
     QVector<QAction *> m_effectMenuActions;

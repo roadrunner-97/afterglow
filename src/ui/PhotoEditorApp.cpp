@@ -1,6 +1,7 @@
 #include "PhotoEditorApp.h"
 #include "ExportDialog.h"
 #include "HistorySerializer.h"
+#include "ImageMetadata.h"
 #include "ExportPath.h"
 #include "ExportResize.h"
 #include "LoupeView.h"
@@ -48,9 +49,62 @@
 #include <QImageReader>
 #include <QSet>
 #include <QDebug>
+#include <QDateTime>
+#include <QFileInfo>
+#include <QLocale>
+#include <cmath>
 #include <memory>
 
 namespace {
+// ── Metadata format helpers ────────────────────────────────────────────────
+
+static QString fmtShutter(float s) {
+    if (s <= 0.0f) return "\xe2\x80\x94";
+    if (s >= 1.0f) return QString::number(s, 'f', 1) + " s";
+    return QString("1/%1 s").arg(static_cast<int>(std::round(1.0f / s)));
+}
+
+static QString fmtAperture(float f) {
+    if (f <= 0.0f) return "\xe2\x80\x94";
+    return QString("f/%1").arg(QString::number(f, 'f', f < 10.0f ? 1 : 0));
+}
+
+static QString fmtIso(float iso) {
+    if (iso <= 0.0f) return "\xe2\x80\x94";
+    return "ISO\xc2\xa0" + QString::number(static_cast<int>(std::round(iso)));
+}
+
+static QString fmtCamera(const ImageMetadata &m) {
+    if (m.cameraMake.isEmpty() && m.cameraModel.isEmpty()) return "\xe2\x80\x94";
+    if (!m.cameraMake.isEmpty() && m.cameraModel.startsWith(m.cameraMake, Qt::CaseInsensitive))
+        return m.cameraModel;
+    if (m.cameraMake.isEmpty()) return m.cameraModel;
+    if (m.cameraModel.isEmpty()) return m.cameraMake;
+    return m.cameraMake + " " + m.cameraModel;
+}
+
+static MetadataTray::Info buildMetadataInfo(const QString &path, const QSize &size,
+                                             const ImageMetadata &meta) {
+    MetadataTray::Info info;
+    info.filename   = QFileInfo(path).fileName();
+    info.dimensions = QString("%1 \xc3\x97 %2").arg(size.width()).arg(size.height());
+    info.camera     = fmtCamera(meta);
+    info.lens       = meta.lens.isEmpty() ? QString("\xe2\x80\x94") : meta.lens;
+
+    QStringList exp;
+    if (meta.isoSpeed > 0.0f) exp << fmtIso(meta.isoSpeed);
+    if (meta.shutterSec > 0.0f) exp << fmtShutter(meta.shutterSec);
+    if (meta.aperture > 0.0f) exp << fmtAperture(meta.aperture);
+    info.exposure = exp.isEmpty() ? QString("\xe2\x80\x94") : exp.join(" \xc2\xb7 ");
+
+    info.captured = meta.captureTime.isValid()
+                        ? QLocale::system().toString(meta.captureTime, QLocale::ShortFormat)
+                        : QString("\xe2\x80\x94");
+    return info;
+}
+
+// ── History label builder ──────────────────────────────────────────────────
+
 // Build a human-readable label for a history entry given the effect's display name.
 QString entryLabel(const UndoHistory::Entry &e, const QString &effectName) {
     QString result;
@@ -221,6 +275,19 @@ void PhotoEditorApp::setupUI() {
     QHBoxLayout *mainLayout = new QHBoxLayout(develop);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
+
+    // ── Left panel (metadata) ──────────────────────────────────────────────
+    QWidget     *leftPanel  = new QWidget();
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
+    leftLayout->setContentsMargins(8, 8, 8, 8);
+    leftLayout->setSpacing(0);
+    leftPanel->setFixedWidth(fontMetrics().averageCharWidth() * 28);
+
+    m_metadataTray = new MetadataTray();
+    leftLayout->addWidget(m_metadataTray);
+    leftLayout->addStretch();
+
+    mainLayout->addWidget(leftPanel);
 
     m_viewport = new ViewportWidget();
     connect(m_viewport, &ViewportWidget::viewportChanged, this, &PhotoEditorApp::triggerViewportUpdate);
@@ -548,6 +615,8 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
 
     m_historyTray->show();
     repositionHistoryTray();
+
+    m_metadataTray->setInfo(buildMetadataInfo(path, img.size(), meta));
 
     syncViewportRotation();
     triggerReprocess();

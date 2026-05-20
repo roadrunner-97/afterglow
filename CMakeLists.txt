@@ -72,6 +72,8 @@ add_library(photoeditor_widgets STATIC
     src/widgets/LogarithmParamSlider.h
     src/widgets/HistoryTray.cpp
     src/widgets/HistoryTray.h
+    src/widgets/MetadataTray.cpp
+    src/widgets/MetadataTray.h
 )
 
 target_link_libraries(photoeditor_widgets
