@@ -39,7 +39,7 @@ public:
             break;
         }
 
-        constexpr int R = 5;
+        constexpr int R        = 5;
         const QSize   iconSz   = option.decorationSize;
         const int     iconLeft = option.rect.left() + (option.rect.width() - iconSz.width()) / 2;
         const QRect   iconRect(iconLeft, option.rect.top(), iconSz.width(), iconSz.height());
