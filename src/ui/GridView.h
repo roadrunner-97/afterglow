@@ -51,10 +51,10 @@ private:
     void ensureAnimTimer();
     void onAnimTick();
 
-    QListWidget                *m_list     = nullptr;
-    int                         m_iconPx   = 160;
-    float                       m_pulsePhase = 0.0f;
-    QTimer                     *m_animTimer  = nullptr;
+    QListWidget *m_list       = nullptr;
+    int          m_iconPx     = 160;
+    float        m_pulsePhase = 0.0f;
+    QTimer      *m_animTimer  = nullptr;
 
     QHash<QString, Mark>        m_marks;
     QHash<QString, ProofStatus> m_proofStatus;

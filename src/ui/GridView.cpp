@@ -23,15 +23,10 @@ constexpr float kPi = 3.14159265358979323846f;
 // Red = NotProofed, orange-pulsing = Proofing, orange-fading = Proofed.
 class ProofRingDelegate : public QStyledItemDelegate {
 public:
-    explicit ProofRingDelegate(
-        const QHash<QString, GridView::ProofStatus> *status,
-        const QHash<QString, float>                 *fadeOpacity,
-        const float                                 *pulsePhase,
-        QObject                                     *parent = nullptr)
-        : QStyledItemDelegate(parent)
-        , m_status(status)
-        , m_fadeOpacity(fadeOpacity)
-        , m_pulsePhase(pulsePhase) {}
+    explicit ProofRingDelegate(const QHash<QString, GridView::ProofStatus> *status,
+                               const QHash<QString, float> *fadeOpacity, const float *pulsePhase,
+                               QObject *parent = nullptr)
+        : QStyledItemDelegate(parent), m_status(status), m_fadeOpacity(fadeOpacity), m_pulsePhase(pulsePhase) {}
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
         QStyledItemDelegate::paint(painter, option, index);
@@ -60,9 +55,9 @@ public:
         }
         }
 
-        const QSize iconSz  = option.decorationSize;
-        const int   iLeft   = option.rect.left() + (option.rect.width()  - iconSz.width())  / 2;
-        const int   iTop    = option.rect.top()  + (option.rect.height() - iconSz.height()) / 2;
+        const QSize iconSz = option.decorationSize;
+        const int   iLeft  = option.rect.left() + (option.rect.width() - iconSz.width()) / 2;
+        const int   iTop   = option.rect.top() + (option.rect.height() - iconSz.height()) / 2;
         const QRect iconRect(iLeft, iTop, iconSz.width(), iconSz.height());
 
         painter->save();
@@ -105,9 +100,8 @@ GridView::GridView(QWidget *parent) : QWidget(parent) {
     m_list->setFocusPolicy(Qt::StrongFocus);
     m_list->setFocusProxy(m_list);
 
-    connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
-        emit photoActivated(item->data(Qt::UserRole).toString());
-    });
+    connect(m_list, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *item) { emit photoActivated(item->data(Qt::UserRole).toString()); });
 
     connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *current, QListWidgetItem *) {
         emit currentPathChanged(current ? current->data(Qt::UserRole).toString() : QString());
@@ -154,10 +148,18 @@ void GridView::setMark(const QString &path, Mark m) {
         QListWidgetItem *item = m_list->item(i);
         if (item->data(Qt::UserRole).toString() == path) {
             switch (m) {
-            case Mark::Accept:  item->setBackground(QColor(144, 238, 144, 100)); break;
-            case Mark::Refine:  item->setBackground(QColor(240, 210, 120, 110)); break;
-            case Mark::Decline: item->setBackground(QColor(255, 127, 127, 100)); break;
-            case Mark::None:    item->setBackground(QColor(255, 255, 255,   0)); break;
+            case Mark::Accept:
+                item->setBackground(QColor(144, 238, 144, 100));
+                break;
+            case Mark::Refine:
+                item->setBackground(QColor(240, 210, 120, 110));
+                break;
+            case Mark::Decline:
+                item->setBackground(QColor(255, 127, 127, 100));
+                break;
+            case Mark::None:
+                item->setBackground(QColor(255, 255, 255, 0));
+                break;
             }
             break;
         }
@@ -207,14 +209,12 @@ void GridView::onAnimTick() {
 
     for (auto it = m_fadeOpacity.begin(); it != m_fadeOpacity.end();) {
         it.value() -= 0.04f; // fade over ~25 ticks ≈ 825 ms
-        if (it.value() <= 0.0f)
-            it = m_fadeOpacity.erase(it);
-        else
-            ++it;
+        if (it.value() <= 0.0f) it = m_fadeOpacity.erase(it);
+        else ++it;
     }
 
     const bool hasProofing = std::any_of(m_proofStatus.cbegin(), m_proofStatus.cend(),
-        [](ProofStatus s) { return s == ProofStatus::Proofing; });
+                                         [](ProofStatus s) { return s == ProofStatus::Proofing; });
 
     if (!hasProofing && m_fadeOpacity.isEmpty()) m_animTimer->stop();
 
@@ -249,14 +249,9 @@ void GridView::keyPressEvent(QKeyEvent *event) {
         event->accept();
     };
 
-    if (event->key() == Qt::Key_A)
-        applyMark(Mark::Accept);
-    else if (event->key() == Qt::Key_R)
-        applyMark(Mark::Refine);
-    else if (event->key() == Qt::Key_D)
-        applyMark(Mark::Decline);
-    else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
-        emit photoActivated(currentPath);
-    else
-        QWidget::keyPressEvent(event);
+    if (event->key() == Qt::Key_A) applyMark(Mark::Accept);
+    else if (event->key() == Qt::Key_R) applyMark(Mark::Refine);
+    else if (event->key() == Qt::Key_D) applyMark(Mark::Decline);
+    else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) emit photoActivated(currentPath);
+    else QWidget::keyPressEvent(event);
 }
