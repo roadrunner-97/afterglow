@@ -3,9 +3,12 @@
 
 #include <QMainWindow>
 #include <QImage>
+#include <QRectF>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QHash>
 #include <memory>
+#include <cstdint>
 #include <optional>
 #include "EffectManager.h"
 #include "ExportOptions.h"
@@ -53,7 +56,7 @@ private slots:
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result, QPoint offset);
     void onProcessingStarted();
-    void onExportComplete(QImage result, QString destinationPath);
+    void onExportComplete(uint64_t requestId, QImage result, QString destinationPath);
     void onPhotoActivated(const QString &path);
     void onDevelopRequested();
     void onLoupeNavigate(int direction);
@@ -134,11 +137,15 @@ private:
     // previously opened photo can't bleed onto the next one.
     SettingsImporter::Settings m_defaults;
 
-    // Set by saveImage() before kicking off the async export, consumed (and
-    // cleared) by onExportComplete().  std::nullopt means "no options" — that
-    // path is reserved for saveTestCase(), which writes a fixed PNG and wants
-    // the default QImage::save() behaviour.
-    std::optional<ExportOptions::Options> m_pendingExportOpts;
+    struct CropSnapshot {
+        QRectF rect;
+        float  angle = 0.0f;
+    };
+    struct PendingExport {
+        std::optional<ExportOptions::Options> options;
+        std::optional<CropSnapshot>           crop;
+    };
+    QHash<uint64_t, PendingExport> m_pendingExports;
 
     bool m_beforeViewActive = false;
 };

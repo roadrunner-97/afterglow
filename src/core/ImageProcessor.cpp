@@ -73,13 +73,14 @@ void ImageProcessor::processImageAsync(const QImage &originalImage, const Effect
     }));
 }
 
-void ImageProcessor::exportImageAsync(const QImage &originalImage, const EffectManager &effects,
-                                      QString destinationPath) {
-    QVector<GpuPipelineCall> calls = buildGpuCalls(effects);
+uint64_t ImageProcessor::exportImageAsync(const QImage &originalImage, const EffectManager &effects,
+                                          QString destinationPath) {
+    QVector<GpuPipelineCall> calls     = buildGpuCalls(effects);
+    const uint64_t           requestId = ++m_nextExportRequestId;
 
     auto *watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, destinationPath]() {
-        emit exportComplete(watcher->result(), destinationPath);
+    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, requestId, destinationPath]() {
+        emit exportComplete(requestId, watcher->result(), destinationPath);
         watcher->deleteLater();
     });
 
@@ -90,4 +91,5 @@ void ImageProcessor::exportImageAsync(const QImage &originalImage, const EffectM
         // needs the pixels.
         return pipeline->run(image, calls, {}, RunMode::Commit).image;
     }));
+    return requestId;
 }

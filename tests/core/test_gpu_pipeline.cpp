@@ -458,6 +458,24 @@ private slots:
         QVERIFY(!out2.isNull());
     }
 
+    void panZoom_changedParameters_doesNotReuseStaleCache() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage          input = makeSolid(64, 64, 64, 64, 64);
+        ViewportRequest vp    = fullViewport(input);
+
+        QMap<QString, QVariant> oldParams{{"brightness", 0}, {"contrast", 0}};
+        QImage oldOutput = m_pipeline.run(input, {call(&m_brightness, oldParams)}, vp, RunMode::Commit).image;
+
+        QMap<QString, QVariant> newParams{{"brightness", 50}, {"contrast", 0}};
+        QImage newOutput = m_pipeline.run(input, {call(&m_brightness, newParams)}, vp, RunMode::PanZoom).image;
+
+        QVERIFY(!oldOutput.isNull());
+        QVERIFY(!newOutput.isNull());
+        const auto *oldRow = reinterpret_cast<const QRgb *>(oldOutput.constScanLine(0));
+        const auto *newRow = reinterpret_cast<const QRgb *>(newOutput.constScanLine(0));
+        QVERIFY(qRed(newRow[0]) > qRed(oldRow[0]));
+    }
+
     // LiveDrag mode: bypasses the cache, runs the preview-sized pipeline
     // (decode+downsample srcBuf → workBuf, then effects at preview size).
     // Covers the preview fallback branch of GpuPipeline::run().

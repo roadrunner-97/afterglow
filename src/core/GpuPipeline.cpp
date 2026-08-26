@@ -220,6 +220,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         m_previewH       = 0;
         m_processedValid = false;
         m_processedBytes = 0;
+        m_processedCalls.clear();
         if (!initContext()) return {}; // GCOVR_EXCL_LINE
         m_revision = rev;
     }
@@ -300,7 +301,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         // ── PanZoom fast path ─────────────────────────────────────────────────
         // If the cache is valid the visible preview can be produced with a
         // single float4→float4 downsample plus pack+readback.  No effect work.
-        if (mode == RunMode::PanZoom && m_processedValid) {
+        if (mode == RunMode::PanZoom && m_processedValid && processedCacheMatches(calls)) {
             cl::Kernel &ds = m_downsampleKernelFloat4;
             ds.setArg(0, m_processedBuf);
             ds.setArg(1, m_workBuf);
@@ -342,6 +343,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
             }
             m_queue.finish();
             m_processedValid = true;
+            m_processedCalls = calls;
 
             // Downsample cache → workBuf at the visible-region dimensions.
             cl::Kernel &ds = m_downsampleKernelFloat4;
@@ -368,6 +370,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         // strength stays constant across zoom levels.  Invalidates the cache
         // since a new drag-state overrides the last committed frame.
         m_processedValid = false;
+        m_processedCalls.clear();
 
         cl::Kernel *dsKernel = nullptr;
         if (m_is16bit) dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
@@ -416,6 +419,14 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         return {};
     }
     // GCOVR_EXCL_STOP
+}
+
+bool GpuPipeline::processedCacheMatches(const QVector<GpuPipelineCall> &calls) const {
+    if (calls.size() != m_processedCalls.size()) return false;
+    for (qsizetype i = 0; i < calls.size(); ++i) {
+        if (calls[i].gpu != m_processedCalls[i].gpu || calls[i].params != m_processedCalls[i].params) return false;
+    }
+    return true;
 }
 
 bool GpuPipeline::decodeFullResLocked() {
@@ -537,6 +548,7 @@ void GpuPipeline::uploadImageLocked(const QImage &image) {
     m_previewW       = 0;
     m_previewH       = 0;
     m_processedValid = false; // new image content invalidates the cache
+    m_processedCalls.clear();
 
     try {
         m_srcBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, m_bufBytes, src.bits());

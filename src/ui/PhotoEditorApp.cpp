@@ -661,9 +661,11 @@ void PhotoEditorApp::saveImage() {
         return;
     }
 
-    m_lastDir           = opts.destinationDir;
-    m_pendingExportOpts = opts;
-    m_processor->exportImageAsync(m_originalImage, *m_effects, destPath);
+    m_lastDir = opts.destinationDir;
+    PendingExport pending{opts, std::nullopt};
+    if (auto *cs = m_effects->activeCropSource()) pending.crop = CropSnapshot{cs->userCropRect(), cs->userCropAngle()};
+    const uint64_t requestId = m_processor->exportImageAsync(m_originalImage, *m_effects, destPath);
+    m_pendingExports.insert(requestId, std::move(pending));
 }
 
 void PhotoEditorApp::importSettings() {
@@ -727,7 +729,11 @@ void PhotoEditorApp::saveTestCase() {
     // Reuse the normal export path: onExportComplete bakes crop + rotate and
     // writes the destination passed in here.  PNG keeps the rendered output
     // bit-exact for the SSIM check that test_golden does at runtime.
-    m_processor->exportImageAsync(m_originalImage, *m_effects, QDir(dir).filePath("expected.png"));
+    PendingExport pending;
+    if (auto *cs = m_effects->activeCropSource()) pending.crop = CropSnapshot{cs->userCropRect(), cs->userCropAngle()};
+    const uint64_t requestId =
+        m_processor->exportImageAsync(m_originalImage, *m_effects, QDir(dir).filePath("expected.png"));
+    m_pendingExports.insert(requestId, std::move(pending));
 }
 
 void PhotoEditorApp::exportSettings() {
@@ -755,12 +761,11 @@ void PhotoEditorApp::exportSettings() {
 // Bake the user's non-destructive crop + rotation into the exported QImage.
 // Pipeline output is still full-frame because crop/rotate is metadata; this
 // is the one place where those metadata choices become real pixels.
-static QImage applyCropAndRotate(const QImage &image, const ICropSource &cs) {
+static QImage applyCropAndRotate(const QImage &image, const QRectF &cropN, float angle) {
     if (image.isNull()) return image;
 
-    const QRectF cropN = cs.userCropRect();
-    const double cx    = cropN.center().x() * image.width();
-    const double cy    = cropN.center().y() * image.height();
+    const double cx = cropN.center().x() * image.width();
+    const double cy = cropN.center().y() * image.height();
     const QSize  dstSize(static_cast<int>(std::round(cropN.width() * image.width())),
                          static_cast<int>(std::round(cropN.height() * image.height())));
     if (dstSize.isEmpty()) return image;
@@ -770,7 +775,7 @@ static QImage applyCropAndRotate(const QImage &image, const ICropSource &cs) {
     // out to the centre of the destination canvas.
     QTransform t;
     t.translate(dstSize.width() * 0.5, dstSize.height() * 0.5);
-    t.rotate(-static_cast<double>(cs.userCropAngle()));
+    t.rotate(-static_cast<double>(angle));
     t.translate(-cx, -cy);
 
     QImage dst(dstSize, image.format());
@@ -783,16 +788,14 @@ static QImage applyCropAndRotate(const QImage &image, const ICropSource &cs) {
     return dst;
 }
 
-void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
-    // Take the pending options unconditionally so a failed/early-returning
-    // export doesn't leak state into the next one.
-    const auto opts = std::exchange(m_pendingExportOpts, std::nullopt);
+void PhotoEditorApp::onExportComplete(uint64_t requestId, QImage result, QString destinationPath) {
+    const PendingExport pending = m_pendingExports.take(requestId);
     if (destinationPath.isEmpty()) return;
     const QString path = destinationPath;
 
     if (!result.isNull()) {
-        if (auto *cs = m_effects->activeCropSource()) result = applyCropAndRotate(result, *cs);
-        if (opts) result = ExportResize::apply(result, opts->resize);
+        if (pending.crop) result = applyCropAndRotate(result, pending.crop->rect, pending.crop->angle);
+        if (pending.options) result = ExportResize::apply(result, pending.options->resize);
     }
 
     // chooseDestination() resolves opts.subfolder into the path but never
@@ -802,9 +805,10 @@ void PhotoEditorApp::onExportComplete(QImage result, QString destinationPath) {
 
     // With opts: explicit format hint + quality (saveImage path).
     // Without: legacy QImage::save behaviour, used by saveTestCase().
-    const bool ok = !result.isNull() && (opts ? result.save(path, ExportOptions::qImageFormatHint(opts->format),
-                                                            ExportOptions::qualityFor(*opts))
-                                              : result.save(path));
+    const bool ok = !result.isNull() &&
+                    (pending.options ? result.save(path, ExportOptions::qImageFormatHint(pending.options->format),
+                                                   ExportOptions::qualityFor(*pending.options))
+                                     : result.save(path));
 
     if (!ok) {
         QMessageBox::warning(this, "Save Failed",

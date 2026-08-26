@@ -91,6 +91,7 @@ private:
     bool decodeFullResLocked();
     // float4 → uint sRGB pack + readback from the given source buffer.
     QImage packAndReadbackLocked(cl::Buffer &src, int w, int h);
+    bool   processedCacheMatches(const QVector<GpuPipelineCall> &calls) const;
 
     std::mutex       m_mutex;
     cl::Context      m_context;
@@ -126,8 +127,9 @@ private:
 
     // Full-res cache state.  m_processedBytes tracks the current allocation so
     // we can reallocate when a new image of a different size is loaded.
-    bool   m_processedValid = false;
-    size_t m_processedBytes = 0;
+    bool                     m_processedValid = false;
+    size_t                   m_processedBytes = 0;
+    QVector<GpuPipelineCall> m_processedCalls;
 
     bool        m_available = false;
     int         m_revision  = -1;
