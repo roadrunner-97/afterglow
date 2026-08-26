@@ -19,8 +19,12 @@ public:
     // user has toggled to Camera JPEG view.  Pass a null QImage to clear.
     void setProofImage(QImage proof);
 
-    // Set the camera-embedded JPEG (shown as placeholder while proofing, or
-    // when the user activates the "Camera JPEG" toggle).
+    // Start displaying a different photo. Clears the previous proof and
+    // per-photo toggle state; placeholder may be a Gallery thumbnail.
+    void beginPhoto(QImage placeholder);
+
+    // Replace the placeholder with the decoded camera/full preview without
+    // clearing a proof that may already have arrived asynchronously.
     void setCameraJpegImage(QImage jpeg);
 
     // Show or hide the "Proofing…" overlay in the top-right of the image area.
@@ -41,6 +45,13 @@ public:
     // falls back to the camera JPEG (no pipeline edits applied) without
     // touching the user's persistent Camera-JPEG toggle.
     void setShowBefore(bool on);
+
+    bool isShowingProof() const {
+        return !m_proofImage.isNull() && m_image.cacheKey() == m_proofImage.cacheKey();
+    }
+    QSize displayedImageSize() const {
+        return m_image.size();
+    }
 
 signals:
     // Emitted when the user presses Enter or double-clicks the image —

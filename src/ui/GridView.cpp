@@ -141,6 +141,31 @@ void GridView::setThumbnail(const QString &path, const QImage &thumb) {
     }
 }
 
+QImage GridView::thumbnail(const QString &path) const {
+    for (int i = 0; i < m_list->count(); ++i) {
+        const QListWidgetItem *item = m_list->item(i);
+        if (item->data(Qt::UserRole).toString() == path) return item->icon().pixmap(m_list->iconSize()).toImage();
+    }
+    return {};
+}
+
+bool GridView::setCurrentPath(const QString &path) {
+    for (int i = 0; i < m_list->count(); ++i) {
+        QListWidgetItem *item = m_list->item(i);
+        if (item->data(Qt::UserRole).toString() == path) {
+            m_list->setCurrentItem(item);
+            m_list->scrollToItem(item);
+            return true;
+        }
+    }
+    return false;
+}
+
+QString GridView::currentPath() const {
+    const QListWidgetItem *item = m_list->currentItem();
+    return item ? item->data(Qt::UserRole).toString() : QString();
+}
+
 void GridView::setMark(const QString &path, Mark m) {
     m_marks[path] = m;
 

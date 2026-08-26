@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QCryptographicHash>
 
 ProofCache::ProofCache(QObject *parent) : QObject(parent) {}
 
@@ -21,9 +22,24 @@ QString ProofCache::sidecarPath(const QString &imagePath) {
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".yml");
 }
 
+QByteArray ProofCache::inputFingerprint(const QString &imagePath) {
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    const QFileInfo    sourceFi(imagePath);
+    hash.addData(imagePath.toUtf8());
+    hash.addData(QByteArray::number(sourceFi.size()));
+    hash.addData(QByteArray::number(sourceFi.lastModified().toMSecsSinceEpoch()));
+
+    QFile sidecar(sidecarPath(imagePath));
+    if (sidecar.open(QIODevice::ReadOnly)) hash.addData(sidecar.readAll());
+    return hash.result();
+}
+
 bool ProofCache::isProofed(const QString &imagePath) const {
     const QFileInfo proofFi(proofPath(imagePath));
     if (!proofFi.exists()) return false;
+
+    const QFileInfo sourceFi(imagePath);
+    if (sourceFi.exists() && proofFi.lastModified() < sourceFi.lastModified()) return false;
 
     const QFileInfo sidecarFi(sidecarPath(imagePath));
     if (!sidecarFi.exists()) return true; // no edits → always fresh
@@ -32,13 +48,16 @@ bool ProofCache::isProofed(const QString &imagePath) const {
 }
 
 QImage ProofCache::proof(const QString &imagePath) {
+    if (!isProofed(imagePath)) {
+        if (m_lruCache.remove(imagePath) > 0) m_lruOrder.removeOne(imagePath);
+        return {};
+    }
+
     auto it = m_lruCache.find(imagePath);
     if (it != m_lruCache.end()) {
         lruPromote(imagePath);
         return it.value();
     }
-
-    if (!isProofed(imagePath)) return {};
 
     QImage img(proofPath(imagePath));
     if (img.isNull()) return {};

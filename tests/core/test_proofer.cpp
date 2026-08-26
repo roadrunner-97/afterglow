@@ -87,6 +87,24 @@ private slots:
         QCOMPARE(p.pendingCount(), 3);
     }
 
+    void refresh_requeuesExactlyOnce() {
+        Proofer p(emptyMgr(), emptyDefaults(), m_cache);
+        p.pause();
+        p.setQueue({"a", "b"});
+        p.refresh("a");
+        p.refresh("a");
+        QCOMPARE(p.pendingCount(), 2);
+    }
+
+    void clear_invalidatesQueueBeforeReplacement() {
+        Proofer p(emptyMgr(), emptyDefaults(), m_cache);
+        p.pause();
+        p.setQueue({"old-a", "old-b"});
+        p.clear();
+        p.setQueue({"new"});
+        QCOMPARE(p.pendingCount(), 1);
+    }
+
     // ── clear ─────────────────────────────────────────────────────────────────
 
     void clear_emptiesQueue() {

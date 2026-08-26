@@ -1,5 +1,20 @@
 find_package(Qt6 COMPONENTS Test REQUIRED)
 
+add_executable(test_gallery_loupe
+    ui/test_gallery_loupe.cpp
+)
+target_link_libraries(test_gallery_loupe PRIVATE
+    photoeditor_ui photoeditor_core photoeditor_widgets
+    Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core Qt6::OpenGLWidgets OpenGL::GL
+)
+target_include_directories(test_gallery_loupe PRIVATE ${CMAKE_SOURCE_DIR}/src/ui)
+set_target_properties(test_gallery_loupe PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME GalleryLoupe COMMAND test_gallery_loupe)
+set_tests_properties(GalleryLoupe PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ---------------------------------------------------------------------------
 # EffectManager tests — no GPU, no display required (GUILESS)
 # ---------------------------------------------------------------------------

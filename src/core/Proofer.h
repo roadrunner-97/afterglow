@@ -5,6 +5,8 @@
 #include <QImage>
 #include <QString>
 #include <QStringList>
+#include <QHash>
+#include <cstdint>
 #include <memory>
 #include "EffectManager.h"
 #include "GpuPipeline.h"
@@ -36,6 +38,9 @@ public:
     // No-op if already at the head.
     void promote(const QString &path);
 
+    // Invalidate any in-flight result for path and queue a fresh proof.
+    void refresh(const QString &path);
+
     // Stop dispatching new jobs.  Any in-progress job runs to completion.
     void pause();
 
@@ -43,7 +48,8 @@ public:
     // non-empty and no job is currently running.
     void resume();
 
-    // Clear the queue.  Does not interrupt the currently-running job.
+    // Clear the queue. The current GPU job may finish, but its result is
+    // discarded through the queue generation check.
     void clear();
 
     // Number of photos waiting to be proofed (not counting the current job).
@@ -60,9 +66,11 @@ signals:
 private:
     void dispatchNext();
 
-    QStringList m_queue;
-    bool        m_paused = false;
-    bool        m_busy   = false;
+    QStringList              m_queue;
+    bool                     m_paused          = false;
+    bool                     m_busy            = false;
+    uint64_t                 m_queueGeneration = 0;
+    QHash<QString, uint64_t> m_pathGenerations;
 
     std::unique_ptr<EffectManager> m_effects;
     SettingsImporter::Settings     m_defaults;

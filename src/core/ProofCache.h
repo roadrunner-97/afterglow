@@ -6,12 +6,13 @@
 #include <QString>
 #include <QHash>
 #include <QList>
+#include <QByteArray>
 
 // On-disk and in-memory cache for rendered "proofs" — pipeline-processed
 // previews that reflect the current sidecar state.
 //
 // On disk:  <folder>/.afterglow/proofs/<filename>.jpg  (JPEG q=90)
-// Freshness: proof.mtime >= sidecar.mtime (or no sidecar exists yet).
+// Freshness: proof.mtime >= source and sidecar mtimes.
 //
 // In memory: LRU cache of the last 8 decoded QImages for instant round-trips.
 class ProofCache : public QObject {
@@ -25,8 +26,12 @@ public:
     // Returns the expected sidecar (.yml) path for a source image.
     static QString sidecarPath(const QString &imagePath);
 
-    // True if the proof file exists on disk and is at least as new as the
-    // sidecar.  If no sidecar exists the proof is always considered fresh.
+    // Fingerprint all inputs that determine a proof. Used to reject a render
+    // that finishes after its source image or sidecar changed.
+    static QByteArray inputFingerprint(const QString &imagePath);
+
+    // True if the proof file exists on disk and is at least as new as both
+    // the source image and sidecar.
     bool isProofed(const QString &imagePath) const;
 
     // Returns the cached proof (from in-memory LRU or disk).

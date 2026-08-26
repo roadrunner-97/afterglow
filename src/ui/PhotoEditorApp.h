@@ -9,6 +9,7 @@
 #include <QHash>
 #include <memory>
 #include <cstdint>
+#include <atomic>
 #include <optional>
 #include "EffectManager.h"
 #include "ExportOptions.h"
@@ -28,6 +29,7 @@ class QLabel;
 class QStackedWidget;
 class QActionGroup;
 class LoupeView;
+class QThreadPool;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -89,6 +91,7 @@ private:
     void    exitBeforeView();
     void    loadFolderIntoGrid(const QString &folder);
     void    loadFullImage(const QString &path);
+    void    loadLoupeImage(const QString &path);
     QString catalogPath(const QString &folder) const;
     void    readCatalog(const QString &folder);
     void    writeCatalog() const;
@@ -123,11 +126,15 @@ private:
     QLabel         *m_processingLabel = nullptr;
     QTimer         *m_resizeDebounce  = nullptr;
     QTimer         *m_panThrottle     = nullptr; // trailing edge of pan throttle
-    QElapsedTimer   m_lastPanDispatch;           // invalid until first dispatch
+    QThreadPool    *m_thumbnailPool   = nullptr;
+    QElapsedTimer   m_lastPanDispatch; // invalid until first dispatch
 
-    QString     m_currentFolder;
-    QStringList m_currentPaths;  // photos shown in the gallery, in display order
-    QString     m_developedPath; // path currently loaded in m_originalImage
+    QString                                m_currentFolder;
+    QStringList                            m_currentPaths;  // photos shown in the gallery, in display order
+    QString                                m_developedPath; // path currently loaded in m_originalImage
+    QString                                m_loupePath;     // path currently represented by LoupeView
+    uint64_t                               m_loupeLoadGeneration = 0;
+    std::shared_ptr<std::atomic<uint64_t>> m_thumbnailGeneration = std::make_shared<std::atomic<uint64_t>>(0);
 
     ProofCache *m_proofCache = nullptr;
     Proofer    *m_proofer    = nullptr;

@@ -61,6 +61,7 @@ Proofer::Proofer(std::unique_ptr<EffectManager> effects, SettingsImporter::Setti
 Proofer::~Proofer() = default;
 
 void Proofer::setQueue(QStringList paths) {
+    ++m_queueGeneration;
     m_queue = std::move(paths);
     dispatchNext();
 }
@@ -68,6 +69,13 @@ void Proofer::setQueue(QStringList paths) {
 void Proofer::promote(const QString &path) {
     if (!m_queue.isEmpty() && m_queue.first() == path) return;
     m_queue.removeOne(path); // no-op if absent; move to front if present
+    m_queue.prepend(path);
+    dispatchNext();
+}
+
+void Proofer::refresh(const QString &path) {
+    ++m_pathGenerations[path];
+    m_queue.removeAll(path);
     m_queue.prepend(path);
     dispatchNext();
 }
@@ -82,14 +90,18 @@ void Proofer::resume() {
 }
 
 void Proofer::clear() {
+    ++m_queueGeneration;
     m_queue.clear();
 }
 
 void Proofer::dispatchNext() {
     if (m_paused || m_busy || m_queue.isEmpty()) return;
 
-    const QString path = m_queue.takeFirst();
-    m_busy             = true;
+    const QString    path             = m_queue.takeFirst();
+    const uint64_t   queueGeneration  = m_queueGeneration;
+    const uint64_t   pathGeneration   = m_pathGenerations.value(path);
+    const QByteArray inputFingerprint = ProofCache::inputFingerprint(path);
+    m_busy                            = true;
     emit proofStarted(path);
 
     SettingsImporter::applyToManager(m_defaults, *m_effects);
@@ -104,18 +116,25 @@ void Proofer::dispatchNext() {
     QVector<GpuPipelineCall> calls = buildGpuCalls(*m_effects);
 
     auto *watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path]() {
-        QImage result = watcher->result();
-        if (!result.isNull()) {
-            m_cache->store(path, result);
-            emit proofFinished(path, result);
-        } else {
-            emit proofFailed(path, QString("Pipeline returned null for %1").arg(path));
-        }
-        m_busy = false;
-        watcher->deleteLater();
-        dispatchNext();
-    });
+    connect(watcher, &QFutureWatcher<QImage>::finished, this,
+            [this, watcher, path, queueGeneration, pathGeneration, inputFingerprint]() {
+                QImage     result       = watcher->result();
+                const bool currentQueue = queueGeneration == m_queueGeneration;
+                const bool currentPath  = pathGeneration == m_pathGenerations.value(path);
+                const bool currentInput = inputFingerprint == ProofCache::inputFingerprint(path);
+                if (!result.isNull() && currentQueue && currentPath && currentInput) {
+                    m_cache->store(path, result);
+                    emit proofFinished(path, result);
+                } else if (result.isNull() && currentQueue && currentPath) {
+                    emit proofFailed(path, QString("Pipeline returned null for %1").arg(path));
+                } else if (currentQueue && (!currentPath || !currentInput)) {
+                    m_queue.removeAll(path);
+                    m_queue.prepend(path);
+                }
+                m_busy = false;
+                watcher->deleteLater();
+                dispatchNext();
+            });
 
     const bool isRaw    = RawLoader::isRawFile(path);
     auto       pipeline = m_pipeline;

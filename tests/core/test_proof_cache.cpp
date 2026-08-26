@@ -168,9 +168,7 @@ private slots:
         QVERIFY(!cache.proof(m_img).isNull());
     }
 
-    void proof_hotCacheHit_survivesRemovedDiskFile() {
-        // Store puts the image in both disk and LRU.  Remove the disk copy
-        // without calling invalidate() — the LRU entry must still be returned.
+    void proof_hotCacheHit_isRejectedWhenDiskFileDisappears() {
         QImage img(8, 8, QImage::Format_RGB32);
         img.fill(qRgb(42, 42, 42));
 
@@ -178,7 +176,31 @@ private slots:
         cache.store(m_img, img);
         QFile::remove(ProofCache::proofPath(m_img));
 
-        QVERIFY(!cache.proof(m_img).isNull());
+        QVERIFY(cache.proof(m_img).isNull());
+    }
+
+    void isProofed_falseWhenSourceIsNewerThanProof() {
+        const QString proof = ProofCache::proofPath(m_img);
+        QVERIFY(writeJpeg(proof));
+
+        const QDateTime proofMtime  = QFileInfo(proof).lastModified();
+        const QDateTime sourceMtime = proofMtime.addSecs(1);
+        QFile           source(m_img);
+        QVERIFY(source.open(QIODevice::ReadWrite));
+        QVERIFY(source.setFileTime(sourceMtime, QFileDevice::FileModificationTime));
+        source.close();
+
+        ProofCache cache;
+        QVERIFY(!cache.isProofed(m_img));
+    }
+
+    void inputFingerprint_changesWithSidecarContents() {
+        const QByteArray before = ProofCache::inputFingerprint(m_img);
+        QFile            sidecar(ProofCache::sidecarPath(m_img));
+        QVERIFY(sidecar.open(QIODevice::WriteOnly));
+        QCOMPARE(sidecar.write("effects: changed\n"), qint64(17));
+        sidecar.close();
+        QVERIFY(ProofCache::inputFingerprint(m_img) != before);
     }
 
     // ── invalidate ────────────────────────────────────────────────────────────

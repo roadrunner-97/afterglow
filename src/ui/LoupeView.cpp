@@ -195,9 +195,8 @@ void LoupeView::setProofImage(QImage proof) {
     if (!m_userForcedCameraJpeg) updateDisplayedImage();
 }
 
-void LoupeView::setCameraJpegImage(QImage jpeg) {
-    m_cameraJpegImage = jpeg;
-    // Reset per-photo toggle state when a new photo is loaded.
+void LoupeView::beginPhoto(QImage placeholder) {
+    m_cameraJpegImage      = std::move(placeholder);
     m_userForcedCameraJpeg = false;
     {
         QSignalBlocker sb(m_btnCameraJpeg);
@@ -205,6 +204,11 @@ void LoupeView::setCameraJpegImage(QImage jpeg) {
     }
     m_proofImage = {}; // clear stale proof from previous photo
     updateDisplayedImage();
+}
+
+void LoupeView::setCameraJpegImage(QImage jpeg) {
+    m_cameraJpegImage = std::move(jpeg);
+    if (m_proofImage.isNull() || m_userForcedCameraJpeg || m_showBefore) updateDisplayedImage();
 }
 
 void LoupeView::setProofingState(bool proofing) {

@@ -27,7 +27,12 @@ public:
 
     // Update the thumbnail for a single photo. Caller decodes off-thread
     // and pushes results in via this method (safe on the GUI thread).
-    void setThumbnail(const QString &path, const QImage &thumb);
+    void   setThumbnail(const QString &path, const QImage &thumb);
+    QImage thumbnail(const QString &path) const;
+
+    // Keep the visible Gallery selection synchronized with Loupe navigation.
+    bool    setCurrentPath(const QString &path);
+    QString currentPath() const;
 
     // Set/get a photo's triage mark. Caller persists this — GridView only
     // displays it (colored background).
