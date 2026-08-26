@@ -18,6 +18,7 @@
 #include <QTransform>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QSplitter>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStackedWidget>
@@ -268,17 +269,17 @@ void PhotoEditorApp::setupUI() {
     m_stack->addWidget(m_loupeView);
 
     // ── Develop page (existing editor: viewport + right panel) ─────────────
-    QWidget     *develop    = new QWidget();
-    QHBoxLayout *mainLayout = new QHBoxLayout(develop);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    QSplitter *develop = new QSplitter(Qt::Horizontal);
+    develop->setContentsMargins(0, 0, 0, 0);
+    develop->setHandleWidth(4);
 
     // ── Left panel (metadata) ──────────────────────────────────────────────
     QWidget     *leftPanel  = new QWidget();
     QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(8, 8, 8, 8);
     leftLayout->setSpacing(0);
-    leftPanel->setFixedWidth(fontMetrics().averageCharWidth() * 28);
+    leftPanel->setMinimumWidth(fontMetrics().averageCharWidth() * 20);
+    leftPanel->setMaximumWidth(fontMetrics().averageCharWidth() * 50);
 
     m_metadataTray = new MetadataTray();
     leftLayout->addWidget(m_metadataTray);
@@ -290,11 +291,11 @@ void PhotoEditorApp::setupUI() {
     m_historyTray = new HistoryTray();
     leftLayout->addWidget(m_historyTray, 1);
 
-    mainLayout->addWidget(leftPanel);
+    develop->addWidget(leftPanel);
 
     m_viewport = new ViewportWidget();
     connect(m_viewport, &ViewportWidget::viewportChanged, this, &PhotoEditorApp::triggerViewportUpdate);
-    mainLayout->addWidget(m_viewport, 3);
+    develop->addWidget(m_viewport);
 
     connect(m_history, &UndoHistory::historyChanged, this, &PhotoEditorApp::refreshHistoryTray);
     connect(m_historyTray, &HistoryTray::rowActivated, this, [this](int index) {
@@ -322,10 +323,7 @@ void PhotoEditorApp::setupUI() {
     });
 
     QWidget *rightPanel = new QWidget();
-    // Width scales with the user's font / DPI: ParamSlider rows need room for
-    // a label, slider track, and spinbox without wrapping.  Empirically ~36
-    // characters of the body font fits the widest control we ship.
-    rightPanel->setFixedWidth(fontMetrics().averageCharWidth() * 36);
+    rightPanel->setMinimumWidth(fontMetrics().averageCharWidth() * 24);
     QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(8, 8, 8, 8);
     rightLayout->setSpacing(6);
@@ -350,7 +348,12 @@ void PhotoEditorApp::setupUI() {
     effectsScroll->setWidget(effectsContainer);
     rightLayout->addWidget(effectsScroll, 1);
 
-    mainLayout->addWidget(rightPanel);
+    develop->addWidget(rightPanel);
+
+    develop->setStretchFactor(0, 0);
+    develop->setStretchFactor(1, 1);
+    develop->setStretchFactor(2, 0);
+
     m_stack->addWidget(develop);
 
     setMode(Mode::Gallery);

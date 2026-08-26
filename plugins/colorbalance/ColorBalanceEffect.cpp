@@ -231,6 +231,7 @@ bool ColorBalanceEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl
     m_kernelLinear.setArg(9, a.hR);
     m_kernelLinear.setArg(10, a.hG);
     m_kernelLinear.setArg(11, a.hB);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }

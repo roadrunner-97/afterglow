@@ -103,7 +103,8 @@ bool SaturationEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::
     m_kernelLinear.setArg(2, h);
     m_kernelLinear.setArg(3, saturationValue);
     m_kernelLinear.setArg(4, vibrancyValue);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }
 

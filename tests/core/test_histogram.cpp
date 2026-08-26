@@ -65,7 +65,8 @@ private slots:
         for (std::size_t i = 0; i < 256; ++i)
             if (bins[i] > bins[maxBin]) maxBin = i;
 
-        QVERIFY2(maxBin >= 126 && maxBin <= 130, qPrintable(QString("maxBin=%1 expected ~128").arg(static_cast<int>(maxBin))));
+        QVERIFY2(maxBin >= 126 && maxBin <= 130,
+                 qPrintable(QString("maxBin=%1 expected ~128").arg(static_cast<int>(maxBin))));
         QCOMPARE(bins[maxBin], uint32_t(16 * 16));
     }
 

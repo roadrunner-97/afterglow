@@ -44,7 +44,9 @@ void fill8bit(const QImage &img, std::vector<uint32_t> &bins) {
         const auto *row = reinterpret_cast<const QRgb *>(img.constScanLine(y));
         for (int x = 0; x < w; ++x) {
             QRgb  px  = row[x];
-            float lin = kRLum * lut[static_cast<std::size_t>(qRed(px))] + kGLum * lut[static_cast<std::size_t>(qGreen(px))] + kBLum * lut[static_cast<std::size_t>(qBlue(px))];
+            float lin = kRLum * lut[static_cast<std::size_t>(qRed(px))] +
+                        kGLum * lut[static_cast<std::size_t>(qGreen(px))] +
+                        kBLum * lut[static_cast<std::size_t>(qBlue(px))];
             float L   = linearToSrgb(lin);
             int   bin = static_cast<int>(L * 256.0f);
             if (bin < 0) bin = 0;

@@ -81,7 +81,8 @@ bool HotPixelEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Bu
     m_kernelLinear.setArg(3, h);
     m_kernelLinear.setArg(4, threshold);
 
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     // Copy aux → buf so downstream effects read corrected pixels from buf.
     const size_t bufBytes = static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_float4);
     queue.enqueueCopyBuffer(aux, buf, 0, 0, bufBytes);

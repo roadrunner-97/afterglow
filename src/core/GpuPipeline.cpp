@@ -313,7 +313,8 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
             ds.setArg(8, clipY0);
             ds.setArg(9, clipX1);
             ds.setArg(10, clipY1);
-            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
+            m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
+                                         cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
             return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
         }
 
@@ -355,7 +356,8 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
             ds.setArg(8, clipY0);
             ds.setArg(9, clipX1);
             ds.setArg(10, clipY1);
-            m_queue.enqueueNDRangeKernel(ds, cl::NullRange, cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
+            m_queue.enqueueNDRangeKernel(ds, cl::NullRange,
+                                         cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
 
             return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
         }
@@ -382,7 +384,8 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         dsKernel->setArg(8, clipY0);
         dsKernel->setArg(9, clipX1);
         dsKernel->setArg(10, clipY1);
-        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange, cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
+        m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange,
+                                     cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
         m_queue.finish();
 
         const float srcPixelsPerPreviewPixel = (clipX1 - clipX0) / static_cast<float>(imgW);
@@ -433,7 +436,8 @@ bool GpuPipeline::decodeFullResLocked() {
     k->setArg(2, m_width);
     k->setArg(3, m_height);
     k->setArg(4, m_stride);
-    m_queue.enqueueNDRangeKernel(*k, cl::NullRange, cl::NDRange(static_cast<size_t>(m_width), static_cast<size_t>(m_height)));
+    m_queue.enqueueNDRangeKernel(*k, cl::NullRange,
+                                 cl::NDRange(static_cast<size_t>(m_width), static_cast<size_t>(m_height)));
     m_queue.finish();
     return true;
 }
@@ -443,10 +447,12 @@ QImage GpuPipeline::packAndReadbackLocked(cl::Buffer &src, int w, int h) {
     m_packKernel.setArg(1, m_packedBuf);
     m_packKernel.setArg(2, w);
     m_packKernel.setArg(3, h);
-    m_queue.enqueueNDRangeKernel(m_packKernel, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)));
+    m_queue.enqueueNDRangeKernel(m_packKernel, cl::NullRange,
+                                 cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)));
 
     QImage result(w, h, QImage::Format_RGB32);
-    m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0, static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_uint), result.bits());
+    m_queue.enqueueReadBuffer(m_packedBuf, CL_TRUE, 0,
+                              static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_uint), result.bits());
     return result;
 }
 

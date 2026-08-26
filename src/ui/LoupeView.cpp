@@ -295,9 +295,14 @@ void LoupeView::clampCentre() {
     // Compute the range of valid centres such that the scaled image stays
     // visible. If the scaled image is smaller than the image area, allow it
     // to be centred. Otherwise, clamp to prevent panning it entirely out.
-    const float maxCentreX = (scaledWidth >= static_cast<float>(r.width())) ? (1.0f - static_cast<float>(r.width()) / (2.0f * scale * static_cast<float>(m_image.width()))) : 0.5f;
+    const float maxCentreX =
+        (scaledWidth >= static_cast<float>(r.width()))
+            ? (1.0f - static_cast<float>(r.width()) / (2.0f * scale * static_cast<float>(m_image.width())))
+            : 0.5f;
     const float maxCentreY =
-        (scaledHeight >= static_cast<float>(r.height())) ? (1.0f - static_cast<float>(r.height()) / (2.0f * scale * static_cast<float>(m_image.height()))) : 0.5f;
+        (scaledHeight >= static_cast<float>(r.height()))
+            ? (1.0f - static_cast<float>(r.height()) / (2.0f * scale * static_cast<float>(m_image.height())))
+            : 0.5f;
     const float minCentreX = 1.0f - maxCentreX;
     const float minCentreY = 1.0f - maxCentreY;
 

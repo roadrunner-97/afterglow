@@ -179,7 +179,7 @@ protected:
                     float inL    = cpuLinearToSrgb(cpuSrgbToLinear(xL) * invGlobalFac);
                     inL          = std::max(0.0f, std::min(1.0f, inL));
                     int   srcBin = std::max(0, std::min(nBins - 1, int(inL * float(nBins))));
-                    float hN     = std::log1p(static_cast<float>(m_histogram[static_cast<std::size_t>(srcBin)])) * invLogPk;
+                    float hN = std::log1p(static_cast<float>(m_histogram[static_cast<std::size_t>(srcBin)])) * invLogPk;
                     hist << toScreen(xL, hN);
                 }
                 hist << toScreen(1.0f, 0.0f);
@@ -656,6 +656,7 @@ bool ExposureEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Bu
     m_kernelLinear.setArg(5, shadowsEv);
     m_kernelLinear.setArg(6, highlightsEv);
     m_kernelLinear.setArg(7, whitesEv);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }

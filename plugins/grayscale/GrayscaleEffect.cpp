@@ -48,7 +48,8 @@ bool GrayscaleEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::B
     m_kernelLinear.setArg(0, buf);
     m_kernelLinear.setArg(1, w);
     m_kernelLinear.setArg(2, h);
-    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange, cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
+    queue.enqueueNDRangeKernel(m_kernelLinear, cl::NullRange,
+                               cl::NDRange(static_cast<size_t>(w), static_cast<size_t>(h)), cl::NullRange);
     return true;
 }
 
