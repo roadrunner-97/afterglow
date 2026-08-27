@@ -92,6 +92,8 @@ set_target_properties(photoeditor_widgets PROPERTIES AUTOMOC ON)
 # ============================================================================
 
 add_library(photoeditor_core STATIC
+    src/core/CachePurger.cpp
+    src/core/CachePurger.h
     src/core/EffectManager.cpp
     src/core/EffectManager.h
     src/core/ImageProcessor.cpp

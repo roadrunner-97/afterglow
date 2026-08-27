@@ -1,5 +1,13 @@
 find_package(Qt6 COMPONENTS Test REQUIRED)
 
+add_executable(test_cache_purger core/test_cache_purger.cpp)
+target_link_libraries(test_cache_purger PRIVATE photoeditor_core Qt6::Test Qt6::Core)
+set_target_properties(test_cache_purger PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME CachePurger COMMAND test_cache_purger)
+
 add_executable(test_gallery_loupe
     ui/test_gallery_loupe.cpp
 )

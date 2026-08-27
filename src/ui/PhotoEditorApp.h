@@ -54,6 +54,7 @@ private slots:
     void exportSettings();
     void importSettings();
     void saveTestCase();
+    void purgeCaches();
     void onParametersChanged();
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result, QPoint offset);
@@ -90,6 +91,7 @@ private:
     void    enterBeforeView();
     void    exitBeforeView();
     void    loadFolderIntoGrid(const QString &folder);
+    void    scheduleThumbnails(const QStringList &paths, const QString &folder);
     void    loadFullImage(const QString &path);
     void    loadLoupeImage(const QString &path);
     QString catalogPath(const QString &folder) const;

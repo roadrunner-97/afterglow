@@ -1,6 +1,7 @@
 #include "PhotoEditorApp.h"
 #include "ExportDialog.h"
 #include "HistorySerializer.h"
+#include "CachePurger.h"
 #include "ImageMetadata.h"
 #include "ExportPath.h"
 #include "ExportResize.h"
@@ -471,6 +472,10 @@ void PhotoEditorApp::setupMenuBar() {
 
     QAction *testCaseAct = debugMenu->addAction("Save Test Case…");
     connect(testCaseAct, &QAction::triggered, this, &PhotoEditorApp::saveTestCase);
+
+    debugMenu->addSeparator();
+    QAction *purgeCachesAct = debugMenu->addAction("Purge Photo Caches…");
+    connect(purgeCachesAct, &QAction::triggered, this, &PhotoEditorApp::purgeCaches);
 }
 
 void PhotoEditorApp::setupGpuSelector(QVBoxLayout *rightLayout) {
@@ -759,6 +764,56 @@ void PhotoEditorApp::saveTestCase() {
     m_pendingExports.insert(requestId, std::move(pending));
 }
 
+void PhotoEditorApp::purgeCaches() {
+    QString folder;
+    if (!m_currentImagePath.isEmpty()) folder = QFileInfo(m_currentImagePath).absolutePath();
+    else folder = m_currentFolder;
+    if (folder.isEmpty()) {
+        QMessageBox::information(this, "Purge Photo Caches", "Open a photo folder first.");
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this, "Purge Photo Caches",
+        QString("Remove generated thumbnails and rendered proof JPEGs from:\n%1\n\n"
+                "Source photos, edits, history, marks, and application settings will not be changed.")
+            .arg(folder));
+    if (answer != QMessageBox::Yes) return;
+
+    const CachePurger::Result result = CachePurger::purgePhotoCaches(folder);
+    if (!result.success) {
+        QMessageBox::warning(this, "Purge Failed", result.error);
+        return;
+    }
+
+    if (m_proofCache) m_proofCache->clear();
+    if (m_proofer) m_proofer->clear();
+
+    QStringList thumbnailsToRegenerate;
+    for (const QString &path : m_currentPaths) {
+        if (QFileInfo(path).absolutePath() == folder) {
+            m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
+            thumbnailsToRegenerate.append(path);
+        }
+    }
+    if (!thumbnailsToRegenerate.isEmpty()) scheduleThumbnails(thumbnailsToRegenerate, folder);
+
+    if (!m_loupePath.isEmpty() && QFileInfo(m_loupePath).absolutePath() == folder) {
+        m_loupeView->setProofImage({});
+        if (m_stack->currentWidget() == m_loupeView && m_proofer) {
+            m_loupeView->setProofingState(true);
+            m_proofer->promote(m_loupePath);
+        } else {
+            m_loupeView->setProofingState(false);
+        }
+    }
+
+    QMessageBox::information(
+        this, "Caches Purged",
+        QString("Removed %1 generated cache file(s). Thumbnail regeneration is running in the background.")
+            .arg(result.filesRemoved));
+}
+
 void PhotoEditorApp::exportSettings() {
     // Default the dump filename to <imagebasename>.yml next to the image.
     QString suggested;
@@ -1036,9 +1091,6 @@ static const QStringList &imageExtensions() {
 }
 
 void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
-    const uint64_t thumbnailGeneration = ++(*m_thumbnailGeneration);
-    m_thumbnailPool->clear();
-
     QStringList  allPaths;
     QDirIterator it(folder, QDir::Files | QDir::Readable, QDirIterator::NoIteratorFlags);
     while (it.hasNext()) {
@@ -1081,7 +1133,14 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
         m_proofer->setQueue(unproofed);
     }
 
-    // Decode thumbnails on a bounded, dedicated pool. Changing folders clears
+    scheduleThumbnails(paths, folder);
+}
+
+void PhotoEditorApp::scheduleThumbnails(const QStringList &paths, const QString &folder) {
+    const uint64_t thumbnailGeneration = ++(*m_thumbnailGeneration);
+    m_thumbnailPool->clear();
+
+    // Decode thumbnails on a bounded, dedicated pool. A new batch clears
     // queued work; generation checks cheaply cancel tasks already running.
     QPointer<PhotoEditorApp> self(this);
     const QString            tag        = folder;
