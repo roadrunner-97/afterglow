@@ -131,9 +131,9 @@ private:
     size_t                   m_processedBytes = 0;
     QVector<GpuPipelineCall> m_processedCalls;
 
-    bool        m_available = false;
-    int         m_revision  = -1;
-    const void *m_lastBits  = nullptr; // detect image changes between runs
+    bool   m_available    = false;
+    int    m_revision     = -1;
+    qint64 m_lastImageKey = 0; // QImage content identity; changes on detach/mutation
 
     // Tracks which IGpuEffect instances have had initGpuKernels() called for
     // the current context.  Cleared on device change so re-enabled effects

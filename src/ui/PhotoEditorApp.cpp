@@ -656,11 +656,11 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
 
     auto *watcher = new QFutureWatcher<std::vector<uint32_t>>(this);
     connect(watcher, &QFutureWatcher<std::vector<uint32_t>>::finished, this,
-            [this, watcher, expectedBits = img.constBits(), tempK = meta.colorTempK]() {
-                // Drop the result if the user opened a different image while we
-                // were computing.  constBits() identity is stable for the
-                // lifetime of m_originalImage's underlying data buffer.
-                if (m_originalImage.constBits() == expectedBits) {
+            [this, watcher, expectedImageKey = img.cacheKey(), tempK = meta.colorTempK]() {
+                // Drop the result if the user opened or mutated a different
+                // image while we were computing. Unlike a bits pointer, the
+                // cache key cannot alias a recycled allocation.
+                if (m_originalImage.cacheKey() == expectedImageKey) {
                     ImageMetadata fullMeta;
                     fullMeta.colorTempK         = tempK;
                     fullMeta.luminanceHistogram = watcher->result();

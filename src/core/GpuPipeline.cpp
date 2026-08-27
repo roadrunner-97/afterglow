@@ -213,8 +213,8 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
 
     const int rev = GpuDeviceRegistry::instance().revision();
     if (!m_available || m_revision != rev) {
-        m_available = false;
-        m_lastBits  = nullptr;
+        m_available    = false;
+        m_lastImageKey = 0;
         m_initializedEffects.clear();
         m_previewW       = 0;
         m_previewH       = 0;
@@ -237,10 +237,10 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         }
     }
 
-    // Also compare dimensions, because freed-then-reallocated QImage buffers
-    // can land at the same address.  The bits pointer alone isn't a reliable
-    // identity for the source image.
-    if (image.constBits() != m_lastBits || image.width() != m_width || image.height() != m_height)
+    // cacheKey() identifies the QImage data and changes when its pixels detach
+    // or are modified. A raw bits address can be recycled for an unrelated
+    // same-sized photo, which would otherwise leave stale pixels in m_srcBuf.
+    if (image.cacheKey() != m_lastImageKey || image.width() != m_width || image.height() != m_height)
         uploadImageLocked(image);
 
     if (!m_available) return {};
@@ -551,8 +551,8 @@ void GpuPipeline::uploadImageLocked(const QImage &image) {
     m_processedCalls.clear();
 
     try {
-        m_srcBuf   = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, m_bufBytes, src.bits());
-        m_lastBits = image.constBits();
+        m_srcBuf       = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, m_bufBytes, src.bits());
+        m_lastImageKey = image.cacheKey();
     }
     // GCOVR_EXCL_START
     catch (const cl::Error &e) {

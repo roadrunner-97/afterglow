@@ -135,6 +135,23 @@ private slots:
         QCOMPARE(out.height(), 64);
     }
 
+    void mutatedSameSizeImage_isReuploaded() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage          input = makeSolid(32, 32, 240, 10, 10);
+        ViewportRequest vp    = fullViewport(input);
+
+        const QImage redOutput = m_pipeline.run(input, {}, vp, RunMode::Commit).image;
+        input.fill(qRgb(10, 10, 240));
+        const QImage blueOutput = m_pipeline.run(input, {}, vp, RunMode::Commit).image;
+
+        QVERIFY(!redOutput.isNull());
+        QVERIFY(!blueOutput.isNull());
+        const QColor redPixel  = redOutput.pixelColor(0, 0);
+        const QColor bluePixel = blueOutput.pixelColor(0, 0);
+        QVERIFY(redPixel.red() > redPixel.blue());
+        QVERIFY(bluePixel.blue() > bluePixel.red());
+    }
+
     void pipeline_brightness() {
         if (!m_hasGpu) QSKIP("No GPU");
         QMap<QString, QVariant> p;
