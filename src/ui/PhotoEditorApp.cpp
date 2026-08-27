@@ -202,6 +202,7 @@ void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) 
 
     connect(m_proofer, &Proofer::proofFinished, this, [this](const QString &path, const QImage &proof) {
         m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
+        m_gridView->setThumbnail(path, proof);
         if (m_loupePath == path) {
             m_loupeView->setProofingState(false);
             m_loupeView->setProofImage(proof);
@@ -417,6 +418,7 @@ void PhotoEditorApp::setupMenuBar() {
             syncViewportRotation();
             triggerReprocess();
             writeSidecar();
+            refreshEditedState();
         }
         m_history->setApplying(false);
     });
@@ -432,6 +434,7 @@ void PhotoEditorApp::setupMenuBar() {
             syncViewportRotation();
             triggerReprocess();
             writeSidecar();
+            refreshEditedState();
         }
         m_history->setApplying(false);
     });
@@ -453,6 +456,7 @@ void PhotoEditorApp::setupMenuBar() {
             triggerReprocess();
             writeSidecar();
             m_history->recordFromCurrent(currentSnapshot());
+            refreshEditedState();
         });
     }
 
@@ -641,6 +645,7 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     } else {
         m_history->seed(currentSnapshot());
     }
+    refreshEditedState();
 
     m_metadataTray->setInfo(buildMetadataInfo(path, img.size(), meta));
 
@@ -723,6 +728,8 @@ void PhotoEditorApp::importSettings() {
     // definitive reprocess now that the full state is in place.
     triggerReprocess();
     writeSidecar();
+    m_history->recordFromCurrent(currentSnapshot());
+    refreshEditedState();
 }
 
 void PhotoEditorApp::saveTestCase() {
@@ -901,6 +908,7 @@ void PhotoEditorApp::onParametersChanged() {
     triggerReprocess();
     writeSidecar();
     m_history->recordFromCurrent(currentSnapshot());
+    refreshEditedState();
 }
 
 void PhotoEditorApp::onLiveParametersChanged() {
@@ -1118,6 +1126,14 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
     m_gridView->setPhotos(paths);
     readCatalog(folder);
 
+    for (const QString &path : paths) {
+        const QString historyPath = historySidecarPathFor(path);
+        if (!QFile::exists(historyPath)) continue;
+        HistorySerializer::HistoryData data;
+        QString                        error;
+        if (HistorySerializer::readYaml(historyPath, &data, &error)) m_gridView->setEdited(path, data.cursor > 0);
+    }
+
     if (m_proofCache && m_proofer) {
         m_proofCache->clear();
         m_proofer->clear();
@@ -1126,6 +1142,8 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
         for (const QString &path : paths) {
             if (m_proofCache->isProofed(path)) {
                 m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
+                const QImage proof = m_proofCache->proof(path);
+                if (!proof.isNull()) m_gridView->setThumbnail(path, proof);
             } else {
                 unproofed.append(path);
             }
@@ -1166,7 +1184,12 @@ void PhotoEditorApp::scheduleThumbnails(const QStringList &paths, const QString 
                     if (!self) return;
                     if (self->m_currentFolder != tag) return;
                     if (self->m_thumbnailGeneration->load(std::memory_order_relaxed) != thumbnailGeneration) return;
-                    self->m_gridView->setThumbnail(path, thumb);
+                    QImage displayed = thumb;
+                    if (self->m_proofCache) {
+                        const QImage proof = self->m_proofCache->proof(path);
+                        if (!proof.isNull()) displayed = proof;
+                    }
+                    self->m_gridView->setThumbnail(path, displayed);
                 },
                 Qt::QueuedConnection);
         });
@@ -1356,6 +1379,11 @@ void PhotoEditorApp::writeSidecar() {
         }
         if (m_proofer) m_proofer->refresh(m_currentImagePath);
     }
+}
+
+void PhotoEditorApp::refreshEditedState() {
+    if (m_currentImagePath.isEmpty() || !m_gridView) return;
+    m_gridView->setEdited(m_currentImagePath, m_history->cursor() > 0);
 }
 
 // ─── Per-folder catalog (triage marks) ──────────────────────────────────────

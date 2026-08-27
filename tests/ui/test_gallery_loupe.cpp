@@ -44,6 +44,18 @@ private slots:
         QVERIFY(grid.thumbnail("missing.jpg").isNull());
     }
 
+    void gridTracksEditedState() {
+        GridView grid;
+        grid.setPhotos({"one.jpg", "two.jpg"});
+
+        QVERIFY(!grid.isEdited("one.jpg"));
+        grid.setEdited("one.jpg", true);
+        QVERIFY(grid.isEdited("one.jpg"));
+        QVERIFY(!grid.isEdited("two.jpg"));
+        grid.setEdited("one.jpg", false);
+        QVERIFY(!grid.isEdited("one.jpg"));
+    }
+
     void lateCameraDecodeDoesNotReplaceProof() {
         LoupeView loupe;
         QImage    placeholder(40, 30, QImage::Format_RGB32);

@@ -23,10 +23,11 @@ constexpr float kPi = 3.14159265358979323846f;
 // Red = NotProofed, orange-pulsing = Proofing, orange-fading = Proofed.
 class ProofRingDelegate : public QStyledItemDelegate {
 public:
-    explicit ProofRingDelegate(const QHash<QString, GridView::ProofStatus> *status,
+    explicit ProofRingDelegate(const QHash<QString, GridView::ProofStatus> *status, const QHash<QString, bool> *edited,
                                const QHash<QString, float> *fadeOpacity, const float *pulsePhase,
                                QObject *parent = nullptr)
-        : QStyledItemDelegate(parent), m_status(status), m_fadeOpacity(fadeOpacity), m_pulsePhase(pulsePhase) {}
+        : QStyledItemDelegate(parent), m_status(status), m_edited(edited), m_fadeOpacity(fadeOpacity),
+          m_pulsePhase(pulsePhase) {}
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
         QStyledItemDelegate::paint(painter, option, index);
@@ -35,7 +36,8 @@ public:
         const GridView::ProofStatus status = m_status->value(path, GridView::ProofStatus::NotProofed);
 
         QColor baseColor;
-        float  opacity = 1.0f;
+        float  opacity  = 1.0f;
+        bool   drawRing = true;
 
         switch (status) {
         case GridView::ProofStatus::NotProofed:
@@ -48,7 +50,10 @@ public:
             break;
         case GridView::ProofStatus::Proofed: {
             float fade = m_fadeOpacity->value(path, 0.0f);
-            if (fade <= 0.0f) return;
+            if (fade <= 0.0f) {
+                drawRing = false;
+                break;
+            }
             baseColor = QColor(255, 155, 25);
             opacity   = fade;
             break;
@@ -63,27 +68,47 @@ public:
         painter->save();
         painter->setBrush(Qt::NoBrush);
 
-        // Glow halos: 3 progressively wider, progressively more transparent rects
-        const float glowAlphas[] = {0.35f, 0.18f, 0.08f};
-        for (int i = 0; i < 3; ++i) {
-            QColor g = baseColor;
-            g.setAlphaF(opacity * glowAlphas[i]);
-            painter->setPen(QPen(g, 1));
-            const int d = i + 1;
-            painter->drawRect(iconRect.adjusted(-d, -d, d, d));
+        if (drawRing) {
+            // Glow halos: 3 progressively wider, progressively more transparent rects
+            const float glowAlphas[] = {0.35f, 0.18f, 0.08f};
+            for (int i = 0; i < 3; ++i) {
+                QColor g = baseColor;
+                g.setAlphaF(opacity * glowAlphas[i]);
+                painter->setPen(QPen(g, 1));
+                const int d = i + 1;
+                painter->drawRect(iconRect.adjusted(-d, -d, d, d));
+            }
+
+            // Main ring
+            QColor ring = baseColor;
+            ring.setAlphaF(opacity * 0.90f);
+            painter->setPen(QPen(ring, 2));
+            painter->drawRect(iconRect.adjusted(-1, -1, 1, 1));
         }
 
-        // Main ring
-        QColor ring = baseColor;
-        ring.setAlphaF(opacity * 0.90f);
-        painter->setPen(QPen(ring, 2));
-        painter->drawRect(iconRect.adjusted(-1, -1, 1, 1));
+        if (m_edited->value(path, false)) {
+            const QString text = QStringLiteral("Edited");
+            QFont         font = painter->font();
+            font.setBold(true);
+            font.setPointSizeF(std::max(8.0, font.pointSizeF() - 1.0));
+            painter->setFont(font);
+            const QFontMetrics fm(font);
+            const QSize        badgeSize(fm.horizontalAdvance(text) + 12, fm.height() + 4);
+            const QRect badge(iconRect.right() - badgeSize.width() - 4, iconRect.bottom() - badgeSize.height() - 4,
+                              badgeSize.width(), badgeSize.height());
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(QColor(30, 30, 30, 210));
+            painter->drawRoundedRect(badge, 4, 4);
+            painter->setPen(Qt::white);
+            painter->drawText(badge, Qt::AlignCenter, text);
+        }
 
         painter->restore();
     }
 
 private:
     const QHash<QString, GridView::ProofStatus> *m_status;
+    const QHash<QString, bool>                  *m_edited;
     const QHash<QString, float>                 *m_fadeOpacity;
     const float                                 *m_pulsePhase;
 };
@@ -92,7 +117,7 @@ private:
 
 GridView::GridView(QWidget *parent) : QWidget(parent) {
     m_list = new QListWidget(this);
-    m_list->setItemDelegate(new ProofRingDelegate(&m_proofStatus, &m_fadeOpacity, &m_pulsePhase, this));
+    m_list->setItemDelegate(new ProofRingDelegate(&m_proofStatus, &m_edited, &m_fadeOpacity, &m_pulsePhase, this));
     m_list->setViewMode(QListView::IconMode);
     m_list->setResizeMode(QListView::Adjust);
     m_list->setMovement(QListView::Static);
@@ -120,6 +145,7 @@ void GridView::setPhotos(const QStringList &paths) {
     m_list->clear();
     m_marks.clear();
     m_proofStatus.clear();
+    m_edited.clear();
     m_fadeOpacity.clear();
 
     for (const QString &path : paths) {
@@ -213,6 +239,21 @@ void GridView::setProofStatus(const QString &path, ProofStatus status) {
             break;
         }
     }
+}
+
+void GridView::setEdited(const QString &path, bool edited) {
+    m_edited[path] = edited;
+    for (int i = 0; i < m_list->count(); ++i) {
+        QListWidgetItem *item = m_list->item(i);
+        if (item->data(Qt::UserRole).toString() == path) {
+            m_list->update(m_list->indexFromItem(item));
+            break;
+        }
+    }
+}
+
+bool GridView::isEdited(const QString &path) const {
+    return m_edited.value(path, false);
 }
 
 void GridView::applyIconSize() {

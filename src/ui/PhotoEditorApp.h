@@ -104,6 +104,7 @@ private:
     // committed edit so the sidecar tracks the live editor state.
     QString sidecarPathFor(const QString &imagePath) const;
     void    writeSidecar();
+    void    refreshEditedState();
     void    snapshotDefaults();
 
     MetadataTray      *m_metadataTray = nullptr;

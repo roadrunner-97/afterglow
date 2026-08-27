@@ -42,6 +42,11 @@ public:
     // Update the proof-status ring for a single photo.
     void setProofStatus(const QString &path, ProofStatus status);
 
+    // Show whether a photo has committed Develop adjustments. The delegate
+    // renders a persistent "Edited" badge independently of transient proofing.
+    void setEdited(const QString &path, bool edited);
+    bool isEdited(const QString &path) const;
+
 signals:
     void photoActivated(const QString &path);
     void markChanged(const QString &path, Mark m);
@@ -63,6 +68,7 @@ private:
 
     QHash<QString, Mark>        m_marks;
     QHash<QString, ProofStatus> m_proofStatus;
+    QHash<QString, bool>        m_edited;
     QHash<QString, float>       m_fadeOpacity;
 };
 
