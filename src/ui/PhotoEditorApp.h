@@ -55,6 +55,7 @@ private slots:
     void importSettings();
     void saveTestCase();
     void purgeCaches();
+    void rebuildEditedPreviews();
     void onParametersChanged();
     void onLiveParametersChanged();
     void onProcessingComplete(QImage result, QPoint offset);

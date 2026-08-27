@@ -207,11 +207,15 @@ void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) 
             m_loupeView->setProofingState(false);
             m_loupeView->setProofImage(proof);
         }
+        if (m_stack->currentIndex() == static_cast<int>(Mode::Develop) && m_proofer->pendingCount() == 0)
+            m_proofer->pause();
     });
 
     connect(m_proofer, &Proofer::proofFailed, this, [this](const QString &path, const QString & /*error*/) {
         m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
         if (m_loupePath == path) m_loupeView->setProofingState(false);
+        if (m_stack->currentIndex() == static_cast<int>(Mode::Develop) && m_proofer->pendingCount() == 0)
+            m_proofer->pause();
     });
 }
 
@@ -478,6 +482,9 @@ void PhotoEditorApp::setupMenuBar() {
     connect(testCaseAct, &QAction::triggered, this, &PhotoEditorApp::saveTestCase);
 
     debugMenu->addSeparator();
+    QAction *rebuildPreviewsAct = debugMenu->addAction("Rebuild Edited Previews");
+    connect(rebuildPreviewsAct, &QAction::triggered, this, &PhotoEditorApp::rebuildEditedPreviews);
+
     QAction *purgeCachesAct = debugMenu->addAction("Purge Photo Caches…");
     connect(purgeCachesAct, &QAction::triggered, this, &PhotoEditorApp::purgeCaches);
 }
@@ -821,6 +828,43 @@ void PhotoEditorApp::purgeCaches() {
         this, "Caches Purged",
         QString("Removed %1 generated cache file(s). Thumbnail regeneration is running in the background.")
             .arg(result.filesRemoved));
+}
+
+void PhotoEditorApp::rebuildEditedPreviews() {
+    if (!m_proofer || !m_proofCache) return;
+
+    // Include the current Develop photo even when it was opened directly
+    // rather than through Gallery, and persist its latest history first.
+    flushHistorySidecar();
+    QStringList candidates = m_currentPaths;
+    if (!m_developedPath.isEmpty() && !candidates.contains(m_developedPath)) candidates.append(m_developedPath);
+
+    QStringList editedPaths;
+    for (const QString &path : candidates) {
+        const QString historyPath = historySidecarPathFor(path);
+        if (!QFile::exists(historyPath)) continue;
+
+        HistorySerializer::HistoryData data;
+        QString                        error;
+        if (!HistorySerializer::readYaml(historyPath, &data, &error)) {
+            qWarning() << "History parse failed for" << historyPath << ":" << error;
+            continue;
+        }
+        if (data.cursor <= 0) continue;
+
+        m_proofCache->invalidate(path);
+        m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
+        editedPaths.append(path);
+        if (m_loupePath == path) {
+            m_loupeView->setProofImage({});
+            m_loupeView->setProofingState(true);
+        }
+    }
+
+    m_proofer->setQueue(editedPaths);
+    // This is an explicit developer command, so run even while Develop would
+    // normally keep automatic background proofing paused.
+    m_proofer->resume();
 }
 
 void PhotoEditorApp::exportSettings() {

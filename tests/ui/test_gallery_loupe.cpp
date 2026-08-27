@@ -125,6 +125,13 @@ private slots:
         QCOMPARE(stack->currentWidget(), galleryPage);
     }
 
+    void debugMenuExposesEditedPreviewRebuild() {
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        QAction       *rebuildAction = action(app, "Rebuild Edited Previews");
+        QVERIFY(rebuildAction);
+    }
+
     void leavingDevelopImmediatelyUsesLatestEditedRender() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
