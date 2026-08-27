@@ -38,9 +38,11 @@ public:
                     const QMap<QString, QVariant> &params) override;
 
     // ICropSource
-    QRectF userCropRect() const override;
-    float  userCropAngle() const override;
-    void   setSourceImageSize(QSize sz) override;
+    QRectF  userCropRect() const override;
+    float   userCropAngle() const override;
+    void    setSourceImageSize(QSize sz) override;
+    QString committedGeometryState() const override;
+    QImage  applyCommittedGeometry(const QImage &source) const override;
 
     // IInteractiveEffect
     void    paintOverlay(QPainter &painter, const ViewportTransform &vt) override;
@@ -93,6 +95,12 @@ private:
     ParamSlider *m_angleSlider      = nullptr;
     QPushButton *m_straightenButton = nullptr;
     QCheckBox   *m_lockAspectCheck  = nullptr;
+    QPushButton *m_applyButton      = nullptr;
+
+    // Compact JSON array of applied crop/rotate operations. Keeping this in
+    // the parameter map makes Apply participate in normal undo/redo and
+    // sidecar persistence without storing image buffers in history.
+    QString m_committedGeometry;
 
     // ── Drag state ─────────────────────────────────────────────────────────
     enum class DragKind {

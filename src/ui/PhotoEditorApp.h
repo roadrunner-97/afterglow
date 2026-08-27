@@ -83,6 +83,7 @@ private:
     void triggerViewportUpdate();  // PanZoom: throttled entry; coalesces mouseMove bursts
     void dispatchViewportUpdate(); // actual PanZoom dispatch — fires from throttle
     void syncViewportRotation();   // push the user's crop angle/centre to the viewport
+    void syncCommittedGeometry();  // rebuild working source after Apply/Undo/Redo
 
     void refreshHistoryTray();
 
@@ -119,6 +120,8 @@ private:
     EffectManager  *m_effects;
     ImageProcessor *m_processor;
     QImage          m_originalImage;
+    QImage          m_loadedImage; // immutable decoded source used to rebuild applied geometry
+    QString         m_committedGeometryState;
     QImage          m_latestDevelopPreview;
     QString         m_currentImagePath;
     QString         m_latestDevelopPreviewPath;

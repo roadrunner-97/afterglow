@@ -146,7 +146,8 @@ void Proofer::dispatchNext() {
         } else qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
     }
 
-    QVector<GpuPipelineCall> calls = buildGpuCalls(*m_effects, effectiveSettings);
+    QVector<GpuPipelineCall> calls      = buildGpuCalls(*m_effects, effectiveSettings);
+    ICropSource             *cropSource = m_effects->cropSource();
 
     auto *watcher = new QFutureWatcher<QImage>(this);
     connect(watcher, &QFutureWatcher<QImage>::finished, this,
@@ -171,7 +172,7 @@ void Proofer::dispatchNext() {
 
     const bool isRaw    = RawLoader::isRawFile(path);
     auto       pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run([path, calls = std::move(calls), pipeline, isRaw]() -> QImage {
+    watcher->setFuture(QtConcurrent::run([path, calls = std::move(calls), pipeline, isRaw, cropSource]() -> QImage {
         QImage img;
         if (isRaw) img = RawLoader::load(path);
         if (img.isNull()) {
@@ -180,6 +181,7 @@ void Proofer::dispatchNext() {
             img = reader.read();
         }
         if (img.isNull()) return {};
+        if (cropSource) img = cropSource->applyCommittedGeometry(img);
         QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
         if (result.isNull()) return {};
         return scaleProof(result);

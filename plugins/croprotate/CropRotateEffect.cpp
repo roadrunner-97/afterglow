@@ -8,7 +8,11 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPushButton>
+#include <QTransform>
 #include <QVBoxLayout>
 
 // OpenCL headers are required by IGpuEffect.h; the actual GPU functions are no-ops.
@@ -105,6 +109,33 @@ QWidget *CropRotateEffect::createControlsWidget() {
     });
     layout->addWidget(btnReset);
 
+    m_applyButton = new QPushButton("Apply Crop + Rotate");
+    m_applyButton->setToolTip("Use this crop as the new working image (Undo restores the previous image)");
+    connect(m_applyButton, &QPushButton::clicked, this, [this]() {
+        QJsonArray operations = QJsonDocument::fromJson(QByteArray::fromBase64(m_committedGeometry.toLatin1())).array();
+        QJsonObject op;
+        op["x"]     = m_crop.x();
+        op["y"]     = m_crop.y();
+        op["w"]     = m_crop.width();
+        op["h"]     = m_crop.height();
+        op["angle"] = static_cast<double>(userCropAngle());
+        operations.append(op);
+        m_committedGeometry = QString::fromLatin1(
+            QJsonDocument(operations).toJson(QJsonDocument::Compact).toBase64(QByteArray::OmitTrailingEquals));
+
+        m_crop           = QRectF(0.0, 0.0, 1.0, 1.0);
+        m_angleDeg       = 0.0f;
+        m_quarterTurns   = 0;
+        m_userManualCrop = false;
+        if (m_angleSlider) {
+            m_angleSlider->blockSignals(true);
+            m_angleSlider->setValue(0.0);
+            m_angleSlider->blockSignals(false);
+        }
+        emit parametersChanged();
+    });
+    layout->addWidget(m_applyButton);
+
     // ── Straighten by Line ───────────────────────────────────────────────────
     m_straightenButton = new QPushButton("Straighten by Line");
     m_straightenButton->setToolTip("Drag along a line in the image that should be horizontal or vertical");
@@ -131,16 +162,18 @@ QWidget *CropRotateEffect::createControlsWidget() {
 
 QMap<QString, QVariant> CropRotateEffect::getParameters() const {
     QMap<QString, QVariant> p;
-    p["angle"]        = static_cast<double>(m_angleDeg);
-    p["quarterTurns"] = m_quarterTurns;
-    p["cropX0"]       = m_crop.x();
-    p["cropY0"]       = m_crop.y();
-    p["cropX1"]       = m_crop.x() + m_crop.width();
-    p["cropY1"]       = m_crop.y() + m_crop.height();
+    p["angle"]             = static_cast<double>(m_angleDeg);
+    p["quarterTurns"]      = m_quarterTurns;
+    p["cropX0"]            = m_crop.x();
+    p["cropY0"]            = m_crop.y();
+    p["cropX1"]            = m_crop.x() + m_crop.width();
+    p["cropY1"]            = m_crop.y() + m_crop.height();
+    p["committedGeometry"] = m_committedGeometry;
     return p;
 }
 
 void CropRotateEffect::applyParameters(const QMap<QString, QVariant> &p) {
+    m_committedGeometry = p.value("committedGeometry").toString();
     if (p.contains("angle")) m_angleDeg = static_cast<float>(p.value("angle").toDouble());
     if (p.contains("quarterTurns")) m_quarterTurns = p.value("quarterTurns").toInt();
     if (p.contains("cropX0") && p.contains("cropY0") && p.contains("cropX1") && p.contains("cropY1")) {
@@ -183,6 +216,35 @@ QRectF CropRotateEffect::userCropRect() const {
 }
 float CropRotateEffect::userCropAngle() const {
     return static_cast<float>(m_quarterTurns) * 90.0f + m_angleDeg;
+}
+
+QString CropRotateEffect::committedGeometryState() const {
+    return m_committedGeometry;
+}
+
+QImage CropRotateEffect::applyCommittedGeometry(const QImage &source) const {
+    QImage           result = source;
+    const QJsonArray operations =
+        QJsonDocument::fromJson(QByteArray::fromBase64(m_committedGeometry.toLatin1())).array();
+    for (const QJsonValue &value : operations) {
+        const QJsonObject op = value.toObject();
+        const QRectF      crop(op["x"].toDouble(), op["y"].toDouble(), op["w"].toDouble(), op["h"].toDouble());
+        const QSize       dstSize(std::max(1, static_cast<int>(std::round(crop.width() * result.width()))),
+                                  std::max(1, static_cast<int>(std::round(crop.height() * result.height()))));
+        QImage            baked(dstSize, result.format());
+        baked.fill(Qt::transparent);
+        QPainter painter(&baked);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        QTransform transform;
+        transform.translate(dstSize.width() * 0.5, dstSize.height() * 0.5);
+        transform.rotate(-op["angle"].toDouble());
+        transform.translate(-crop.center().x() * result.width(), -crop.center().y() * result.height());
+        painter.setTransform(transform);
+        painter.drawImage(0, 0, result);
+        painter.end();
+        result = std::move(baked);
+    }
+    return result;
 }
 
 // ============================================================================

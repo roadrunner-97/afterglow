@@ -141,6 +141,57 @@ private slots:
         QCOMPARE(w1, w2);
     }
 
+    void applyButton_commitsGeometryAndResetsLiveCrop() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 80});
+        QWidget *w        = e.createControlsWidget();
+        auto     before   = e.getParameters();
+        auto     cropped  = before;
+        cropped["cropX0"] = 0.25;
+        cropped["cropY0"] = 0.25;
+        cropped["cropX1"] = 0.75;
+        cropped["cropY1"] = 0.75;
+        e.applyParameters(cropped);
+
+        QPushButton *apply = nullptr;
+        for (auto *button : w->findChildren<QPushButton *>())
+            if (button->text().contains("Apply Crop")) apply = button;
+        QVERIFY(apply);
+        QSignalSpy changed(&e, &PhotoEditorEffect::parametersChanged);
+        apply->click();
+
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(e.userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
+        QVERIFY(!e.committedGeometryState().isEmpty());
+        QCOMPARE(e.applyCommittedGeometry(makeSolid(100, 80, 12, 34, 56)).size(), QSize(50, 40));
+    }
+
+    void committedGeometry_parameterRoundTripsForUndoRedo() {
+        CropRotateEffect e;
+        e.setSourceImageSize({100, 80});
+        QWidget *w       = e.createControlsWidget();
+        auto     params  = e.getParameters();
+        params["cropX1"] = 0.5;
+        params["cropY1"] = 0.5;
+        e.applyParameters(params);
+        for (auto *button : w->findChildren<QPushButton *>())
+            if (button->text().contains("Apply Crop")) button->click();
+
+        const auto       applied = e.getParameters();
+        CropRotateEffect restored;
+        restored.applyParameters(applied);
+        QCOMPARE(restored.applyCommittedGeometry(makeSolid(100, 80, 1, 2, 3)).size(), QSize(50, 40));
+
+        restored.applyParameters(QMap<QString, QVariant>{{"angle", 0.0},
+                                                         {"quarterTurns", 0},
+                                                         {"cropX0", 0.0},
+                                                         {"cropY0", 0.0},
+                                                         {"cropX1", 1.0},
+                                                         {"cropY1", 1.0},
+                                                         {"committedGeometry", QString{}}});
+        QCOMPARE(restored.applyCommittedGeometry(makeSolid(100, 80, 1, 2, 3)).size(), QSize(100, 80));
+    }
+
     void createControlsWidget_hasAngleSlider() {
         CropRotateEffect e;
         QWidget         *w       = e.createControlsWidget();

@@ -419,6 +419,7 @@ void PhotoEditorApp::setupMenuBar() {
         m_history->setApplying(true);
         if (auto entry = m_history->undo()) {
             applyHistoryEntry(*entry, /*applyFrom=*/true);
+            syncCommittedGeometry();
             syncViewportRotation();
             triggerReprocess();
             writeSidecar();
@@ -435,6 +436,7 @@ void PhotoEditorApp::setupMenuBar() {
         m_history->setApplying(true);
         if (auto entry = m_history->redo()) {
             applyHistoryEntry(*entry, /*applyFrom=*/false);
+            syncCommittedGeometry();
             syncViewportRotation();
             triggerReprocess();
             writeSidecar();
@@ -608,7 +610,9 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     // Flush history for the outgoing image before we replace m_developedPath.
     flushHistorySidecar();
 
-    m_originalImage        = img;
+    m_loadedImage   = img;
+    m_originalImage = img;
+    m_committedGeometryState.clear();
     m_latestDevelopPreview = {};
     m_latestDevelopPreviewPath.clear();
     m_currentImagePath = path;
@@ -639,6 +643,8 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     } else {
         writeSidecar();
     }
+
+    syncCommittedGeometry();
 
     // Load or seed undo history for the new image.
     const QString histPath = historySidecarPathFor(path);
@@ -735,6 +741,7 @@ void PhotoEditorApp::importSettings() {
 
     // applyToManager blocks parametersChanged on each effect; fire one
     // definitive reprocess now that the full state is in place.
+    syncCommittedGeometry();
     triggerReprocess();
     writeSidecar();
     m_history->recordFromCurrent(currentSnapshot());
@@ -950,6 +957,7 @@ void PhotoEditorApp::onExportComplete(uint64_t requestId, QImage result, QString
 }
 
 void PhotoEditorApp::onParametersChanged() {
+    syncCommittedGeometry();
     syncViewportRotation();
     triggerReprocess();
     writeSidecar();
@@ -971,6 +979,18 @@ void PhotoEditorApp::syncViewportRotation() {
         const QRectF c = cs->userCropRect();
         m_viewport->setImageRotation(cs->userCropAngle(), c.center());
     }
+}
+
+void PhotoEditorApp::syncCommittedGeometry() {
+    auto *cs = m_effects->cropSource();
+    if (!cs || m_loadedImage.isNull()) return;
+    const QString state = cs->committedGeometryState();
+    if (state == m_committedGeometryState) return;
+    m_committedGeometryState = state;
+    m_originalImage          = cs->applyCommittedGeometry(m_loadedImage);
+    cs->setSourceImageSize(m_originalImage.size());
+    m_viewport->setImageSize(m_originalImage.size());
+    m_viewport->resetView();
 }
 
 void PhotoEditorApp::triggerReprocess() {
