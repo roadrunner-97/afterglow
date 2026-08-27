@@ -30,13 +30,30 @@ static void mergeInto(QMap<QString, QVariant> &dst, const QMap<QString, QVariant
     for (auto it = src.constBegin(); it != src.constEnd(); ++it) dst.insert(it.key(), it.value());
 }
 
-static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager &effects) {
+static const SettingsImporter::EffectSettings *findSettings(const SettingsImporter::Settings &settings,
+                                                            const EffectEntry                &entry) {
+    const QString id   = entry.effect->getId();
+    const QString name = entry.effect->getName();
+    for (const auto &candidate : settings.effects) {
+        if ((!id.isEmpty() && candidate.id == id) || (candidate.id.isEmpty() && candidate.name == name))
+            return &candidate;
+    }
+    return nullptr;
+}
+
+static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager              &effects,
+                                              const SettingsImporter::Settings &effectiveSettings) {
     const QMap<QString, QVariant> cropInjected = buildCropInjection(effects.activeCropSource());
     QVector<GpuPipelineCall>      calls;
     calls.reserve(effects.entries().size());
     for (const EffectEntry &entry : effects.entries()) {
         if (!entry.enabled || !entry.gpu) continue;
-        QMap<QString, QVariant> params = entry.effect->getParameters();
+        // Proofer effects are headless: their controls widgets do not exist,
+        // while many effects keep UI values in those widgets. Read the
+        // authoritative saved parameters directly instead of asking the
+        // headless effect object, which would return constructor defaults.
+        const auto             *saved  = findSettings(effectiveSettings, entry);
+        QMap<QString, QVariant> params = saved ? saved->parameters : entry.effect->getParameters();
         mergeInto(params, cropInjected);
         calls.append({entry.effect, entry.gpu, params});
     }
@@ -104,16 +121,32 @@ void Proofer::dispatchNext() {
     m_busy                            = true;
     emit proofStarted(path);
 
+    SettingsImporter::Settings effectiveSettings = m_defaults;
     SettingsImporter::applyToManager(m_defaults, *m_effects);
     const QString sidecar = ProofCache::sidecarPath(path);
     if (QFile::exists(sidecar)) {
         SettingsImporter::Settings parsed;
         QString                    err;
-        if (SettingsImporter::readYaml(sidecar, &parsed, &err)) SettingsImporter::applyToManager(parsed, *m_effects);
-        else qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
+        if (SettingsImporter::readYaml(sidecar, &parsed, &err)) {
+            SettingsImporter::applyToManager(parsed, *m_effects);
+            // Canonical sidecars contain all effects. For compatibility with
+            // older/partial files, replace only entries they actually name.
+            for (const auto &overrideSettings : parsed.effects) {
+                bool replaced = false;
+                for (auto &base : effectiveSettings.effects) {
+                    const bool idMatch   = !overrideSettings.id.isEmpty() && overrideSettings.id == base.id;
+                    const bool nameMatch = overrideSettings.id.isEmpty() && overrideSettings.name == base.name;
+                    if (!idMatch && !nameMatch) continue;
+                    base     = overrideSettings;
+                    replaced = true;
+                    break;
+                }
+                if (!replaced) effectiveSettings.effects.append(overrideSettings);
+            }
+        } else qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
     }
 
-    QVector<GpuPipelineCall> calls = buildGpuCalls(*m_effects);
+    QVector<GpuPipelineCall> calls = buildGpuCalls(*m_effects, effectiveSettings);
 
     auto *watcher = new QFutureWatcher<QImage>(this);
     connect(watcher, &QFutureWatcher<QImage>::finished, this,

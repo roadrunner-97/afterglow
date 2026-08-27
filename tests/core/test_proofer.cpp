@@ -5,6 +5,9 @@
 #include "ProofCache.h"
 #include "EffectManager.h"
 #include "SettingsImporter.h"
+#include "GpuDeviceRegistry.h"
+#include "BrightnessEffect.h"
+#include <QFile>
 
 // Minimal EffectManager with no real effects — sufficient for queue-management
 // tests that keep the proofer paused so no GPU dispatch occurs.
@@ -142,6 +145,44 @@ private slots:
         Proofer p(emptyMgr(), emptyDefaults(), m_cache);
         p.pause();
         QCOMPARE(p.pendingCount(), 0);
+    }
+
+    void sidecarParametersApplyWithoutControlsWidget() {
+        GpuDeviceRegistry::instance().enumerate();
+        if (GpuDeviceRegistry::instance().count() == 0) QSKIP("No OpenCL device found");
+
+        const QString imagePath = m_dir.filePath("edited.png");
+        QImage        input(16, 16, QImage::Format_RGB32);
+        input.fill(qRgb(20, 20, 20));
+        QVERIFY(input.save(imagePath));
+
+        QFile sidecar(ProofCache::sidecarPath(imagePath));
+        QVERIFY(sidecar.open(QIODevice::WriteOnly | QIODevice::Text));
+        const QByteArray yaml = "effects:\n"
+                                "  - id: \"brightness_contrast\"\n"
+                                "    enabled: true\n"
+                                "    parameters:\n"
+                                "      brightness: 100\n"
+                                "      contrast: 0\n";
+        QCOMPARE(sidecar.write(yaml), static_cast<qint64>(yaml.size()));
+        sidecar.close();
+
+        auto effects = std::make_unique<EffectManager>();
+        auto effect  = std::make_unique<BrightnessEffect>();
+        QVERIFY(effect->initialize());
+        effects->addEffect(std::move(effect));
+
+        SettingsImporter::Settings defaults;
+        defaults.effects.append(
+            {"brightness_contrast", "Brightness & Contrast", true, {{"brightness", 0.0}, {"contrast", 0.0}}});
+        Proofer    proofer(std::move(effects), defaults, m_cache);
+        QSignalSpy finished(&proofer, &Proofer::proofFinished);
+        proofer.setQueue({imagePath});
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 10000);
+
+        const QImage proof = finished.first().at(1).value<QImage>();
+        QVERIFY(!proof.isNull());
+        QVERIFY(qRed(proof.pixel(0, 0)) > 100);
     }
 };
 

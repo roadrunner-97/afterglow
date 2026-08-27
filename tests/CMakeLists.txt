@@ -56,6 +56,7 @@ add_executable(test_proofer
 target_link_libraries(test_proofer
     PRIVATE
         photoeditor_core
+        brightness_effect
         Qt6::Test Qt6::Core Qt6::Gui
 )
 set_target_properties(test_proofer PROPERTIES
