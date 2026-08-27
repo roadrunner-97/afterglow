@@ -105,6 +105,7 @@ private:
     QString sidecarPathFor(const QString &imagePath) const;
     void    writeSidecar();
     void    refreshEditedState();
+    void    persistLatestDevelopPreview();
     void    snapshotDefaults();
 
     MetadataTray      *m_metadataTray = nullptr;

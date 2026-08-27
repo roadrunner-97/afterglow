@@ -1040,6 +1040,7 @@ void PhotoEditorApp::closeEvent(QCloseEvent *event) {
     settings.setValue("geometry", saveGeometry());
     settings.setValue("lastDir", m_lastDir);
     flushHistorySidecar();
+    persistLatestDevelopPreview();
     QMainWindow::closeEvent(event);
 }
 
@@ -1053,6 +1054,7 @@ void PhotoEditorApp::setMode(Mode m) {
             // Give Gallery/Loupe the exact render the user was just viewing.
             // The background proofer will replace this viewport-sized image
             // with its full-frame render when it finishes.
+            persistLatestDevelopPreview();
             m_gridView->setThumbnail(m_currentImagePath, m_latestDevelopPreview);
             if (m == Mode::Loupe) {
                 m_loupeView->setProofImage(m_latestDevelopPreview);
@@ -1403,6 +1405,11 @@ void PhotoEditorApp::writeSidecar() {
 void PhotoEditorApp::refreshEditedState() {
     if (m_currentImagePath.isEmpty() || !m_gridView) return;
     m_gridView->setEdited(m_currentImagePath, m_history->cursor() > 0);
+}
+
+void PhotoEditorApp::persistLatestDevelopPreview() {
+    if (!m_proofCache || m_latestDevelopPreview.isNull() || m_latestDevelopPreviewPath.isEmpty()) return;
+    m_proofCache->store(m_latestDevelopPreviewPath, m_latestDevelopPreview);
 }
 
 // ─── Per-folder catalog (triage marks) ──────────────────────────────────────
