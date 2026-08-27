@@ -117,7 +117,9 @@ private:
     EffectManager  *m_effects;
     ImageProcessor *m_processor;
     QImage          m_originalImage;
+    QImage          m_latestDevelopPreview;
     QString         m_currentImagePath;
+    QString         m_latestDevelopPreviewPath;
     QString         m_lastDir;
 
     QStackedWidget *m_stack           = nullptr;

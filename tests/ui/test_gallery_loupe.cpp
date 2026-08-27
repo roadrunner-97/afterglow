@@ -9,6 +9,7 @@
 #include "GridView.h"
 #include "LoupeView.h"
 #include "PhotoEditorApp.h"
+#include "ImageProcessor.h"
 
 class TestGalleryLoupe : public QObject {
     Q_OBJECT
@@ -122,6 +123,45 @@ private slots:
         QWidget *galleryPage = stack->currentWidget();
         developAction->trigger();
         QCOMPARE(stack->currentWidget(), galleryPage);
+    }
+
+    void leavingDevelopImmediatelyUsesLatestEditedRender() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("photo.png");
+        QImage        original(40, 30, QImage::Format_RGB32);
+        original.fill(Qt::blue);
+        QVERIFY(original.save(path));
+
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        auto          *grid          = app.findChild<GridView *>();
+        auto          *loupe         = app.findChild<LoupeView *>();
+        auto          *processor     = app.findChild<ImageProcessor *>();
+        QAction       *developAction = action(app, "Develop");
+        QAction       *loupeAction   = action(app, "Loupe");
+        QVERIFY(grid);
+        QVERIFY(loupe);
+        QVERIFY(processor);
+        QVERIFY(developAction);
+        QVERIFY(loupeAction);
+
+        grid->setPhotos({path});
+        grid->setThumbnail(path, original);
+        QVERIFY(grid->setCurrentPath(path));
+        developAction->trigger();
+
+        QImage edited(80, 60, QImage::Format_RGB32);
+        edited.fill(Qt::red);
+        QVERIFY(QMetaObject::invokeMethod(processor, "processingComplete", Qt::DirectConnection, Q_ARG(QImage, edited),
+                                          Q_ARG(QPoint, QPoint())));
+
+        loupeAction->trigger();
+        QVERIFY(loupe->isShowingProof());
+        const QImage galleryImage = grid->thumbnail(path);
+        QVERIFY(!galleryImage.isNull());
+        const QColor centre = galleryImage.pixelColor(galleryImage.width() / 2, galleryImage.height() / 2);
+        QVERIFY(centre.red() > centre.blue());
     }
 };
 

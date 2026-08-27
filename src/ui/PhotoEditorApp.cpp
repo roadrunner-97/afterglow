@@ -601,7 +601,9 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     // Flush history for the outgoing image before we replace m_developedPath.
     flushHistorySidecar();
 
-    m_originalImage    = img;
+    m_originalImage        = img;
+    m_latestDevelopPreview = {};
+    m_latestDevelopPreviewPath.clear();
     m_currentImagePath = path;
     m_developedPath    = path;
     m_viewport->setImageSize(img.size());
@@ -1020,6 +1022,10 @@ void PhotoEditorApp::onProcessingComplete(QImage result, QPoint offset) {
         m_viewport->update();
     } else {
         m_viewport->setImage(result, offset);
+        if (!m_beforeViewActive && !m_developedPath.isEmpty()) {
+            m_latestDevelopPreview     = result;
+            m_latestDevelopPreviewPath = m_developedPath;
+        }
     }
 }
 
@@ -1040,7 +1046,20 @@ void PhotoEditorApp::closeEvent(QCloseEvent *event) {
 // ─── Gallery / Loupe / Develop mode switching ───────────────────────────────
 
 void PhotoEditorApp::setMode(Mode m) {
-    if (m_stack->currentIndex() == static_cast<int>(Mode::Develop) && m != Mode::Develop) flushHistorySidecar();
+    const bool leavingDevelop = m_stack->currentIndex() == static_cast<int>(Mode::Develop) && m != Mode::Develop;
+    if (leavingDevelop) {
+        flushHistorySidecar();
+        if (!m_latestDevelopPreview.isNull() && m_latestDevelopPreviewPath == m_currentImagePath) {
+            // Give Gallery/Loupe the exact render the user was just viewing.
+            // The background proofer will replace this viewport-sized image
+            // with its full-frame render when it finishes.
+            m_gridView->setThumbnail(m_currentImagePath, m_latestDevelopPreview);
+            if (m == Mode::Loupe) {
+                m_loupeView->setProofImage(m_latestDevelopPreview);
+                m_loupeView->setProofingState(m_proofer != nullptr);
+            }
+        }
+    }
     if (m == Mode::Gallery && !m_gridView->setCurrentPath(m_currentImagePath))
         m_currentImagePath = m_gridView->currentPath();
     m_stack->setCurrentIndex(static_cast<int>(m));
