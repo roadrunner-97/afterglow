@@ -222,6 +222,12 @@ void ViewportWidget::setActiveInteractiveEffect(IInteractiveEffect *effect) {
     update();
 }
 
+void ViewportWidget::clearActiveInteractiveEffect(IInteractiveEffect *effect) {
+    if (m_active != effect) return;
+    m_active = nullptr;
+    update();
+}
+
 void ViewportWidget::setImageRotation(float angleDeg, QPointF pivotNorm) {
     m_imgAngleDeg  = angleDeg;
     m_imgPivotNorm = pivotNorm;

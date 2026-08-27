@@ -2,6 +2,8 @@
 #include <QSignalSpy>
 #include <QSlider>
 #include <QWidget>
+#include <QMouseEvent>
+#include <QPainter>
 #include "VignetteEffect.h"
 #include "GpuTestBase.h"
 #include "GpuPipeline.h"
@@ -78,6 +80,18 @@ private slots:
         int center = pixelR(out, 32, 32);
         int corner = pixelR(out, 0, 0);
         QVERIFY(corner > center);
+    }
+
+    void movedFocalPoint_relocatesUnaffectedCenter() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        VignetteEffect          e;
+        QImage                  input = makeSolid(100, 100, 200, 200, 200);
+        QMap<QString, QVariant> params{{"amount", -100}, {"midpoint", 15}, {"feather", 20},
+                                       {"roundness", 0}, {"centerX", 25},  {"centerY", 75}};
+        const QImage            out = runEffect(e, input, params);
+        QVERIFY(!out.isNull());
+        QVERIFY(pixelR(out, 25, 75) > 190);
+        QVERIFY(pixelR(out, 50, 50) < pixelR(out, 25, 75) - 30);
     }
 
     // feather=0 gives a near-hard edge: pixels near centre unchanged, pixels past
@@ -233,6 +247,61 @@ private slots:
         QCOMPARE(params["midpoint"].toInt(), 50);
         QCOMPARE(params["feather"].toInt(), 50);
         QCOMPARE(params["roundness"].toInt(), 0);
+        QCOMPARE(params["centerX"].toInt(), 50);
+        QCOMPARE(params["centerY"].toInt(), 50);
+    }
+
+    void focalPoint_dragUpdatesParametersAndSignals() {
+        VignetteEffect    e;
+        ViewportTransform vt{{100, 100}, {100, 100}, {0.5, 0.5}, 1.0f};
+        QSignalSpy        liveSpy(&e, &PhotoEditorEffect::liveParametersChanged);
+        QSignalSpy        changedSpy(&e, &PhotoEditorEffect::parametersChanged);
+        QCOMPARE(e.cursorFor({50, 50}, vt).shape(), Qt::OpenHandCursor);
+        QCOMPARE(e.cursorFor({5, 5}, vt).shape(), Qt::ArrowCursor);
+        QCOMPARE(e.cursorFor({50, 50}, {}).shape(), Qt::ArrowCursor);
+
+        QMouseEvent press(QEvent::MouseButtonPress, {50, 50}, {50, 50}, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QVERIFY(e.mousePress(&press, vt));
+        QCOMPARE(e.cursorFor({50, 50}, vt).shape(), Qt::ClosedHandCursor);
+        QMouseEvent move(QEvent::MouseMove, {70, 30}, {70, 30}, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QVERIFY(e.mouseMove(&move, vt));
+        QCOMPARE(e.getParameters()["centerX"].toInt(), 70);
+        QCOMPARE(e.getParameters()["centerY"].toInt(), 30);
+        QVERIFY(liveSpy.count() >= 1);
+
+        QMouseEvent release(QEvent::MouseButtonRelease, {70, 30}, {70, 30}, Qt::LeftButton, Qt::NoButton,
+                            Qt::NoModifier);
+        QVERIFY(e.mouseRelease(&release, vt));
+        QCOMPARE(changedSpy.count(), 1);
+    }
+
+    void applyFocalPoint_withoutControls_clampsAndPersists() {
+        VignetteEffect e;
+        e.applyParameters({{"centerX", 125.0}, {"centerY", -25.0}});
+        const auto params = e.getParameters();
+        QCOMPARE(params["centerX"].toInt(), 100);
+        QCOMPARE(params["centerY"].toInt(), 0);
+    }
+
+    void focalPoint_onlyClaimsItsHandleAndClampsToImage() {
+        VignetteEffect    e;
+        ViewportTransform vt{{100, 100}, {100, 100}, {0.5, 0.5}, 1.0f};
+        QMouseEvent miss(QEvent::MouseButtonPress, {5, 5}, {5, 5}, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QVERIFY(!e.mousePress(&miss, vt));
+
+        QMouseEvent press(QEvent::MouseButtonPress, {50, 50}, {50, 50}, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QVERIFY(e.mousePress(&press, vt));
+        QMouseEvent move(QEvent::MouseMove, {150, -20}, {150, -20}, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QVERIFY(e.mouseMove(&move, vt));
+        QCOMPARE(e.getParameters()["centerX"].toInt(), 100);
+        QCOMPARE(e.getParameters()["centerY"].toInt(), 0);
+    }
+
+    void paintFocalPointOverlay_doesNotCrash() {
+        VignetteEffect e;
+        QImage         image(100, 100, QImage::Format_ARGB32_Premultiplied);
+        QPainter       painter(&image);
+        e.paintOverlay(painter, {{100, 100}, {100, 100}, {0.5, 0.5}, 1.0f});
     }
 
     // Fire every slider's editingFinished + valueChanged path.
@@ -245,7 +314,7 @@ private slots:
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
         auto sliders = w->findChildren<ParamSlider *>();
-        QCOMPARE(sliders.size(), 4);
+        QCOMPARE(sliders.size(), 6);
 
         for (auto *ps : sliders) {
             auto *qs = ps->findChild<QSlider *>();

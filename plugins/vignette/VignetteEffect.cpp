@@ -2,7 +2,10 @@
 #include "ParamSlider.h"
 #include "color_kernels.h"
 #include <QDebug>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -109,7 +112,7 @@ __kernel void applyVignetteLinear(__global float4* pixels,
 
 VignetteEffect::VignetteEffect()
     : controlsWidget(nullptr), amountParam(nullptr), midpointParam(nullptr), featherParam(nullptr),
-      roundnessParam(nullptr) {}
+      roundnessParam(nullptr), centerXParam(nullptr), centerYParam(nullptr) {}
 
 VignetteEffect::~VignetteEffect() {}
 
@@ -166,6 +169,26 @@ QWidget *VignetteEffect::createControlsWidget() {
     connectSlider(roundnessParam);
     layout->addWidget(roundnessParam);
 
+    centerXParam = new ParamSlider("Focal X", 0.0, 100.0, 0.1, 1);
+    centerXParam->setValue(m_center.x() * 100.0);
+    centerXParam->setToolTip("Horizontal focal point. You can also drag the crosshair on the image.");
+    connect(centerXParam, &ParamSlider::valueChanged, this, [this](double value) {
+        m_center.setX(value / 100.0);
+        emit liveParametersChanged();
+    });
+    connect(centerXParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    layout->addWidget(centerXParam);
+
+    centerYParam = new ParamSlider("Focal Y", 0.0, 100.0, 0.1, 1);
+    centerYParam->setValue(m_center.y() * 100.0);
+    centerYParam->setToolTip("Vertical focal point. You can also drag the crosshair on the image.");
+    connect(centerYParam, &ParamSlider::valueChanged, this, [this](double value) {
+        m_center.setY(value / 100.0);
+        emit liveParametersChanged();
+    });
+    connect(centerYParam, &ParamSlider::editingFinished, this, [this]() { emit parametersChanged(); });
+    layout->addWidget(centerYParam);
+
     layout->addStretch();
     return controlsWidget;
 }
@@ -176,6 +199,8 @@ QMap<QString, QVariant> VignetteEffect::getParameters() const {
     params["midpoint"]  = midpointParam ? midpointParam->value() : 50.0;
     params["feather"]   = featherParam ? featherParam->value() : 50.0;
     params["roundness"] = roundnessParam ? roundnessParam->value() : 0.0;
+    params["centerX"]   = m_center.x() * 100.0;
+    params["centerY"]   = m_center.y() * 100.0;
     return params;
 }
 
@@ -187,7 +212,62 @@ void VignetteEffect::applyParameters(const QMap<QString, QVariant> &parameters) 
     apply(midpointParam, "midpoint");
     apply(featherParam, "feather");
     apply(roundnessParam, "roundness");
+    if (parameters.contains("centerX"))
+        m_center.setX(std::clamp(parameters.value("centerX").toDouble() / 100.0, 0.0, 1.0));
+    if (parameters.contains("centerY"))
+        m_center.setY(std::clamp(parameters.value("centerY").toDouble() / 100.0, 0.0, 1.0));
+    if (centerXParam) centerXParam->setValue(m_center.x() * 100.0);
+    if (centerYParam) centerYParam->setValue(m_center.y() * 100.0);
     emit parametersChanged();
+}
+
+void VignetteEffect::paintOverlay(QPainter &painter, const ViewportTransform &vt) {
+    if (vt.imageSize.isEmpty()) return;
+    const QPointF p = vt.sourceToScreen({m_center.x() * vt.imageSize.width(), m_center.y() * vt.imageSize.height()});
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor(0, 0, 0, 180), 4.0));
+    painter.drawEllipse(p, 8.0, 8.0);
+    painter.drawLine(p + QPointF(-13, 0), p + QPointF(13, 0));
+    painter.drawLine(p + QPointF(0, -13), p + QPointF(0, 13));
+    painter.setPen(QPen(QColor(255, 255, 255, 230), 1.5));
+    painter.drawEllipse(p, 8.0, 8.0);
+    painter.drawLine(p + QPointF(-13, 0), p + QPointF(13, 0));
+    painter.drawLine(p + QPointF(0, -13), p + QPointF(0, 13));
+    painter.restore();
+}
+
+bool VignetteEffect::mousePress(QMouseEvent *event, const ViewportTransform &vt) {
+    if (event->button() != Qt::LeftButton || vt.imageSize.isEmpty()) return false;
+    const QPointF p = vt.sourceToScreen({m_center.x() * vt.imageSize.width(), m_center.y() * vt.imageSize.height()});
+    if (QLineF(event->position(), p).length() > 16.0) return false;
+    m_draggingCenter = true;
+    return true;
+}
+
+bool VignetteEffect::mouseMove(QMouseEvent *event, const ViewportTransform &vt) {
+    if (!m_draggingCenter || vt.imageSize.isEmpty()) return false;
+    const QPointF src = vt.screenToSource(event->position());
+    m_center.setX(std::clamp(src.x() / vt.imageSize.width(), 0.0, 1.0));
+    m_center.setY(std::clamp(src.y() / vt.imageSize.height(), 0.0, 1.0));
+    if (centerXParam) centerXParam->setValue(m_center.x() * 100.0);
+    if (centerYParam) centerYParam->setValue(m_center.y() * 100.0);
+    emit liveParametersChanged();
+    return true;
+}
+
+bool VignetteEffect::mouseRelease(QMouseEvent *event, const ViewportTransform &) {
+    if (event->button() != Qt::LeftButton || !m_draggingCenter) return false;
+    m_draggingCenter = false;
+    emit parametersChanged();
+    return true;
+}
+
+QCursor VignetteEffect::cursorFor(QPointF screenPx, const ViewportTransform &vt) {
+    if (m_draggingCenter) return QCursor(Qt::ClosedHandCursor);
+    if (vt.imageSize.isEmpty()) return {};
+    const QPointF p = vt.sourceToScreen({m_center.x() * vt.imageSize.width(), m_center.y() * vt.imageSize.height()});
+    return QLineF(screenPx, p).length() <= 16.0 ? QCursor(Qt::OpenHandCursor) : QCursor();
 }
 
 // ============================================================================
@@ -237,8 +317,8 @@ bool VignetteEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Bu
     const double uY1 = params.value("_userCropY1", 1.0).toDouble();
 
     // Convert user-crop rect to source-pixel coords.
-    const float cropCxSrc    = static_cast<float>((uX0 + uX1) * 0.5 * srcW);
-    const float cropCySrc    = static_cast<float>((uY0 + uY1) * 0.5 * srcH);
+    const float cropCxSrc    = static_cast<float>(params.value("centerX", 50.0).toDouble() * 0.01 * srcW);
+    const float cropCySrc    = static_cast<float>(params.value("centerY", 50.0).toDouble() * 0.01 * srcH);
     const float cropHalfWSrc = static_cast<float>((uX1 - uX0) * 0.5 * srcW);
     const float cropHalfHSrc = static_cast<float>((uY1 - uY0) * 0.5 * srcH);
 

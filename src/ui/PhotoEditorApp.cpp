@@ -517,9 +517,11 @@ void PhotoEditorApp::setupGpuSelector(QVBoxLayout *rightLayout) {
 }
 
 void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
-    const auto &entries = m_effects->entries();
+    const auto &entries              = m_effects->entries();
+    bool        hasActiveInteractive = false;
     for (int i = 0; i < entries.size(); ++i) {
-        PhotoEditorEffect *effect = entries[i].effect;
+        PhotoEditorEffect  *effect      = entries[i].effect;
+        IInteractiveEffect *interactive = entries[i].interactive;
 
         // Container
         QWidget     *panel       = new QWidget();
@@ -535,6 +537,15 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
         QLabel *title = new QLabel(QString("<b>%1</b>").arg(effect->getName()));
         titleLayout->addWidget(title, 1);
 
+        if (interactive) {
+            QPushButton *editOnImageBtn = new QPushButton("◎");
+            editOnImageBtn->setToolTip("Activate this effect's on-image controls.");
+            editOnImageBtn->setMaximumWidth(28);
+            connect(editOnImageBtn, &QPushButton::clicked, this,
+                    [this, interactive]() { m_viewport->setActiveInteractiveEffect(interactive); });
+            titleLayout->addWidget(editOnImageBtn);
+        }
+
         QPushButton *collapseBtn = new QPushButton("−");
         collapseBtn->setToolTip("Collapse or expand this effect's controls.");
         collapseBtn->setMaximumWidth(28);
@@ -549,15 +560,16 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
 
         // If this effect owns an on-canvas tool (crop handles, etc.), track it so
         // expanding/collapsing the panel activates/deactivates the overlay.
-        IInteractiveEffect *interactive = entries[i].interactive;
-
         // Collapse toggle — shared_ptr so the lambda stays valid after panel is reparented
         auto expanded = std::make_shared<bool>(true);
         connect(collapseBtn, &QPushButton::clicked, this, [this, controls, collapseBtn, expanded, interactive]() {
             *expanded = !*expanded;
             if (controls) controls->setVisible(*expanded);
             collapseBtn->setText(*expanded ? "−" : "+");
-            if (interactive) m_viewport->setActiveInteractiveEffect(*expanded ? interactive : nullptr);
+            if (interactive) {
+                if (*expanded) m_viewport->setActiveInteractiveEffect(interactive);
+                else m_viewport->clearActiveInteractiveEffect(interactive);
+            }
         });
 
         // Show/hide panel when effect is toggled from the View menu
@@ -565,12 +577,15 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
         connect(m_effects, &EffectManager::effectToggled, panel, [this, panel, i, interactive](int idx, bool on) {
             if (idx != i) return;
             panel->setVisible(on);
-            if (interactive && !on) m_viewport->setActiveInteractiveEffect(nullptr);
+            if (interactive && !on) m_viewport->clearActiveInteractiveEffect(interactive);
         });
 
         // Initial activation: if an interactive effect starts enabled + expanded,
         // attach it to the viewport so the overlay shows up on first image load.
-        if (interactive && entries[i].enabled) m_viewport->setActiveInteractiveEffect(interactive);
+        if (interactive && entries[i].enabled && !hasActiveInteractive) {
+            m_viewport->setActiveInteractiveEffect(interactive);
+            hasActiveInteractive = true;
+        }
 
         // Wire parametersChanged (committed) and liveParametersChanged (drag)
         connect(effect, &PhotoEditorEffect::parametersChanged, this, &PhotoEditorApp::onParametersChanged);

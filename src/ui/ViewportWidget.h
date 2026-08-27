@@ -44,6 +44,7 @@ public:
     // Set the currently active interactive effect (nullptr to clear).
     // Triggers an immediate repaint so the overlay appears/disappears.
     void setActiveInteractiveEffect(IInteractiveEffect *effect);
+    void clearActiveInteractiveEffect(IInteractiveEffect *effect);
 
     // Rotation applied to the displayed image (and the overlay, which uses
     // the same pivot so handles stay anchored to the image content).  Pivot
