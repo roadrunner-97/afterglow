@@ -39,11 +39,11 @@ public:
     void setMark(const QString &path, Mark m);
     Mark mark(const QString &path) const;
 
-    // Update the proof-status ring for a single photo.
+    // Update the proof-status dot for a single photo.
     void setProofStatus(const QString &path, ProofStatus status);
 
     // Show whether a photo has committed Develop adjustments. The delegate
-    // renders a persistent "Edited" badge independently of transient proofing.
+    // renders a persistent pencil badge independently of transient proofing.
     void setEdited(const QString &path, bool edited);
     bool isEdited(const QString &path) const;
 
@@ -53,11 +53,13 @@ signals:
     void currentPathChanged(const QString &path);
 
 protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
 
 private:
     void applyIconSize();
+    void resizeThumbnails(QWheelEvent *event);
     void ensureAnimTimer();
     void onAnimTick();
 

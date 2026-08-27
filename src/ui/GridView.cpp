@@ -11,6 +11,7 @@
 #include <QKeyEvent>
 #include <QFileInfo>
 #include <QPixmap>
+#include <QEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -19,25 +20,49 @@ namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
 
-// Draws a glowing colored ring around the thumbnail border.
-// Red = NotProofed, orange-pulsing = Proofing, orange-fading = Proofed.
-class ProofRingDelegate : public QStyledItemDelegate {
+constexpr int kCardPadding = 8;
+
+// Paints thumbnails into a predictable card rectangle. Proof state is a small
+// status dot; edited photos get a compact pencil glyph.
+class GalleryItemDelegate : public QStyledItemDelegate {
 public:
-    explicit ProofRingDelegate(const QHash<QString, GridView::ProofStatus> *status, const QHash<QString, bool> *edited,
-                               const QHash<QString, float> *fadeOpacity, const float *pulsePhase,
-                               QObject *parent = nullptr)
+    explicit GalleryItemDelegate(const QHash<QString, GridView::ProofStatus> *status,
+                                 const QHash<QString, bool> *edited, const QHash<QString, float> *fadeOpacity,
+                                 const float *pulsePhase, QObject *parent = nullptr)
         : QStyledItemDelegate(parent), m_status(status), m_edited(edited), m_fadeOpacity(fadeOpacity),
           m_pulsePhase(pulsePhase) {}
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
-        QStyledItemDelegate::paint(painter, option, index);
-
         const QString               path   = index.data(Qt::UserRole).toString();
         const GridView::ProofStatus status = m_status->value(path, GridView::ProofStatus::NotProofed);
 
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+
+        if (option.state & QStyle::State_Selected) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(option.palette.highlight().color().lighter(125));
+            painter->drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 5, 5);
+        } else if (index.data(Qt::BackgroundRole).canConvert<QBrush>()) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(qvariant_cast<QBrush>(index.data(Qt::BackgroundRole)));
+            painter->drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 5, 5);
+        }
+
+        const QRect   available = option.rect.adjusted(kCardPadding, kCardPadding, -kCardPadding, -kCardPadding);
+        const QIcon   icon      = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
+        const QPixmap source    = icon.pixmap(option.decorationSize);
+        QRect         imageRect = available;
+        if (!source.isNull()) {
+            const QSize fitted = source.size().scaled(available.size(), Qt::KeepAspectRatio);
+            imageRect          = QRect(QPoint(0, 0), fitted);
+            imageRect.moveCenter(available.center());
+            painter->drawPixmap(imageRect, source);
+        }
+
         QColor baseColor;
-        float  opacity  = 1.0f;
-        bool   drawRing = true;
+        float  opacity = 1.0f;
+        bool   drawDot = true;
 
         switch (status) {
         case GridView::ProofStatus::NotProofed:
@@ -51,7 +76,7 @@ public:
         case GridView::ProofStatus::Proofed: {
             float fade = m_fadeOpacity->value(path, 0.0f);
             if (fade <= 0.0f) {
-                drawRing = false;
+                drawDot = false;
                 break;
             }
             baseColor = QColor(255, 155, 25);
@@ -60,50 +85,30 @@ public:
         }
         }
 
-        const QSize iconSz = option.decorationSize;
-        const int   iLeft  = option.rect.left() + (option.rect.width() - iconSz.width()) / 2;
-        const int   iTop   = option.rect.top() + (option.rect.height() - iconSz.height()) / 2;
-        const QRect iconRect(iLeft, iTop, iconSz.width(), iconSz.height());
-
-        painter->save();
-        painter->setBrush(Qt::NoBrush);
-
-        if (drawRing) {
-            // Glow halos: 3 progressively wider, progressively more transparent rects
-            const float glowAlphas[] = {0.35f, 0.18f, 0.08f};
-            for (int i = 0; i < 3; ++i) {
-                QColor g = baseColor;
-                g.setAlphaF(opacity * glowAlphas[i]);
-                painter->setPen(QPen(g, 1));
-                const int d = i + 1;
-                painter->drawRect(iconRect.adjusted(-d, -d, d, d));
-            }
-
-            // Main ring
-            QColor ring = baseColor;
-            ring.setAlphaF(opacity * 0.90f);
-            painter->setPen(QPen(ring, 2));
-            painter->drawRect(iconRect.adjusted(-1, -1, 1, 1));
+        if (drawDot) {
+            baseColor.setAlphaF(opacity);
+            const QPoint centre(imageRect.right() - 7, imageRect.top() + 8);
+            painter->setPen(QPen(QColor(20, 20, 20, 150), 2));
+            painter->setBrush(baseColor);
+            painter->drawEllipse(centre, 5, 5);
         }
 
         if (m_edited->value(path, false)) {
-            const QString text = QStringLiteral("Edited");
-            QFont         font = painter->font();
-            font.setBold(true);
-            font.setPointSizeF(std::max(8.0, font.pointSizeF() - 1.0));
-            painter->setFont(font);
-            const QFontMetrics fm(font);
-            const QSize        badgeSize(fm.horizontalAdvance(text) + 12, fm.height() + 4);
-            const QRect badge(iconRect.right() - badgeSize.width() - 4, iconRect.bottom() - badgeSize.height() - 4,
-                              badgeSize.width(), badgeSize.height());
             painter->setPen(Qt::NoPen);
             painter->setBrush(QColor(30, 30, 30, 210));
-            painter->drawRoundedRect(badge, 4, 4);
-            painter->setPen(Qt::white);
-            painter->drawText(badge, Qt::AlignCenter, text);
+            const QRect badge(imageRect.right() - 25, imageRect.bottom() - 25, 20, 20);
+            painter->drawEllipse(badge);
+            painter->setPen(QPen(Qt::white, 2.2, Qt::SolidLine, Qt::RoundCap));
+            painter->drawLine(badge.left() + 6, badge.bottom() - 6, badge.right() - 5, badge.top() + 5);
+            painter->setPen(QPen(Qt::white, 1.4, Qt::SolidLine, Qt::RoundCap));
+            painter->drawLine(badge.left() + 5, badge.bottom() - 5, badge.left() + 8, badge.bottom() - 6);
         }
 
         painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &) const override {
+        return option.decorationSize + QSize(kCardPadding * 2, kCardPadding * 2);
     }
 
 private:
@@ -117,13 +122,16 @@ private:
 
 GridView::GridView(QWidget *parent) : QWidget(parent) {
     m_list = new QListWidget(this);
-    m_list->setItemDelegate(new ProofRingDelegate(&m_proofStatus, &m_edited, &m_fadeOpacity, &m_pulsePhase, this));
+    m_list->setItemDelegate(new GalleryItemDelegate(&m_proofStatus, &m_edited, &m_fadeOpacity, &m_pulsePhase, this));
     m_list->setViewMode(QListView::IconMode);
     m_list->setResizeMode(QListView::Adjust);
     m_list->setMovement(QListView::Static);
     m_list->setWrapping(true);
     m_list->setFocusPolicy(Qt::StrongFocus);
     m_list->setFocusProxy(m_list);
+    m_list->setSpacing(4);
+    m_list->setUniformItemSizes(true);
+    m_list->viewport()->installEventFilter(this);
 
     connect(m_list, &QListWidget::itemDoubleClicked, this,
             [this](QListWidgetItem *item) { emit photoActivated(item->data(Qt::UserRole).toString()); });
@@ -258,7 +266,8 @@ bool GridView::isEdited(const QString &path) const {
 
 void GridView::applyIconSize() {
     m_list->setIconSize(QSize(m_iconPx, m_iconPx));
-    m_list->setGridSize(QSize(m_iconPx + 16, m_iconPx + 16));
+    m_list->setGridSize(QSize(m_iconPx + kCardPadding * 2, m_iconPx + kCardPadding * 2));
+    m_list->viewport()->update();
 }
 
 void GridView::ensureAnimTimer() {
@@ -289,13 +298,30 @@ void GridView::onAnimTick() {
 
 void GridView::wheelEvent(QWheelEvent *event) {
     if (event->modifiers() & Qt::ControlModifier) {
-        int delta = event->angleDelta().y() / 8;
-        m_iconPx  = qBound(48, m_iconPx + delta, 512);
-        applyIconSize();
-        event->accept();
+        resizeThumbnails(event);
     } else {
         QWidget::wheelEvent(event);
     }
+}
+
+bool GridView::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == m_list->viewport() && event->type() == QEvent::Wheel) {
+        auto *wheel = static_cast<QWheelEvent *>(event);
+        if (wheel->modifiers() & Qt::ControlModifier) {
+            resizeThumbnails(wheel);
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void GridView::resizeThumbnails(QWheelEvent *event) {
+    const int direction = event->angleDelta().y() > 0 ? 1 : (event->angleDelta().y() < 0 ? -1 : 0);
+    if (direction != 0) {
+        m_iconPx = qBound(64, m_iconPx + direction * 16, 512);
+        applyIconSize();
+    }
+    event->accept();
 }
 
 void GridView::keyPressEvent(QKeyEvent *event) {

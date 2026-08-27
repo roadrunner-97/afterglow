@@ -2,8 +2,10 @@
 #include <QApplication>
 #include <QSignalSpy>
 #include <QStackedWidget>
+#include <QListWidget>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QWheelEvent>
 
 #include "EffectManager.h"
 #include "GridView.h"
@@ -55,6 +57,24 @@ private slots:
         QVERIFY(!grid.isEdited("two.jpg"));
         grid.setEdited("one.jpg", false);
         QVERIFY(!grid.isEdited("one.jpg"));
+    }
+
+    void controlWheelOnGalleryChangesThumbnailSize() {
+        GridView grid;
+        grid.setPhotos({"one.jpg"});
+        auto *list = grid.findChild<QListWidget *>();
+        QVERIFY(list);
+        const QSize initial = list->iconSize();
+
+        QWheelEvent zoomIn(QPointF(10, 10), QPointF(10, 10), QPoint(), QPoint(0, 120), Qt::NoButton,
+                           Qt::ControlModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(list->viewport(), &zoomIn);
+        QCOMPARE(list->iconSize(), initial + QSize(16, 16));
+
+        QWheelEvent ordinaryScroll(QPointF(10, 10), QPointF(10, 10), QPoint(), QPoint(0, -120), Qt::NoButton,
+                                   Qt::NoModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(list->viewport(), &ordinaryScroll);
+        QCOMPARE(list->iconSize(), initial + QSize(16, 16));
     }
 
     void lateCameraDecodeDoesNotReplaceProof() {
