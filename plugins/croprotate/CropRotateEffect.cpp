@@ -2,6 +2,7 @@
 #include "ParamSlider.h"
 
 #include <QCheckBox>
+#include <QColorSpace>
 #include <QFont>
 #include <QFontMetrics>
 #include <QMouseEvent>
@@ -232,6 +233,11 @@ QImage CropRotateEffect::applyCommittedGeometry(const QImage &source) const {
         const QSize       dstSize(std::max(1, static_cast<int>(std::round(crop.width() * result.width()))),
                                   std::max(1, static_cast<int>(std::round(crop.height() * result.height()))));
         QImage            baked(dstSize, result.format());
+        // QImage's size/format constructor does not inherit metadata.  In
+        // particular, RawLoader's color_space=linear tag tells GpuPipeline
+        // not to apply an sRGB decode to scene-linear RGBX64 pixels.
+        baked.setColorSpace(result.colorSpace());
+        for (const QString &key : result.textKeys()) baked.setText(key, result.text(key));
         baked.fill(Qt::transparent);
         QPainter painter(&baked);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);

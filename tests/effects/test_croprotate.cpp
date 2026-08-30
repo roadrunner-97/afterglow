@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QColorSpace>
 #include <QSignalSpy>
 #include <QPushButton>
 #include <QSlider>
@@ -164,6 +165,30 @@ private slots:
         QCOMPARE(e.userCropRect(), QRectF(0.0, 0.0, 1.0, 1.0));
         QVERIFY(!e.committedGeometryState().isEmpty());
         QCOMPARE(e.applyCommittedGeometry(makeSolid(100, 80, 12, 34, 56)).size(), QSize(50, 40));
+    }
+
+    void committedGeometry_preservesLinearRawMetadata() {
+        CropRotateEffect e;
+        QWidget         *w      = e.createControlsWidget();
+        auto             params = e.getParameters();
+        params["cropX1"]        = 0.5;
+        params["cropY1"]        = 0.5;
+        e.applyParameters(params);
+        for (auto *button : w->findChildren<QPushButton *>())
+            if (button->text().contains("Apply Crop")) button->click();
+
+        QImage raw(100, 80, QImage::Format_RGBX64);
+        raw.fill(QColor::fromRgbF(0.25, 0.5, 0.75));
+        raw.setText("color_space", "linear");
+        raw.setText("test_metadata", "preserved");
+        raw.setColorSpace(QColorSpace::SRgbLinear);
+
+        const QImage cropped = e.applyCommittedGeometry(raw);
+        QCOMPARE(cropped.size(), QSize(50, 40));
+        QCOMPARE(cropped.format(), QImage::Format_RGBX64);
+        QCOMPARE(cropped.text("color_space"), QString("linear"));
+        QCOMPARE(cropped.text("test_metadata"), QString("preserved"));
+        QCOMPARE(cropped.colorSpace(), QColorSpace(QColorSpace::SRgbLinear));
     }
 
     void committedGeometry_parameterRoundTripsForUndoRedo() {
