@@ -341,7 +341,6 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
                     return {};
                 }
             }
-            m_queue.finish();
             m_processedValid = true;
             m_processedCalls = calls;
 
@@ -389,8 +388,6 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         dsKernel->setArg(10, clipY1);
         m_queue.enqueueNDRangeKernel(*dsKernel, cl::NullRange,
                                      cl::NDRange(static_cast<size_t>(imgW), static_cast<size_t>(imgH)));
-        m_queue.finish();
-
         const float srcPixelsPerPreviewPixel = (clipX1 - clipX0) / static_cast<float>(imgW);
         for (const auto &call : calls) {
             IGpuEffect             *g            = call.gpu;
@@ -408,8 +405,6 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
                 // GCOVR_EXCL_STOP
             }
         }
-        m_queue.finish();
-
         return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
     }
     // GCOVR_EXCL_START
@@ -449,7 +444,6 @@ bool GpuPipeline::decodeFullResLocked() {
     k->setArg(4, m_stride);
     m_queue.enqueueNDRangeKernel(*k, cl::NullRange,
                                  cl::NDRange(static_cast<size_t>(m_width), static_cast<size_t>(m_height)));
-    m_queue.finish();
     return true;
 }
 
