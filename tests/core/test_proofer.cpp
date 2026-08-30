@@ -7,6 +7,7 @@
 #include "SettingsImporter.h"
 #include "GpuDeviceRegistry.h"
 #include "BrightnessEffect.h"
+#include "CropRotateEffect.h"
 #include <QFile>
 
 // Minimal EffectManager with no real effects — sufficient for queue-management
@@ -183,6 +184,46 @@ private slots:
         const QImage proof = finished.first().at(1).value<QImage>();
         QVERIFY(!proof.isNull());
         QVERIFY(qRed(proof.pixel(0, 0)) > 100);
+    }
+
+    void proofBakesActiveCropGeometry() {
+        GpuDeviceRegistry::instance().enumerate();
+        if (GpuDeviceRegistry::instance().count() == 0) QSKIP("No OpenCL device found");
+
+        const QString imagePath = m_dir.filePath("cropped.png");
+        QImage        input(40, 20, QImage::Format_RGB32);
+        input.fill(Qt::green);
+        QVERIFY(input.save(imagePath));
+
+        QFile sidecar(ProofCache::sidecarPath(imagePath));
+        QVERIFY(sidecar.open(QIODevice::WriteOnly | QIODevice::Text));
+        const QByteArray yaml = "effects:\n"
+                                "  - id: \"crop_rotate\"\n"
+                                "    enabled: true\n"
+                                "    parameters:\n"
+                                "      angle: 0\n"
+                                "      quarterTurns: 0\n"
+                                "      cropX0: 0.25\n"
+                                "      cropY0: 0.0\n"
+                                "      cropX1: 0.75\n"
+                                "      cropY1: 1.0\n";
+        QCOMPARE(sidecar.write(yaml), static_cast<qint64>(yaml.size()));
+        sidecar.close();
+
+        auto effects = std::make_unique<EffectManager>();
+        auto crop    = std::make_unique<CropRotateEffect>();
+        QVERIFY(crop->initialize());
+        effects->addEffect(std::move(crop));
+
+        SettingsImporter::Settings defaults;
+        defaults.effects.append({"crop_rotate", "Crop & Rotate", true, {}});
+        Proofer    proofer(std::move(effects), defaults, m_cache);
+        QSignalSpy finished(&proofer, &Proofer::proofFinished);
+        proofer.setQueue({imagePath});
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 10000);
+
+        const QImage proof = finished.first().at(1).value<QImage>();
+        QCOMPARE(proof.size(), QSize(20, 20));
     }
 };
 

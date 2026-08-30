@@ -57,6 +57,7 @@ target_link_libraries(test_proofer
     PRIVATE
         photoeditor_core
         brightness_effect
+        croprotate_effect
         Qt6::Test Qt6::Core Qt6::Gui
 )
 set_target_properties(test_proofer PROPERTIES

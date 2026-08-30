@@ -10,7 +10,10 @@
 #include <QFutureWatcher>
 #include <QFile>
 #include <QImageReader>
+#include <QPainter>
+#include <QTransform>
 #include <QDebug>
+#include <cmath>
 
 namespace {
 
@@ -66,6 +69,24 @@ QImage scaleProof(const QImage &img) {
     if (longEdge <= MAX_LONG_EDGE) return img;
     const QSize scaled = img.size().scaled(MAX_LONG_EDGE, MAX_LONG_EDGE, Qt::KeepAspectRatio);
     return img.scaled(scaled, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+}
+
+QImage applyActiveCropAndRotate(const QImage &image, const QRectF &crop, float angle) {
+    if (image.isNull()) return image;
+    const QSize dstSize(std::max(1, static_cast<int>(std::round(crop.width() * image.width()))),
+                        std::max(1, static_cast<int>(std::round(crop.height() * image.height()))));
+
+    QImage dst(dstSize, image.format());
+    dst.fill(Qt::black);
+    QTransform transform;
+    transform.translate(dstSize.width() * 0.5, dstSize.height() * 0.5);
+    transform.rotate(-static_cast<double>(angle));
+    transform.translate(-crop.center().x() * image.width(), -crop.center().y() * image.height());
+    QPainter painter(&dst);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.setTransform(transform);
+    painter.drawImage(0, 0, image);
+    return dst;
 }
 
 } // namespace
@@ -146,8 +167,10 @@ void Proofer::dispatchNext() {
         } else qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
     }
 
-    QVector<GpuPipelineCall> calls      = buildGpuCalls(*m_effects, effectiveSettings);
-    ICropSource             *cropSource = m_effects->cropSource();
+    QVector<GpuPipelineCall> calls       = buildGpuCalls(*m_effects, effectiveSettings);
+    ICropSource             *cropSource  = m_effects->cropSource();
+    const QRectF             activeCrop  = cropSource ? cropSource->userCropRect() : QRectF(0.0, 0.0, 1.0, 1.0);
+    const float              activeAngle = cropSource ? cropSource->userCropAngle() : 0.0f;
 
     auto *watcher = new QFutureWatcher<QImage>(this);
     connect(watcher, &QFutureWatcher<QImage>::finished, this,
@@ -172,20 +195,22 @@ void Proofer::dispatchNext() {
 
     const bool isRaw    = RawLoader::isRawFile(path);
     auto       pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run([path, calls = std::move(calls), pipeline, isRaw, cropSource]() -> QImage {
-        QImage img;
-        if (isRaw) img = RawLoader::load(path);
-        if (img.isNull()) {
-            QImageReader reader(path);
-            reader.setAutoTransform(true);
-            img = reader.read();
-        }
-        if (img.isNull()) return {};
-        if (cropSource) img = cropSource->applyCommittedGeometry(img);
-        QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
-        if (result.isNull()) return {};
-        return scaleProof(result);
-    }));
+    watcher->setFuture(QtConcurrent::run(
+        [path, calls = std::move(calls), pipeline, isRaw, cropSource, activeCrop, activeAngle]() -> QImage {
+            QImage img;
+            if (isRaw) img = RawLoader::load(path);
+            if (img.isNull()) {
+                QImageReader reader(path);
+                reader.setAutoTransform(true);
+                img = reader.read();
+            }
+            if (img.isNull()) return {};
+            if (cropSource) img = cropSource->applyCommittedGeometry(img);
+            QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
+            if (result.isNull()) return {};
+            result = applyActiveCropAndRotate(result, activeCrop, activeAngle);
+            return scaleProof(result);
+        }));
 }
 
 // GCOVR_EXCL_STOP

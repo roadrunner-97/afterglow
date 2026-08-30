@@ -10,10 +10,12 @@ ProofCache::ProofCache(QObject *parent) : QObject(parent) {}
 // static
 QString ProofCache::proofPath(const QString &imagePath) {
     const QFileInfo fi(imagePath);
-    // <folder>/.afterglow/proofs/<original-filename>.jpg
+    // <folder>/.afterglow/proofs/<original-filename>.geometry-v2.jpg
     // The full filename (including extension) disambiguates IMG_0001.CR2
     // from IMG_0001.NEF when both exist in the same folder.
-    return fi.absoluteDir().filePath(".afterglow/proofs/" + fi.fileName() + ".jpg");
+    // The render-version suffix invalidates proofs produced before active
+    // crop/rotation was baked into the cached image.
+    return fi.absoluteDir().filePath(".afterglow/proofs/" + fi.fileName() + ".geometry-v2.jpg");
 }
 
 // static
