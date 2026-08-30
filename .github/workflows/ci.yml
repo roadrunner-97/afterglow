@@ -4,6 +4,10 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 # Cancel superseded runs on the same branch/PR — saves runner minutes.
 concurrency:
@@ -13,6 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -44,4 +49,38 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure -j$(nproc)
+        run: ctest --test-dir build --output-on-failure -j8
+
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build ccache gcovr clang-format \
+            qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
+            libgl1-mesa-dev \
+            opencl-headers opencl-clhpp-headers ocl-icd-opencl-dev \
+            pocl-opencl-icd \
+            libraw-dev
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: coverage-${{ runner.os }}
+
+      - name: Check formatting
+        run: bash scripts/check-format.sh
+
+      # This is deliberately server-side as well as in the pre-push hook:
+      # local hooks can be skipped and do not protect pull requests.
+      - name: Test with coverage
+        env:
+          QT_QPA_PLATFORM: offscreen
+          COVERAGE_MIN_LINES: '100.0'
+        run: bash scripts/check-coverage.sh

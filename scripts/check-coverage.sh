@@ -29,7 +29,7 @@ cmake -B "$BUILD_DIR" \
   2>&1 | tail -5
 
 echo "=== check-coverage: build ==="
-cmake --build "$BUILD_DIR" -j"$(nproc)"
+cmake --build "$BUILD_DIR" -j8
 
 echo "=== check-coverage: test ==="
 # Tests run serially: they share a single OpenCL GPU and deadlock in the

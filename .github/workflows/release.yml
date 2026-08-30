@@ -15,6 +15,7 @@ jobs:
     # Same as CI (ubuntu-24.04) to avoid 'unknown target CPU' issues on
     # newer runners like EPYC Genoa. Uses POCL 1.11 which supports these CPUs.
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +46,7 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure -j$(nproc)
+        run: ctest --test-dir build --output-on-failure -j8
 
       - name: Package tarball
         run: |
@@ -68,14 +69,7 @@ jobs:
       - name: Build AppImage
         env:
           AFTERGLOW_VERSION: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          ./scripts/build-appimage.sh || \
-          (
-            echo "AppImage build failed in release workflow" && \
-            echo "Check that afterglow binaries built to 'build/bin/' directory" && \
-            ls -la afterglow-x86_64.AppImage 2>&1 || true
-          )
+        run: ./scripts/build-appimage.sh
 
       - name: Rename AppImage with version
         run: |
@@ -127,4 +121,3 @@ jobs:
               libqt6concurrent6 libqt6openglwidgets6 \
               ocl-icd-libopencl1 libgl1 libraw-bin
             ```
-
