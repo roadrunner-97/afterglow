@@ -140,9 +140,20 @@ GridView::GridView(QWidget *parent) : QWidget(parent) {
         m_list->setCurrentItem(item);
         const QString path = item->data(Qt::UserRole).toString();
         QMenu         menu(m_list);
-        QAction      *copy   = menu.addAction("Copy Develop Settings");
-        QAction      *paste  = menu.addAction("Paste Develop Settings");
-        QAction      *chosen = menu.exec(m_list->viewport()->mapToGlobal(pos));
+        QAction      *copy  = menu.addAction("Copy Develop Settings");
+        QAction      *paste = menu.addAction("Paste Develop Settings");
+        menu.addSeparator();
+        QMenu *markMenu      = menu.addMenu("Mark");
+        auto   addMarkAction = [this, markMenu, &path](const QString &label, Mark requested) {
+            QAction *action = markMenu->addAction(label);
+            action->setCheckable(true);
+            action->setChecked(mark(path) == requested);
+            connect(action, &QAction::triggered, this, [this, path, requested]() { toggleMark(path, requested); });
+        };
+        addMarkAction("Accept", Mark::Accept);
+        addMarkAction("Refine", Mark::Refine);
+        addMarkAction("Decline", Mark::Decline);
+        QAction *chosen = menu.exec(m_list->viewport()->mapToGlobal(pos));
         if (chosen == copy) emit copySettingsRequested(path);
         else if (chosen == paste) emit pasteSettingsRequested(path);
     });
@@ -241,6 +252,12 @@ void GridView::setMark(const QString &path, Mark m) {
 
 GridView::Mark GridView::mark(const QString &path) const {
     return m_marks.value(path, Mark::None);
+}
+
+void GridView::toggleMark(const QString &path, Mark requested) {
+    const Mark next = (mark(path) == requested) ? Mark::None : requested;
+    setMark(path, next);
+    emit markChanged(path, next);
 }
 
 void GridView::setProofStatus(const QString &path, ProofStatus status) {
@@ -348,9 +365,7 @@ void GridView::keyPressEvent(QKeyEvent *event) {
     const QString currentPath = currentItem->data(Qt::UserRole).toString();
 
     auto applyMark = [&](Mark requested) {
-        const Mark next = (mark(currentPath) == requested) ? Mark::None : requested;
-        setMark(currentPath, next);
-        emit markChanged(currentPath, next);
+        toggleMark(currentPath, requested);
         m_list->setCurrentRow(m_list->currentRow() + 1);
         event->accept();
     };

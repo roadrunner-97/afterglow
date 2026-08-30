@@ -60,6 +60,20 @@ private slots:
         QVERIFY(!grid.isEdited("one.jpg"));
     }
 
+    void galleryMarkToggleMatchesLoupeSemantics() {
+        GridView   grid;
+        QSignalSpy changed(&grid, &GridView::markChanged);
+        grid.setPhotos({"one.jpg"});
+
+        grid.toggleMark("one.jpg", GridView::Mark::Accept);
+        QCOMPARE(grid.mark("one.jpg"), GridView::Mark::Accept);
+        grid.toggleMark("one.jpg", GridView::Mark::Accept);
+        QCOMPARE(grid.mark("one.jpg"), GridView::Mark::None);
+        grid.toggleMark("one.jpg", GridView::Mark::Decline);
+        QCOMPARE(grid.mark("one.jpg"), GridView::Mark::Decline);
+        QCOMPARE(changed.count(), 3);
+    }
+
     void controlWheelOnGalleryChangesThumbnailSize() {
         GridView grid;
         grid.setPhotos({"one.jpg"});

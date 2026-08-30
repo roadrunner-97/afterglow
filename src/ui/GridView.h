@@ -38,6 +38,7 @@ public:
     // displays it (colored background).
     void setMark(const QString &path, Mark m);
     Mark mark(const QString &path) const;
+    void toggleMark(const QString &path, Mark requested);
 
     // Update the proof-status dot for a single photo.
     void setProofStatus(const QString &path, ProofStatus status);
