@@ -12,6 +12,7 @@
 #include <atomic>
 #include <optional>
 #include "EffectManager.h"
+#include "EditorUiState.h"
 #include "ExportOptions.h"
 #include "GridView.h"
 #include "ImageProcessor.h"
@@ -30,6 +31,7 @@ class QStackedWidget;
 class QActionGroup;
 class LoupeView;
 class QThreadPool;
+class UiServices;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -37,6 +39,10 @@ class PhotoEditorApp : public QMainWindow {
 public:
     explicit PhotoEditorApp(EffectManager *effectManager, QWidget *parent = nullptr);
     ~PhotoEditorApp() override;
+
+    // Replaces native modal dialogs with a caller-owned service. Intended for
+    // deterministic workflow tests; call before triggering any UI action.
+    void setUiServices(UiServices *services);
 
     // Call once after construction with a dedicated EffectManager (separate
     // instances from the Develop pipeline) to enable proof cache generation.
@@ -69,7 +75,7 @@ private slots:
     void pasteDevelopSettings();
 
 private:
-    enum class Mode { Gallery = 0, Loupe = 1, Develop = 2 };
+    using Mode = EditorUiState::Mode;
 
     void                                      setupUI();
     void                                      setupToolBar();
@@ -122,15 +128,18 @@ private:
     QAction           *m_redoAct      = nullptr;
     QVector<QAction *> m_effectMenuActions;
 
-    EffectManager  *m_effects;
-    ImageProcessor *m_processor;
-    QImage          m_originalImage;
-    QImage          m_loadedImage; // immutable decoded source used to rebuild applied geometry
-    QString         m_committedGeometryState;
-    QImage          m_latestDevelopPreview;
-    QString         m_currentImagePath;
-    QString         m_latestDevelopPreviewPath;
-    QString         m_lastDir;
+    EffectManager              *m_effects;
+    ImageProcessor             *m_processor;
+    EditorUiState               m_uiState;
+    std::unique_ptr<UiServices> m_ownedUiServices;
+    UiServices                 *m_uiServices = nullptr;
+    QImage                      m_originalImage;
+    QImage                      m_loadedImage; // immutable decoded source used to rebuild applied geometry
+    QString                     m_committedGeometryState;
+    QImage                      m_latestDevelopPreview;
+    QString                     m_currentImagePath;
+    QString                     m_latestDevelopPreviewPath;
+    QString                     m_lastDir;
 
     QStackedWidget *m_stack           = nullptr;
     GridView       *m_gridView        = nullptr;
@@ -168,8 +177,6 @@ private:
         std::optional<CropSnapshot>           crop;
     };
     QHash<uint64_t, PendingExport> m_pendingExports;
-
-    bool m_beforeViewActive = false;
 };
 
 #endif // PHOTOEDITORAPP_H

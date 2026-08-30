@@ -1,5 +1,5 @@
 #include "PhotoEditorApp.h"
-#include "ExportDialog.h"
+#include "UiServices.h"
 #include "HistorySerializer.h"
 #include "CachePurger.h"
 #include "ImageMetadata.h"
@@ -27,8 +27,6 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
-#include <QFileDialog>
-#include <QMessageBox>
 #include <QClipboard>
 #include <QStatusBar>
 #include <QComboBox>
@@ -187,7 +185,9 @@ static QImage decodeThumbnailOriented(const QString &path) {
 PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
     : QMainWindow(parent), m_effects(effectManager), m_processor(new ImageProcessor(this)),
       m_resizeDebounce(new QTimer(this)) {
-    m_history = new UndoHistory(200, this);
+    m_ownedUiServices = createNativeUiServices();
+    m_uiServices      = m_ownedUiServices.get();
+    m_history         = new UndoHistory(200, this);
     connect(m_processor, &ImageProcessor::processingComplete, this, &PhotoEditorApp::onProcessingComplete);
     connect(m_processor, &ImageProcessor::processingStarted, this, &PhotoEditorApp::onProcessingStarted);
     connect(m_processor, &ImageProcessor::exportComplete, this, &PhotoEditorApp::onExportComplete);
@@ -224,6 +224,12 @@ PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
 }
 
 PhotoEditorApp::~PhotoEditorApp() = default;
+
+void PhotoEditorApp::setUiServices(UiServices *services) {
+    Q_ASSERT(services);
+    m_ownedUiServices.reset();
+    m_uiServices = services;
+}
 
 void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) {
     m_proofCache = new ProofCache(this);
@@ -263,6 +269,7 @@ void PhotoEditorApp::setupToolBar() {
     m_modeGroup->setExclusive(true);
     auto addModeAction = [&](const QString &label, Mode m) {
         QAction *act = new QAction(label, this);
+        act->setObjectName(QString("actionMode%1").arg(label));
         act->setCheckable(true);
         act->setData(static_cast<int>(m));
         m_modeGroup->addAction(act);
@@ -294,6 +301,7 @@ void PhotoEditorApp::setupToolBar() {
     toolbar->addWidget(spacer);
 
     m_processingLabel = new QLabel("Processing…");
+    m_processingLabel->setObjectName("processingIndicator");
     m_processingLabel->setVisible(false);
     toolbar->addWidget(m_processingLabel);
 }
@@ -306,10 +314,12 @@ void PhotoEditorApp::setupUI() {
     //   1 = Loupe   (full-size single-image preview, no GPU pipeline)
     //   2 = Develop (existing viewport + right panel — the editor)
     m_stack = new QStackedWidget();
+    m_stack->setObjectName("editorModeStack");
     setCentralWidget(m_stack);
 
     // ── Gallery page ────────────────────────────────────────────────────────
     m_gridView = new GridView();
+    m_gridView->setObjectName("galleryGrid");
     connect(m_gridView, &GridView::photoActivated, this, &PhotoEditorApp::onPhotoActivated);
     connect(m_gridView, &GridView::markChanged, this, &PhotoEditorApp::onMarkChanged);
     connect(m_gridView, &GridView::copySettingsRequested, this,
@@ -324,6 +334,7 @@ void PhotoEditorApp::setupUI() {
 
     // ── Loupe page ──────────────────────────────────────────────────────────
     m_loupeView = new LoupeView();
+    m_loupeView->setObjectName("loupeView");
     connect(m_loupeView, &LoupeView::developRequested, this, &PhotoEditorApp::onDevelopRequested);
     connect(m_loupeView, &LoupeView::previousRequested, this, [this]() { onLoupeNavigate(-1); });
     connect(m_loupeView, &LoupeView::nextRequested, this, [this]() { onLoupeNavigate(+1); });
@@ -361,6 +372,7 @@ void PhotoEditorApp::setupUI() {
     develop->addWidget(leftPanel);
 
     m_viewport = new ViewportWidget();
+    m_viewport->setObjectName("developViewport");
     connect(m_viewport, &ViewportWidget::viewportChanged, this, &PhotoEditorApp::triggerViewportUpdate);
     develop->addWidget(m_viewport);
 
@@ -430,14 +442,17 @@ void PhotoEditorApp::setupMenuBar() {
     QMenu *fileMenu = menuBar()->addMenu("File");
 
     QAction *openAct = fileMenu->addAction("Open Image…");
+    openAct->setObjectName("actionOpenImage");
     openAct->setShortcut(QKeySequence::Open);
     connect(openAct, &QAction::triggered, this, &PhotoEditorApp::openImage);
 
     QAction *openFolderAct = fileMenu->addAction("Open Folder…");
+    openFolderAct->setObjectName("actionOpenFolder");
     openFolderAct->setShortcut(QKeySequence("Ctrl+Shift+O"));
     connect(openFolderAct, &QAction::triggered, this, &PhotoEditorApp::openFolder);
 
     QAction *saveAct = fileMenu->addAction("Save Image…");
+    saveAct->setObjectName("actionSaveImage");
     saveAct->setShortcut(QKeySequence::Save);
     connect(saveAct, &QAction::triggered, this, &PhotoEditorApp::saveImage);
 
@@ -451,6 +466,7 @@ void PhotoEditorApp::setupMenuBar() {
     QMenu *editMenu = menuBar()->addMenu("Edit");
 
     m_undoAct = editMenu->addAction("Undo");
+    m_undoAct->setObjectName("actionUndo");
     m_undoAct->setShortcut(QKeySequence::Undo);
     m_undoAct->setEnabled(false);
     connect(m_undoAct, &QAction::triggered, this, [this]() {
@@ -468,6 +484,7 @@ void PhotoEditorApp::setupMenuBar() {
     connect(m_history, &UndoHistory::canUndoChanged, m_undoAct, &QAction::setEnabled);
 
     m_redoAct = editMenu->addAction("Redo");
+    m_redoAct->setObjectName("actionRedo");
     m_redoAct->setShortcuts({QKeySequence::Redo, QKeySequence("Ctrl+Y")});
     m_redoAct->setEnabled(false);
     connect(m_redoAct, &QAction::triggered, this, [this]() {
@@ -486,10 +503,12 @@ void PhotoEditorApp::setupMenuBar() {
 
     QMenu   *developMenu     = menuBar()->addMenu("Develop");
     QAction *copySettingsAct = developMenu->addAction("Copy Develop Settings");
+    copySettingsAct->setObjectName("actionCopyDevelopSettings");
     copySettingsAct->setShortcut(QKeySequence::Copy);
     connect(copySettingsAct, &QAction::triggered, this, &PhotoEditorApp::copyDevelopSettings);
 
     QAction *pasteSettingsAct = developMenu->addAction("Paste Develop Settings");
+    pasteSettingsAct->setObjectName("actionPasteDevelopSettings");
     pasteSettingsAct->setShortcut(QKeySequence::Paste);
     connect(pasteSettingsAct, &QAction::triggered, this, &PhotoEditorApp::pasteDevelopSettings);
 
@@ -501,6 +520,7 @@ void PhotoEditorApp::setupMenuBar() {
     m_effectMenuActions.clear();
     for (int i = 0; i < entries.size(); ++i) {
         QAction *act = effectsMenu->addAction(entries[i].effect->getName());
+        act->setObjectName(QString("actionEffect%1").arg(i));
         act->setCheckable(true);
         act->setChecked(entries[i].enabled);
         m_effectMenuActions.append(act);
@@ -520,21 +540,26 @@ void PhotoEditorApp::setupMenuBar() {
     QMenu *debugMenu = menuBar()->addMenu("Debug");
 
     QAction *importAct = debugMenu->addAction("Load Settings…");
+    importAct->setObjectName("actionLoadSettings");
     connect(importAct, &QAction::triggered, this, &PhotoEditorApp::importSettings);
 
     QAction *exportAct = debugMenu->addAction("Save Settings…");
+    exportAct->setObjectName("actionSaveSettings");
     connect(exportAct, &QAction::triggered, this, &PhotoEditorApp::exportSettings);
 
     debugMenu->addSeparator();
 
     QAction *testCaseAct = debugMenu->addAction("Save Test Case…");
+    testCaseAct->setObjectName("actionSaveTestCase");
     connect(testCaseAct, &QAction::triggered, this, &PhotoEditorApp::saveTestCase);
 
     debugMenu->addSeparator();
     QAction *rebuildPreviewsAct = debugMenu->addAction("Rebuild Edited Previews");
+    rebuildPreviewsAct->setObjectName("actionRebuildEditedPreviews");
     connect(rebuildPreviewsAct, &QAction::triggered, this, &PhotoEditorApp::rebuildEditedPreviews);
 
     QAction *purgeCachesAct = debugMenu->addAction("Purge Photo Caches…");
+    purgeCachesAct->setObjectName("actionPurgeCaches");
     connect(purgeCachesAct, &QAction::triggered, this, &PhotoEditorApp::purgeCaches);
 }
 
@@ -543,6 +568,7 @@ void PhotoEditorApp::setupGpuSelector(QVBoxLayout *rightLayout) {
     rightLayout->addWidget(label);
 
     m_gpuSelector = new QComboBox();
+    m_gpuSelector->setObjectName("gpuDeviceSelector");
     m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing "
                               "effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
 
@@ -571,7 +597,8 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
         IInteractiveEffect *interactive = entries[i].interactive;
 
         // Container
-        QWidget     *panel       = new QWidget();
+        QWidget *panel = new QWidget();
+        panel->setObjectName(QString("effectPanel%1").arg(i));
         QVBoxLayout *panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
@@ -643,14 +670,14 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
 }
 
 void PhotoEditorApp::openImage() {
-    QString fileName = QFileDialog::getOpenFileName(this, "Open Image", m_lastDir,
-                                                    "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
-                                                    "*.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
-                                                    "All Files (*)");
+    QString fileName = m_uiServices->openFile(this, "Open Image", m_lastDir,
+                                              "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
+                                              "*.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
+                                              "All Files (*)");
 
     if (fileName.isEmpty()) return;
-    setMode(Mode::Develop);
     loadFullImage(fileName);
+    setMode(Mode::Develop);
 }
 
 void PhotoEditorApp::loadFullImage(const QString &path) {
@@ -749,13 +776,11 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
 void PhotoEditorApp::saveImage() {
     if (m_originalImage.isNull()) return;
 
-    ExportDialog dlg(this);
-    dlg.setDefaultDestinationDir(m_lastDir);
-    if (dlg.exec() != QDialog::Accepted) return;
-
-    const ExportOptions::Options opts = dlg.options();
+    const auto selectedOptions = m_uiServices->chooseExportOptions(this, m_lastDir);
+    if (!selectedOptions) return;
+    const ExportOptions::Options opts = *selectedOptions;
     if (opts.destinationDir.isEmpty()) {
-        QMessageBox::warning(this, "Export", "Please choose a destination folder.");
+        m_uiServices->warning(this, "Export", "Please choose a destination folder.");
         return;
     }
 
@@ -765,9 +790,9 @@ void PhotoEditorApp::saveImage() {
     const QString destPath = ExportPath::chooseDestination(opts, m_currentImagePath, /*batchIndex=*/1);
     if (destPath.isEmpty()) {
         // Skip-on-conflict — surface it so the user knows nothing was written.
-        QMessageBox::information(this, "Export Skipped",
-                                 "A file with that name already exists. "
-                                 "Change the pattern or pick a different policy.");
+        m_uiServices->information(this, "Export Skipped",
+                                  "A file with that name already exists. "
+                                  "Change the pattern or pick a different policy.");
         return;
     }
 
@@ -787,15 +812,15 @@ void PhotoEditorApp::importSettings() {
     }
 
     const QString fileName =
-        QFileDialog::getOpenFileName(this, "Load Settings", suggested, "YAML (*.yml *.yaml);;All Files (*)");
+        m_uiServices->openFile(this, "Load Settings", suggested, "YAML (*.yml *.yaml);;All Files (*)");
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
 
     SettingsImporter::Settings parsed;
     QString                    error;
     if (!SettingsImporter::readYaml(fileName, &parsed, &error)) {
-        QMessageBox::warning(this, "Load Failed",
-                             QString("Could not read settings from:\n%1\n\n%2").arg(fileName, error));
+        m_uiServices->warning(this, "Load Failed",
+                              QString("Could not read settings from:\n%1\n\n%2").arg(fileName, error));
         return;
     }
 
@@ -812,14 +837,13 @@ void PhotoEditorApp::importSettings() {
 
 void PhotoEditorApp::saveTestCase() {
     if (m_originalImage.isNull() || m_currentImagePath.isEmpty()) {
-        QMessageBox::warning(this, "Save Test Case",
-                             "Open an image first — a test case bundles the source image, the "
-                             "current settings, and the rendered output.");
+        m_uiServices->warning(this, "Save Test Case",
+                              "Open an image first — a test case bundles the source image, the "
+                              "current settings, and the rendered output.");
         return;
     }
 
-    const QString dir =
-        QFileDialog::getExistingDirectory(this, "Save Test Case To Folder", m_lastDir, QFileDialog::ShowDirsOnly);
+    const QString dir = m_uiServices->chooseDirectory(this, "Save Test Case To Folder", m_lastDir);
     if (dir.isEmpty()) return;
     m_lastDir = dir;
 
@@ -827,15 +851,15 @@ void PhotoEditorApp::saveTestCase() {
     const QString   inputDest = QDir(dir).filePath("input." + srcInfo.suffix().toLower());
     if (QFile::exists(inputDest)) QFile::remove(inputDest);
     if (!QFile::copy(m_currentImagePath, inputDest)) {
-        QMessageBox::warning(this, "Save Test Case", QString("Could not copy source image to:\n%1").arg(inputDest));
+        m_uiServices->warning(this, "Save Test Case", QString("Could not copy source image to:\n%1").arg(inputDest));
         return;
     }
 
     QString       error;
     const QString yamlPath = QDir(dir).filePath("settings.yaml");
     if (!SettingsExporter::writeYaml(yamlPath, *m_effects, m_currentImagePath, &error)) {
-        QMessageBox::warning(this, "Save Test Case",
-                             QString("Could not write settings to:\n%1\n\n%2").arg(yamlPath, error));
+        m_uiServices->warning(this, "Save Test Case",
+                              QString("Could not write settings to:\n%1\n\n%2").arg(yamlPath, error));
         return;
     }
 
@@ -854,20 +878,20 @@ void PhotoEditorApp::purgeCaches() {
     if (!m_currentImagePath.isEmpty()) folder = QFileInfo(m_currentImagePath).absolutePath();
     else folder = m_currentFolder;
     if (folder.isEmpty()) {
-        QMessageBox::information(this, "Purge Photo Caches", "Open a photo folder first.");
+        m_uiServices->information(this, "Purge Photo Caches", "Open a photo folder first.");
         return;
     }
 
-    const auto answer = QMessageBox::question(
-        this, "Purge Photo Caches",
-        QString("Remove generated thumbnails and rendered proof JPEGs from:\n%1\n\n"
-                "Source photos, edits, history, marks, and application settings will not be changed.")
-            .arg(folder));
-    if (answer != QMessageBox::Yes) return;
+    if (!m_uiServices->confirm(
+            this, "Purge Photo Caches",
+            QString("Remove generated thumbnails and rendered proof JPEGs from:\n%1\n\n"
+                    "Source photos, edits, history, marks, and application settings will not be changed.")
+                .arg(folder)))
+        return;
 
     const CachePurger::Result result = CachePurger::purgePhotoCaches(folder);
     if (!result.success) {
-        QMessageBox::warning(this, "Purge Failed", result.error);
+        m_uiServices->warning(this, "Purge Failed", result.error);
         return;
     }
 
@@ -893,7 +917,7 @@ void PhotoEditorApp::purgeCaches() {
         }
     }
 
-    QMessageBox::information(
+    m_uiServices->information(
         this, "Caches Purged",
         QString("Removed %1 generated cache file(s). Thumbnail regeneration is running in the background.")
             .arg(result.filesRemoved));
@@ -947,14 +971,14 @@ void PhotoEditorApp::exportSettings() {
     }
 
     const QString fileName =
-        QFileDialog::getSaveFileName(this, "Export Settings", suggested, "YAML (*.yml *.yaml);;All Files (*)");
+        m_uiServices->saveFile(this, "Export Settings", suggested, "YAML (*.yml *.yaml);;All Files (*)");
     if (fileName.isEmpty()) return;
     m_lastDir = QFileInfo(fileName).absolutePath();
 
     QString error;
     if (!SettingsExporter::writeYaml(fileName, *m_effects, m_currentImagePath, &error)) {
-        QMessageBox::warning(this, "Export Failed",
-                             QString("Could not write settings to:\n%1\n\n%2").arg(fileName, error));
+        m_uiServices->warning(this, "Export Failed",
+                              QString("Could not write settings to:\n%1\n\n%2").arg(fileName, error));
     }
 }
 
@@ -1011,10 +1035,10 @@ void PhotoEditorApp::onExportComplete(uint64_t requestId, QImage result, QString
                                      : result.save(path));
 
     if (!ok) {
-        QMessageBox::warning(this, "Save Failed",
-                             QString("Could not save image to:\n%1\n\n"
-                                     "Check that the directory is writable and you have sufficient disk space.")
-                                 .arg(path));
+        m_uiServices->warning(this, "Save Failed",
+                              QString("Could not save image to:\n%1\n\n"
+                                      "Check that the directory is writable and you have sufficient disk space.")
+                                  .arg(path));
     }
 }
 
@@ -1106,11 +1130,11 @@ bool PhotoEditorApp::eventFilter(QObject *obj, QEvent *event) {
                        fw->inherits("QPlainTextEdit"))) {
                 return QMainWindow::eventFilter(obj, event);
             }
-            if (event->type() == QEvent::KeyPress && !m_beforeViewActive) {
+            if (event->type() == QEvent::KeyPress && !m_uiState.isBeforeViewActive()) {
                 enterBeforeView();
                 return true;
             }
-            if (event->type() == QEvent::KeyRelease && m_beforeViewActive) {
+            if (event->type() == QEvent::KeyRelease && m_uiState.isBeforeViewActive()) {
                 exitBeforeView();
                 return true;
             }
@@ -1120,7 +1144,7 @@ bool PhotoEditorApp::eventFilter(QObject *obj, QEvent *event) {
 }
 
 void PhotoEditorApp::enterBeforeView() {
-    m_beforeViewActive = true;
+    if (!m_uiState.enterBeforeView()) return;
     if (m_stack && m_stack->currentWidget() == m_loupeView) {
         m_loupeView->setShowBefore(true);
     } else if (!m_originalImage.isNull()) {
@@ -1130,7 +1154,7 @@ void PhotoEditorApp::enterBeforeView() {
 }
 
 void PhotoEditorApp::exitBeforeView() {
-    m_beforeViewActive = false;
+    if (!m_uiState.exitBeforeView()) return;
     if (m_stack && m_stack->currentWidget() == m_loupeView) {
         m_loupeView->setShowBefore(false);
     } else {
@@ -1139,16 +1163,18 @@ void PhotoEditorApp::exitBeforeView() {
 }
 
 void PhotoEditorApp::onProcessingStarted() {
+    m_uiState.setProcessing(true);
     m_processingLabel->setVisible(true);
 }
 
 void PhotoEditorApp::onProcessingComplete(QImage result, QPoint offset) {
+    m_uiState.setProcessing(false);
     m_processingLabel->setVisible(false);
     if (result.isNull()) {
         m_viewport->update();
     } else {
         m_viewport->setImage(result, offset);
-        if (!m_beforeViewActive && !m_developedPath.isEmpty()) {
+        if (!m_uiState.isBeforeViewActive() && !m_developedPath.isEmpty()) {
             m_latestDevelopPreview     = result;
             m_latestDevelopPreviewPath = m_developedPath;
         }
@@ -1173,7 +1199,8 @@ void PhotoEditorApp::closeEvent(QCloseEvent *event) {
 // ─── Gallery / Loupe / Develop mode switching ───────────────────────────────
 
 void PhotoEditorApp::setMode(Mode m) {
-    const bool leavingDevelop = m_stack->currentIndex() == static_cast<int>(Mode::Develop) && m != Mode::Develop;
+    const bool leavingDevelop = m_uiState.mode() == Mode::Develop && m != Mode::Develop;
+    if (!m_uiState.requestMode(m, !m_currentImagePath.isEmpty())) return;
     if (leavingDevelop) {
         flushHistorySidecar();
         if (!m_latestDevelopPreview.isNull() && m_latestDevelopPreviewPath == m_currentImagePath) {
@@ -1204,7 +1231,7 @@ void PhotoEditorApp::setMode(Mode m) {
 }
 
 void PhotoEditorApp::openFolder() {
-    const QString folder = QFileDialog::getExistingDirectory(this, "Open Folder", m_lastDir, QFileDialog::ShowDirsOnly);
+    const QString folder = m_uiServices->chooseDirectory(this, "Open Folder", m_lastDir);
     if (folder.isEmpty()) return;
     m_lastDir = folder;
     loadFolderIntoGrid(folder);
@@ -1407,11 +1434,8 @@ void PhotoEditorApp::onDevelopRequested() {
 }
 
 void PhotoEditorApp::onLoupeNavigate(int direction) {
-    if (m_currentPaths.isEmpty() || m_currentImagePath.isEmpty()) return;
-    const int idx  = static_cast<int>(m_currentPaths.indexOf(m_currentImagePath));
-    const int next = idx + direction;
-    if (idx < 0 || next < 0 || next >= m_currentPaths.size()) return;
-    onPhotoActivated(m_currentPaths[next]);
+    const QString target = EditorUiState::navigationTarget(m_currentPaths, m_currentImagePath, direction);
+    if (!target.isEmpty()) onPhotoActivated(target);
 }
 
 void PhotoEditorApp::onMarkChanged(const QString &path, GridView::Mark mark) {
@@ -1475,8 +1499,8 @@ void PhotoEditorApp::pasteDevelopSettingsTo(const QString &path) {
     } else {
         const SettingsImporter::Settings previous = settingsForPath(path);
         if (!SettingsExporter::writeYaml(sidecarPathFor(path), copied, path, &error)) {
-            QMessageBox::warning(this, "Paste Settings",
-                                 QString("Could not write settings for:\n%1\n\n%2").arg(path, error));
+            m_uiServices->warning(this, "Paste Settings",
+                                  QString("Could not write settings for:\n%1\n\n%2").arg(path, error));
             return;
         }
 

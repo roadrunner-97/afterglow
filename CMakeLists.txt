@@ -96,6 +96,8 @@ add_library(photoeditor_core STATIC
     src/core/CachePurger.h
     src/core/EffectManager.cpp
     src/core/EffectManager.h
+    src/core/EditorUiState.cpp
+    src/core/EditorUiState.h
     src/core/ImageProcessor.cpp
     src/core/ImageProcessor.h
     src/core/GpuDeviceRegistry.cpp
@@ -157,6 +159,8 @@ set_target_properties(photoeditor_core PROPERTIES AUTOMOC ON)
 add_library(photoeditor_ui STATIC
     src/ui/PhotoEditorApp.cpp
     src/ui/PhotoEditorApp.h
+    src/ui/UiServices.cpp
+    src/ui/UiServices.h
     src/ui/ExportDialog.cpp
     src/ui/ExportDialog.h
     src/ui/GridView.cpp

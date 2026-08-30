@@ -13,6 +13,40 @@
 #include "LoupeView.h"
 #include "PhotoEditorApp.h"
 #include "ImageProcessor.h"
+#include "UiServices.h"
+
+class FakeUiServices final : public UiServices {
+public:
+    QString                               openFileResult;
+    QString                               saveFileResult;
+    QString                               directoryResult;
+    std::optional<ExportOptions::Options> exportOptions;
+    bool                                  confirmResult = false;
+    QStringList                           informationTitles;
+    QStringList                           warningTitles;
+
+    QString openFile(QWidget *, const QString &, const QString &, const QString &) override {
+        return openFileResult;
+    }
+    QString saveFile(QWidget *, const QString &, const QString &, const QString &) override {
+        return saveFileResult;
+    }
+    QString chooseDirectory(QWidget *, const QString &, const QString &) override {
+        return directoryResult;
+    }
+    std::optional<ExportOptions::Options> chooseExportOptions(QWidget *, const QString &) override {
+        return exportOptions;
+    }
+    void information(QWidget *, const QString &title, const QString &) override {
+        informationTitles.append(title);
+    }
+    void warning(QWidget *, const QString &title, const QString &) override {
+        warningTitles.append(title);
+    }
+    bool confirm(QWidget *, const QString &, const QString &) override {
+        return confirmResult;
+    }
+};
 
 class TestGalleryLoupe : public QObject {
     Q_OBJECT
@@ -25,6 +59,115 @@ private:
     }
 
 private slots:
+    void importantControlsHaveStableObjectNames() {
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+
+        QVERIFY(app.findChild<QAction *>("actionOpenImage"));
+        QVERIFY(app.findChild<QAction *>("actionOpenFolder"));
+        QVERIFY(app.findChild<QAction *>("actionSaveImage"));
+        QVERIFY(app.findChild<QAction *>("actionUndo"));
+        QVERIFY(app.findChild<QAction *>("actionRedo"));
+        QVERIFY(app.findChild<QAction *>("actionModeGallery"));
+        QVERIFY(app.findChild<QAction *>("actionModeLoupe"));
+        QVERIFY(app.findChild<QAction *>("actionModeDevelop"));
+        QVERIFY(app.findChild<QStackedWidget *>("editorModeStack"));
+        QVERIFY(app.findChild<GridView *>("galleryGrid"));
+        QVERIFY(app.findChild<LoupeView *>("loupeView"));
+        QVERIFY(app.findChild<ViewportWidget *>("developViewport"));
+        QVERIFY(app.findChild<QWidget *>("processingIndicator"));
+        QVERIFY(app.findChild<QWidget *>("gpuDeviceSelector"));
+    }
+
+    void injectedOpenImageRunsDevelopWorkflowWithoutNativeDialogs() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString imagePath = dir.filePath("workflow.png");
+        QImage        image(48, 32, QImage::Format_RGB32);
+        image.fill(Qt::cyan);
+        QVERIFY(image.save(imagePath));
+
+        FakeUiServices ui;
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        ui.openFileResult = imagePath;
+        app.setUiServices(&ui);
+
+        app.findChild<QAction *>("actionOpenImage")->trigger();
+
+        auto *stack      = app.findChild<QStackedWidget *>("editorModeStack");
+        auto *viewport   = app.findChild<ViewportWidget *>("developViewport");
+        auto *processing = app.findChild<QWidget *>("processingIndicator");
+        QVERIFY(stack);
+        QVERIFY(viewport);
+        QVERIFY(processing);
+        QCOMPARE(stack->currentIndex(), static_cast<int>(EditorUiState::Mode::Develop));
+        QVERIFY(stack->currentWidget()->isAncestorOf(viewport));
+        QTRY_VERIFY(!processing->isVisible());
+        QVERIFY(QFile::exists(dir.filePath("workflow.yml")));
+    }
+
+    void injectedServicesDriveSettingsAndExportWorkflows() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString imagePath = dir.filePath("source.png");
+        QImage        image(40, 30, QImage::Format_RGB32);
+        image.fill(Qt::magenta);
+        QVERIFY(image.save(imagePath));
+
+        FakeUiServices ui;
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.setUiServices(&ui);
+
+        ui.openFileResult = imagePath;
+        app.findChild<QAction *>("actionOpenImage")->trigger();
+
+        const QString settingsPath = dir.filePath("saved-settings.yml");
+        ui.saveFileResult          = settingsPath;
+        app.findChild<QAction *>("actionSaveSettings")->trigger();
+        QVERIFY(QFile::exists(settingsPath));
+
+        ui.openFileResult = dir.filePath("missing-settings.yml");
+        app.findChild<QAction *>("actionLoadSettings")->trigger();
+        QCOMPARE(ui.warningTitles, QStringList{"Load Failed"});
+
+        ExportOptions::Options options;
+        options.destinationDir  = dir.path();
+        options.filenamePattern = "rendered";
+        options.format          = ExportOptions::Format::PNG;
+        options.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
+        ui.exportOptions        = options;
+        app.findChild<QAction *>("actionSaveImage")->trigger();
+        QTRY_VERIFY(QFile::exists(dir.filePath("rendered.png")));
+        QCOMPARE(ui.warningTitles, QStringList{"Load Failed"});
+    }
+
+    void injectedFolderPickerRunsGalleryWorkflow() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString imagePath = dir.filePath("gallery.png");
+        QImage        image(32, 24, QImage::Format_RGB32);
+        image.fill(Qt::yellow);
+        QVERIFY(image.save(imagePath));
+
+        FakeUiServices ui;
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        ui.directoryResult = dir.path();
+        app.setUiServices(&ui);
+
+        app.findChild<QAction *>("actionOpenFolder")->trigger();
+
+        auto *stack = app.findChild<QStackedWidget *>("editorModeStack");
+        auto *grid  = app.findChild<GridView *>("galleryGrid");
+        QVERIFY(stack);
+        QVERIFY(grid);
+        QCOMPARE(stack->currentIndex(), static_cast<int>(EditorUiState::Mode::Gallery));
+        QCOMPARE(grid->currentPath(), imagePath);
+        QTRY_VERIFY(!grid->thumbnail(imagePath).isNull());
+    }
+
     void gridSelectionCanFollowLoupeNavigation() {
         GridView grid;
         grid.setPhotos({"one.jpg", "two.jpg", "three.jpg"});
