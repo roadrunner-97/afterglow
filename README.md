@@ -5,7 +5,7 @@ with Qt 6 and OpenCL. Browse a folder, review and mark photographs, inspect RAW
 metadata, then develop and export full-resolution images through a stack of 15
 effects.
 
-![Afterglow's Develop view](docs/images/afterglow-develop.png)
+![Afterglow's Develop view](docs/images/afterglow-develop-v2.png)
 
 <p align="center">
   <img src="docs/images/afterglow-gallery.png" alt="Afterglow's Gallery view" width="49%">
