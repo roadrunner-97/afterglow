@@ -160,7 +160,9 @@ private slots:
         options.onConflict      = ExportOptions::OverwritePolicy::Overwrite;
         ui.exportOptions        = options;
         app.findChild<QAction *>("actionSaveImage")->trigger();
-        QTRY_VERIFY(QFile::exists(dir.filePath("rendered.png")));
+        // A cold POCL runner may spend several seconds compiling the shared
+        // pipeline while the rest of ctest is running in parallel.
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(dir.filePath("rendered.png")), 15000);
         QCOMPARE(ui.warningTitles, QStringList{"Load Failed"});
     }
 
