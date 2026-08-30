@@ -191,10 +191,13 @@ void GridView::setPhotos(const QStringList &paths) {
 }
 
 void GridView::setThumbnail(const QString &path, const QImage &thumb) {
+    QImage galleryThumb = thumb;
+    if (galleryThumb.width() > 512 || galleryThumb.height() > 512)
+        galleryThumb = galleryThumb.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     for (int i = 0; i < m_list->count(); ++i) {
         QListWidgetItem *item = m_list->item(i);
         if (item->data(Qt::UserRole).toString() == path) {
-            item->setIcon(QIcon(QPixmap::fromImage(thumb)));
+            item->setIcon(QIcon(QPixmap::fromImage(galleryThumb)));
             break;
         }
     }

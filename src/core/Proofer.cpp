@@ -206,10 +206,11 @@ void Proofer::dispatchNext() {
             }
             if (img.isNull()) return {};
             if (cropSource) img = cropSource->applyCommittedGeometry(img);
+            img           = scaleProof(img);
             QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
             if (result.isNull()) return {};
             result = applyActiveCropAndRotate(result, activeCrop, activeAngle);
-            return scaleProof(result);
+            return result;
         }));
 }
 

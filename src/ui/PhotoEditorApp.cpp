@@ -1289,8 +1289,6 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
         for (const QString &path : paths) {
             if (m_proofCache->isProofed(path)) {
                 m_gridView->setProofStatus(path, GridView::ProofStatus::Proofed);
-                const QImage proof = m_proofCache->proof(path);
-                if (!proof.isNull()) m_gridView->setThumbnail(path, proof);
             } else {
                 unproofed.append(path);
             }
@@ -1311,9 +1309,14 @@ void PhotoEditorApp::scheduleThumbnails(const QStringList &paths, const QString 
     const QString            tag        = folder;
     const auto               generation = m_thumbnailGeneration;
     for (const QString &path : paths) {
-        m_thumbnailPool->start([self, path, tag, generation, thumbnailGeneration]() {
+        const bool proofed = m_proofCache && m_proofCache->isProofed(path);
+        m_thumbnailPool->start([self, path, tag, generation, thumbnailGeneration, proofed]() {
             if (generation->load(std::memory_order_relaxed) != thumbnailGeneration) return;
-            QImage thumb = tryLoadCachedThumb(path);
+            QImage thumb;
+            if (proofed) thumb = QImage(ProofCache::proofPath(path));
+            if (thumb.width() > 512 || thumb.height() > 512)
+                thumb = thumb.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            if (thumb.isNull()) thumb = tryLoadCachedThumb(path);
             if (thumb.isNull()) {
                 if (RawLoader::isRawFile(path)) thumb = RawLoader::loadThumbnail(path);
                 else thumb = decodeThumbnailOriented(path);
@@ -1331,12 +1334,7 @@ void PhotoEditorApp::scheduleThumbnails(const QStringList &paths, const QString 
                     if (!self) return;
                     if (self->m_currentFolder != tag) return;
                     if (self->m_thumbnailGeneration->load(std::memory_order_relaxed) != thumbnailGeneration) return;
-                    QImage displayed = thumb;
-                    if (self->m_proofCache) {
-                        const QImage proof = self->m_proofCache->proof(path);
-                        if (!proof.isNull()) displayed = proof;
-                    }
-                    self->m_gridView->setThumbnail(path, displayed);
+                    self->m_gridView->setThumbnail(path, thumb);
                 },
                 Qt::QueuedConnection);
         });

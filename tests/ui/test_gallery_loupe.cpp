@@ -48,6 +48,20 @@ private slots:
         QVERIFY(grid.thumbnail("missing.jpg").isNull());
     }
 
+    void gridCapsStoredThumbnailsAtMaximumZoomSize() {
+        GridView grid;
+        grid.setPhotos({"large.jpg"});
+        QImage large(1600, 1200, QImage::Format_RGB32);
+        large.fill(Qt::blue);
+
+        grid.setThumbnail("large.jpg", large);
+
+        const QImage stored = grid.thumbnail("large.jpg");
+        QVERIFY(!stored.isNull());
+        QVERIFY(stored.width() <= 512);
+        QVERIFY(stored.height() <= 512);
+    }
+
     void gridTracksEditedState() {
         GridView grid;
         grid.setPhotos({"one.jpg", "two.jpg"});
