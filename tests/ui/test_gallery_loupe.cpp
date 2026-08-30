@@ -186,6 +186,17 @@ private slots:
         QVERIFY(rebuildAction);
     }
 
+    void developSettingsActionsExposeClipboardShortcuts() {
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        QAction       *copyAction  = action(app, "Copy Develop Settings");
+        QAction       *pasteAction = action(app, "Paste Develop Settings");
+        QVERIFY(copyAction);
+        QVERIFY(pasteAction);
+        QCOMPARE(copyAction->shortcut(), QKeySequence::Copy);
+        QCOMPARE(pasteAction->shortcut(), QKeySequence::Paste);
+    }
+
     void leavingDevelopImmediatelyUsesLatestEditedRender() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

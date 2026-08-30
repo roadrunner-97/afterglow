@@ -65,6 +65,8 @@ private slots:
     void onDevelopRequested();
     void onLoupeNavigate(int direction);
     void onMarkChanged(const QString &path, GridView::Mark mark);
+    void copyDevelopSettings();
+    void pasteDevelopSettings();
 
 private:
     enum class Mode { Gallery = 0, Loupe = 1, Develop = 2 };
@@ -104,11 +106,14 @@ private:
     // present once an image has been opened: loadFullImage creates one filled
     // with defaults if missing, and onParametersChanged rewrites it on every
     // committed edit so the sidecar tracks the live editor state.
-    QString sidecarPathFor(const QString &imagePath) const;
-    void    writeSidecar();
-    void    refreshEditedState();
-    void    persistLatestDevelopPreview();
-    void    snapshotDefaults();
+    QString                    sidecarPathFor(const QString &imagePath) const;
+    void                       writeSidecar();
+    void                       refreshEditedState();
+    void                       persistLatestDevelopPreview();
+    void                       snapshotDefaults();
+    SettingsImporter::Settings settingsForPath(const QString &path) const;
+    void                       copyDevelopSettingsFrom(const QString &path);
+    void                       pasteDevelopSettingsTo(const QString &path);
 
     MetadataTray      *m_metadataTray = nullptr;
     HistoryTray       *m_historyTray  = nullptr;

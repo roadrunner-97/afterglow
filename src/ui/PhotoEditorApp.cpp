@@ -29,6 +29,8 @@
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QClipboard>
+#include <QStatusBar>
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
@@ -310,6 +312,10 @@ void PhotoEditorApp::setupUI() {
     m_gridView = new GridView();
     connect(m_gridView, &GridView::photoActivated, this, &PhotoEditorApp::onPhotoActivated);
     connect(m_gridView, &GridView::markChanged, this, &PhotoEditorApp::onMarkChanged);
+    connect(m_gridView, &GridView::copySettingsRequested, this,
+            [this](const QString &path) { copyDevelopSettingsFrom(path); });
+    connect(m_gridView, &GridView::pasteSettingsRequested, this,
+            [this](const QString &path) { pasteDevelopSettingsTo(path); });
     // Single-click / arrow keys in the grid track m_currentImagePath so
     // the toolbar Develop / Loupe buttons act on the highlighted photo.
     connect(m_gridView, &GridView::currentPathChanged, this,
@@ -477,6 +483,15 @@ void PhotoEditorApp::setupMenuBar() {
         m_history->setApplying(false);
     });
     connect(m_history, &UndoHistory::canRedoChanged, m_redoAct, &QAction::setEnabled);
+
+    QMenu   *developMenu     = menuBar()->addMenu("Develop");
+    QAction *copySettingsAct = developMenu->addAction("Copy Develop Settings");
+    copySettingsAct->setShortcut(QKeySequence::Copy);
+    connect(copySettingsAct, &QAction::triggered, this, &PhotoEditorApp::copyDevelopSettings);
+
+    QAction *pasteSettingsAct = developMenu->addAction("Paste Develop Settings");
+    pasteSettingsAct->setShortcut(QKeySequence::Paste);
+    connect(pasteSettingsAct, &QAction::triggered, this, &PhotoEditorApp::pasteDevelopSettings);
 
     // View → Effects — enable/disable individual effects
     QMenu *viewMenu    = menuBar()->addMenu("View");
@@ -1404,6 +1419,89 @@ void PhotoEditorApp::onLoupeNavigate(int direction) {
 void PhotoEditorApp::onMarkChanged(const QString &path, GridView::Mark mark) {
     m_gridView->setMark(path, mark);
     writeCatalog();
+}
+
+SettingsImporter::Settings PhotoEditorApp::settingsForPath(const QString &path) const {
+    if (path == m_developedPath && !m_originalImage.isNull()) {
+        SettingsImporter::Settings settings;
+        settings.image   = path;
+        settings.effects = currentSnapshot();
+        return settings;
+    }
+
+    SettingsImporter::Settings settings;
+    const QString              sidecar = sidecarPathFor(path);
+    QString                    error;
+    if (QFile::exists(sidecar) && SettingsImporter::readYaml(sidecar, &settings, &error)) return settings;
+    return m_defaults;
+}
+
+void PhotoEditorApp::copyDevelopSettings() {
+    if (!m_currentImagePath.isEmpty()) copyDevelopSettingsFrom(m_currentImagePath);
+}
+
+void PhotoEditorApp::copyDevelopSettingsFrom(const QString &path) {
+    if (path.isEmpty()) return;
+    const SettingsImporter::Settings settings = settingsForPath(path);
+    if (settings.effects.isEmpty()) return;
+    QApplication::clipboard()->setText(SettingsExporter::toYaml(settings, path));
+    statusBar()->showMessage(QString("Copied develop settings from %1").arg(QFileInfo(path).fileName()), 2500);
+}
+
+void PhotoEditorApp::pasteDevelopSettings() {
+    if (!m_currentImagePath.isEmpty()) pasteDevelopSettingsTo(m_currentImagePath);
+}
+
+void PhotoEditorApp::pasteDevelopSettingsTo(const QString &path) {
+    if (path.isEmpty()) return;
+
+    SettingsImporter::Settings copied;
+    QString                    error;
+    if (!SettingsImporter::fromYaml(QApplication::clipboard()->text(), &copied, &error) || copied.effects.isEmpty()) {
+        statusBar()->showMessage("Clipboard does not contain Afterglow develop settings", 3000);
+        return;
+    }
+
+    if (path == m_developedPath && !m_originalImage.isNull()) {
+        SettingsImporter::applyToManager(copied, *m_effects);
+        for (int i = 0; i < m_effectMenuActions.size() && i < m_effects->entries().size(); ++i) {
+            QSignalBlocker block(m_effectMenuActions[i]);
+            m_effectMenuActions[i]->setChecked(m_effects->entries()[i].enabled);
+        }
+        syncCommittedGeometry();
+        syncViewportRotation();
+        triggerReprocess();
+        writeSidecar();
+        m_history->recordFromCurrent(currentSnapshot());
+        refreshEditedState();
+    } else {
+        const SettingsImporter::Settings previous = settingsForPath(path);
+        if (!SettingsExporter::writeYaml(sidecarPathFor(path), copied, path, &error)) {
+            QMessageBox::warning(this, "Paste Settings",
+                                 QString("Could not write settings for:\n%1\n\n%2").arg(path, error));
+            return;
+        }
+
+        UndoHistory                    pastedHistory;
+        HistorySerializer::HistoryData oldHistory;
+        const QString                  historyPath = historySidecarPathFor(path);
+        QString                        historyError;
+        if (QFile::exists(historyPath) && HistorySerializer::readYaml(historyPath, &oldHistory, &historyError))
+            pastedHistory.load(std::move(oldHistory.entries), oldHistory.cursor, std::move(oldHistory.shadow));
+        else pastedHistory.seed(previous.effects);
+        pastedHistory.recordFromCurrent(copied.effects);
+        if (!HistorySerializer::writeYaml(historyPath, pastedHistory.entries(), pastedHistory.cursor(), copied.effects,
+                                          &error))
+            qWarning() << "History sidecar write failed for" << historyPath << ":" << error;
+        m_gridView->setEdited(path, pastedHistory.cursor() > 0);
+        if (m_proofCache) {
+            m_proofCache->invalidate(path);
+            m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
+            if (m_proofer) m_proofer->refresh(path);
+        }
+    }
+
+    statusBar()->showMessage(QString("Pasted develop settings to %1").arg(QFileInfo(path).fileName()), 2500);
 }
 
 // ─── Per-image sidecar (.yml) ───────────────────────────────────────────────

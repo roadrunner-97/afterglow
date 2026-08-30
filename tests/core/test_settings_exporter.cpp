@@ -39,6 +39,21 @@ class TestSettingsExporter : public QObject {
     Q_OBJECT
 
 private slots:
+    void serializesSettingsSnapshot() {
+        SettingsImporter::Settings       settings;
+        SettingsImporter::EffectSettings effect;
+        effect.id                     = "brightness";
+        effect.enabled                = false;
+        effect.parameters["exposure"] = 1.25;
+        settings.effects.append(effect);
+
+        const QString yaml = SettingsExporter::toYaml(settings, "/tmp/target.jpg");
+        QVERIFY(yaml.contains("image: \"/tmp/target.jpg\""));
+        QVERIFY(yaml.contains("id: \"brightness\""));
+        QVERIFY(yaml.contains("enabled: false"));
+        QVERIFY(yaml.contains("exposure: 1.25"));
+    }
+
     void emptyManager_emitsEmptyEffectsList() {
         EffectManager mgr;
         const QString yaml = SettingsExporter::toYaml(mgr);

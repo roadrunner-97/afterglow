@@ -75,19 +75,17 @@ QString formatScalar(const QVariant &v) {
 
 namespace SettingsExporter {
 
-QString toYaml(const EffectManager &mgr, const QString &sourceImagePath) {
+static QString effectsToYaml(const QVector<SettingsImporter::EffectSettings> &effects, const QString &sourceImagePath) {
     QString out;
     out.append("# Afterglow effect settings\n");
     if (!sourceImagePath.isEmpty()) out.append("image: ").append(quoteString(sourceImagePath)).append('\n');
 
     out.append("effects:\n");
-    const auto &entries = mgr.entries();
-    for (const auto &entry : entries) {
-        if (!entry.effect) continue;
-        out.append("  - id: ").append(quoteString(entry.effect->getId())).append('\n');
+    for (const auto &entry : effects) {
+        out.append("  - id: ").append(quoteString(entry.id)).append('\n');
         out.append("    enabled: ").append(entry.enabled ? "true" : "false").append('\n');
 
-        const auto params = entry.effect->getParameters();
+        const auto &params = entry.parameters;
         if (params.isEmpty()) {
             out.append("    parameters: {}\n");
         } else {
@@ -100,13 +98,38 @@ QString toYaml(const EffectManager &mgr, const QString &sourceImagePath) {
     return out;
 }
 
+QString toYaml(const EffectManager &mgr, const QString &sourceImagePath) {
+    SettingsImporter::Settings settings;
+    for (const auto &entry : mgr.entries()) {
+        if (!entry.effect) continue;
+        settings.effects.append(
+            {entry.effect->getId(), entry.effect->getName(), entry.enabled, entry.effect->getParameters()});
+    }
+    return effectsToYaml(settings.effects, sourceImagePath);
+}
+
+QString toYaml(const SettingsImporter::Settings &settings, const QString &sourceImagePath) {
+    return effectsToYaml(settings.effects, sourceImagePath);
+}
+
 bool writeYaml(const QString &path, const EffectManager &mgr, const QString &sourceImagePath, QString *error) {
+    SettingsImporter::Settings settings;
+    for (const auto &entry : mgr.entries()) {
+        if (!entry.effect) continue;
+        settings.effects.append(
+            {entry.effect->getId(), entry.effect->getName(), entry.enabled, entry.effect->getParameters()});
+    }
+    return writeYaml(path, settings, sourceImagePath, error);
+}
+
+bool writeYaml(const QString &path, const SettingsImporter::Settings &settings, const QString &sourceImagePath,
+               QString *error) {
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         if (error) *error = f.errorString();
         return false;
     }
-    const QByteArray bytes = toYaml(mgr, sourceImagePath).toUtf8();
+    const QByteArray bytes = toYaml(settings, sourceImagePath).toUtf8();
     // GCOVR_EXCL_START — short-write on a freshly-opened regular file isn't
     // reachable from a unit test; the branch exists for diagnostic safety.
     if (f.write(bytes) != bytes.size()) {

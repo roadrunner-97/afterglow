@@ -6,6 +6,7 @@
 #include <QStyledItemDelegate>
 #include <QStyleOptionViewItem>
 #include <QTimer>
+#include <QMenu>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QKeyEvent>
@@ -132,6 +133,19 @@ GridView::GridView(QWidget *parent) : QWidget(parent) {
     m_list->setSpacing(4);
     m_list->setUniformItemSizes(true);
     m_list->viewport()->installEventFilter(this);
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_list, &QListWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QListWidgetItem *item = m_list->itemAt(pos);
+        if (!item) return;
+        m_list->setCurrentItem(item);
+        const QString path = item->data(Qt::UserRole).toString();
+        QMenu         menu(m_list);
+        QAction      *copy   = menu.addAction("Copy Develop Settings");
+        QAction      *paste  = menu.addAction("Paste Develop Settings");
+        QAction      *chosen = menu.exec(m_list->viewport()->mapToGlobal(pos));
+        if (chosen == copy) emit copySettingsRequested(path);
+        else if (chosen == paste) emit pasteSettingsRequested(path);
+    });
 
     connect(m_list, &QListWidget::itemDoubleClicked, this,
             [this](QListWidgetItem *item) { emit photoActivated(item->data(Qt::UserRole).toString()); });

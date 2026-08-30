@@ -51,6 +51,8 @@ signals:
     void photoActivated(const QString &path);
     void markChanged(const QString &path, Mark m);
     void currentPathChanged(const QString &path);
+    void copySettingsRequested(const QString &path);
+    void pasteSettingsRequested(const QString &path);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
