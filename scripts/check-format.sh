@@ -11,18 +11,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
+CLANG_FORMAT_BIN="${CLANG_FORMAT:-clang-format}"
+
 if [[ -f "$PROJECT_DIR/.git/check-coverage-skip" ]]; then
     echo "check-format: skip flag present — exiting 0"
     exit 0
 fi
 
 echo "=== check-format: clang-format ==="
+echo "Using: $($CLANG_FORMAT_BIN --version)"
 
 mapfile -t FILES < <(find src plugins tests -name '*.cpp' -o -name '*.h' | sort)
 
 BAD=()
 for f in "${FILES[@]}"; do
-    if ! clang-format --dry-run --Werror "$f" 2>/dev/null; then
+    if ! "$CLANG_FORMAT_BIN" --dry-run --Werror "$f" 2>/dev/null; then
         BAD+=("$f")
     fi
 done
