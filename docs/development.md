@@ -8,11 +8,11 @@ One-shot via the `coverage` workflow preset:
 cmake --workflow --preset coverage
 ```
 
-Report lands in `build/coverage/index.html`. Requires `gcovr` on PATH.
+Report lands in `build-coverage/coverage/index.html`. Requires `gcovr` on PATH.
 
 A `pre-push` hook (installed automatically by `cmake -B build`) runs
 `scripts/check-coverage.sh`, which builds into `build-coverage/`, runs the
-suite, and enforces a 99% line-coverage threshold. Skip a single push with
+suite, and enforces a 100% line-coverage threshold. Skip a single push with
 `touch .git/check-coverage-skip`; lower the bar with `COVERAGE_MIN_LINES=<pct>
 git push`.
 

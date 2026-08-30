@@ -1,20 +1,41 @@
 # Quickstart
 
-Short tour of the app once it's built. For install steps see [INSTALL.md](INSTALL.md); for architecture see [README.md](README.md).
+Short tour of the app once it is installed. For build and dependency steps see
+[INSTALL.md](INSTALL.md).
 
 ## Launch
 
 ```bash
-./build/bin/lightroom_clone
+./build/bin/afterglow
 ```
 
-The window opens with an empty viewport on the left and a stack of collapsible effect panels on the right.
+Pass an image path to open it directly in Develop:
+
+```bash
+./build/bin/afterglow /path/to/photo.raw
+```
+
+Afterglow opens in Gallery view. Use the mode buttons in the toolbar to move
+between Gallery, Loupe, and Develop.
 
 ## Open an image
 
-- **File → Open Image…** (`Ctrl+O`)
-- Supported: `.png`, `.jpg/.jpeg`, `.bmp`, `.tif/.tiff`, and — when LibRaw is present — `.cr2 .cr3 .nef .nrw .arw .dng .raf .orf .rw2`
+- **File → Open Folder…** (`Ctrl+Shift+O`) opens a folder in Gallery
+- **File → Open Image…** (`Ctrl+O`) opens one image directly in Develop
+- Supported: `.png`, `.jpg/.jpeg`, `.bmp`, `.tif/.tiff`, `.cr2`, `.cr3`,
+  `.nef`, `.nrw`, `.arw`, `.dng`, `.raf`, `.orf`, and `.rw2`
 - RAW files are decoded into 16-bit RGBX64 so highlight/shadow recovery has real headroom
+
+## Gallery and Loupe
+
+Gallery builds cached thumbnails and edited previews in the background. Scroll
+to resize thumbnails, use the arrow keys to select, and press `Enter` (or
+double-click) to open Loupe. Mark a photo with `A` (Accept), `R` (Refine), or
+`D` (Decline); pressing the active mark again clears it.
+
+Loupe provides a large preview, mark controls, image-version choices, and
+camera metadata. Use `Left`/`Right` to navigate, `F` to fit the image, and
+`Enter` to move into Develop.
 
 ## Pan / zoom
 
@@ -30,7 +51,8 @@ Zoom range is 1× (fit) to 64×.
 
 ## Editing
 
-Right panel, top-to-bottom pipeline order:
+Develop has metadata and history on the left, the image viewport in the centre,
+and GPU and effect controls on the right. The pipeline order is:
 
 1. **Hot Pixel** — single-pixel outlier removal
 2. **Exposure** — EV stops
@@ -47,7 +69,8 @@ Right panel, top-to-bottom pipeline order:
 13. **Clarity** — local-contrast midtone boost
 14. **Color Balance** — per-zone RGB shifts
 
-Each panel has a collapse toggle in its header.
+Each panel has a collapse toggle in its header. Crop & Rotate comes before the
+effects listed above.
 
 ### Sliders
 
@@ -55,7 +78,7 @@ Every numeric parameter uses a `ParamSlider` (label + slider + spinbox):
 
 - drag the slider for a live preview
 - release (or commit the spinbox) to trigger a full GPU reprocess
-- **double-click** the slider to reset to 0
+- double-click a slider to restore that parameter's default value
 
 ### Enabling / disabling effects
 
@@ -63,13 +86,26 @@ Every numeric parameter uses a `ParamSlider` (label + slider + spinbox):
 
 ## GPU device
 
-A combo box at the top of the right panel lists every OpenCL device found at startup. Switching it reinitialises all effect kernels on the new device and triggers a full reprocess. Hover the combo for a tooltip.
+A combo box at the top of the right panel lists every OpenCL device found at
+startup, including CPU runtimes such as POCL. Switching devices reinitialises
+the kernels and triggers a full reprocess.
 
 ## Save
 
-- **File → Save Image…** (`Ctrl+S`) — saves the current fully-processed output at source resolution
-- Format is inferred from the chosen extension
+- **File → Save Image…** (`Ctrl+S`) opens the export dialog
+- Choose JPEG, PNG, or TIFF, output quality, a naming suffix, resize mode, and
+  what to do when the destination already exists
+- Crop and rotation are baked into the exported full-resolution image
+
+## Editing shortcuts
+
+| Action | Shortcut |
+|---|---|
+| Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` or `Ctrl+Y` |
+| Copy / paste develop settings | `Ctrl+C` / `Ctrl+V` |
+| Hold before-edits preview | `\` |
 
 ## Quit
 
-**File → Quit** (`Ctrl+Q`). Window geometry is persisted via `QSettings`.
+**File → Exit** (`Ctrl+Q`). Window geometry and the last-used directory are
+remembered between sessions.

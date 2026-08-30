@@ -101,7 +101,7 @@ Four shared libraries + static effect libs + a thin `main.cpp`:
 | `libphotoeditor_core` | `src/core/` | `EffectManager`, `ImageProcessor`, `GpuDeviceRegistry`, `GpuPipeline`, `RawLoader` |
 | `libphotoeditor_widgets` | `src/widgets/` | Reusable custom Qt widgets (`ParamSlider`) |
 | `libphotoeditor_ui` | `src/ui/` | `PhotoEditorApp` (main window), `ViewportWidget` |
-| `lightroom_clone` | `src/main.cpp` | Composition root: creates effects, passes to `PhotoEditorApp` |
+| `afterglow` | `src/main.cpp` | Composition root: creates effects, passes to `PhotoEditorApp` |
 | `*_effect.a` | `plugins/*/` | Effect libs, statically linked (no dlopen) |
 
 Effects are **static libraries** instantiated in `main.cpp` — no runtime loading.
@@ -222,7 +222,7 @@ set_target_properties(myeffect_effect PROPERTIES AUTOMOC ON)
 - Qt6: Core, Gui, Widgets, Concurrent, OpenGLWidgets
 - OpenCL REQUIRED (`opencl-clhpp` — `sudo pacman -S opencl-clhpp`)
 - OpenGL REQUIRED (libGL)
-- LibRaw optional (detected via pkg-config)
+- LibRaw REQUIRED (detected via pkg-config)
 - C++17, `-O3`
 
 ---

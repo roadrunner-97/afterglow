@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QFileInfo>
 #include <memory>
 #include "ui/PhotoEditorApp.h"
 #include "core/EffectManager.h"
@@ -51,6 +52,8 @@ int main(int argc, char *argv[]) {
     PhotoEditorApp                 window(effects.get());
     window.initProofer(makeEffects());
     window.show();
+
+    if (argc > 1) window.openImagePath(QFileInfo(QString::fromLocal8Bit(argv[1])).absoluteFilePath());
 
     return app.exec();
 }

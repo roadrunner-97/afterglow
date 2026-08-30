@@ -12,10 +12,10 @@ Required:
 - Qt 6 — `Core`, `Gui`, `Widgets`, `Concurrent`, `OpenGLWidgets`
 - OpenCL — ICD loader **and** the C++ headers (`cl2.hpp` / `opencl.hpp`)
 - OpenGL (libGL)
+- LibRaw and its `pkg-config` metadata
 
 Optional:
 
-- **LibRaw** — RAW decode support (`.cr2 .cr3 .nef .arw .dng .raf .orf .rw2` …). Detected via `pkg-config`; absent → RAW files silently unavailable.
 - **gcovr** — coverage reports
 - **ccache** — detected automatically and used as the compiler launcher when present
 
@@ -65,7 +65,8 @@ cmake -B build -G Ninja
 cmake --build build
 ```
 
-The configure step will fail fast if OpenCL or any required Qt module is missing. Output binary is `build/bin/lightroom_clone`.
+The configure step fails fast if Qt, OpenCL, OpenGL, or LibRaw is missing. The
+output binary is `build/bin/afterglow`.
 
 ### Options
 
@@ -79,14 +80,14 @@ The configure step will fail fast if OpenCL or any required Qt module is missing
 
 ```bash
 cmake --workflow --preset coverage
-# report: build/coverage/index.html
+# report: build-coverage/coverage/index.html
 ```
 
 ## Tests
 
 ```bash
 cmake --build build
-ctest --test-dir build --output-on-failure -j$(nproc)
+ctest --test-dir build --output-on-failure -j8
 ```
 
 Test targets live under `tests/` (core, effects, widgets) and are discovered once `enable_testing()` runs during configure.

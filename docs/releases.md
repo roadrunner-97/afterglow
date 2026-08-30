@@ -21,11 +21,14 @@ Rules of thumb while we're still on `0.x`:
 ## Cutting a release
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag -a v0.5.0 -m "Afterglow 0.5.0"
+git push origin v0.5.0
 ```
 
-Pushing a `v*` tag fires `.github/workflows/release.yml`: it rebuilds on a clean Ubuntu runner, runs the full test suite, strips the binary, packages `afterglow-<version>-linux-x86_64.tar.gz` + a SHA-256 sum, and publishes a GitHub Release with both attached. Auto-generated changelog notes are appended below the install instructions.
+Pushing a `v*` tag fires `.github/workflows/release.yml`: it rebuilds on a
+clean Ubuntu runner, runs the full test suite, and publishes both an AppImage
+and a stripped system-Qt tarball, each with a SHA-256 checksum. Auto-generated
+changelog notes are appended below the install instructions.
 
 Releases land at <https://github.com/roadrunner-97/afterglow/releases>.
 

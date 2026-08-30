@@ -107,6 +107,27 @@ private slots:
         QVERIFY(QFile::exists(dir.filePath("workflow.yml")));
     }
 
+    void explicitImagePathRunsDevelopWorkflowWithoutNativeDialogs() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString imagePath = dir.filePath("command-line.png");
+        QImage        image(48, 32, QImage::Format_RGB32);
+        image.fill(Qt::cyan);
+        QVERIFY(image.save(imagePath));
+
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.openImagePath(imagePath);
+
+        auto *stack      = app.findChild<QStackedWidget *>("editorModeStack");
+        auto *processing = app.findChild<QWidget *>("processingIndicator");
+        QVERIFY(stack);
+        QVERIFY(processing);
+        QCOMPARE(stack->currentIndex(), static_cast<int>(EditorUiState::Mode::Develop));
+        QTRY_VERIFY(!processing->isVisible());
+        QVERIFY(QFile::exists(dir.filePath("command-line.yml")));
+    }
+
     void injectedServicesDriveSettingsAndExportWorkflows() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

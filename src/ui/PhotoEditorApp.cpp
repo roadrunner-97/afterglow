@@ -225,6 +225,13 @@ PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
 
 PhotoEditorApp::~PhotoEditorApp() = default;
 
+void PhotoEditorApp::openImagePath(const QString &path) {
+    if (path.isEmpty() || !QFileInfo::exists(path)) return;
+    m_lastDir = QFileInfo(path).absolutePath();
+    loadFullImage(path);
+    setMode(Mode::Develop);
+}
+
 void PhotoEditorApp::setUiServices(UiServices *services) {
     Q_ASSERT(services);
     m_ownedUiServices.reset();

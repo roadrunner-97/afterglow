@@ -48,6 +48,10 @@ public:
     // instances from the Develop pipeline) to enable proof cache generation.
     void initProofer(std::unique_ptr<EffectManager> prooferEffects);
 
+    // Opens an image without showing the native picker. Used by command-line
+    // launches and deterministic UI workflows.
+    void openImagePath(const QString &path);
+
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
