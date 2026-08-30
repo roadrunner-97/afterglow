@@ -7,6 +7,11 @@ effects.
 
 ![Afterglow's Develop view](docs/images/afterglow-develop.png)
 
+<p align="center">
+  <img src="docs/images/afterglow-gallery.png" alt="Afterglow's Gallery view" width="49%">
+  <img src="docs/images/afterglow-loupe.png" alt="Afterglow's Loupe view" width="49%">
+</p>
+
 ## Highlights
 
 - Gallery, Loupe, and Develop views for browsing, reviewing, and editing
