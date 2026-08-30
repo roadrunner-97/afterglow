@@ -21,7 +21,10 @@ set_target_properties(test_gallery_loupe PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
 )
 add_test(NAME GalleryLoupe COMMAND test_gallery_loupe)
-set_tests_properties(GalleryLoupe PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(GalleryLoupe PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    RESOURCE_LOCK opencl_jit
+)
 
 # ---------------------------------------------------------------------------
 # EffectManager tests — no GPU, no display required (GUILESS)
