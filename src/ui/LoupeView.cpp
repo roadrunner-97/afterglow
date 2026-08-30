@@ -23,7 +23,7 @@ namespace {
 // for a two-column "Camera | Sony ILCE-7M4" row at the body font without
 // wrapping, narrow enough to leave the image area dominant on a 1280px
 // laptop screen.
-constexpr int SIDEBAR_W = 320;
+constexpr int SIDEBAR_W = 360;
 
 QString formatShutter(float s) {
     if (s <= 0.0f) return "—";

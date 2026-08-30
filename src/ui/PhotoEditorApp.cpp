@@ -54,6 +54,9 @@
 #include <QDateTime>
 #include <QFileInfo>
 #include <QLocale>
+#include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cmath>
 #include <memory>
 
@@ -62,6 +65,35 @@ struct LoupeLoadResult {
     QImage        cameraJpeg;
     ImageMetadata metadata;
 };
+
+// RawLoader returns scene-linear RGBX64 so effects retain the sensor's range.
+// QPainter expects display-encoded pixels, however, so an unedited RAW needs
+// the same final linear-to-sRGB transfer used by GpuPipeline's pack kernel.
+QImage linearRawToDisplay(const QImage &raw) {
+    if (raw.isNull() || raw.format() != QImage::Format_RGBX64 || raw.text("color_space") != QStringLiteral("linear"))
+        return raw;
+
+    static const std::array<uint8_t, 65536> lut = [] {
+        std::array<uint8_t, 65536> values{};
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            const float linear = static_cast<float>(i) / 65535.0f;
+            const float srgb = linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
+            values[i]        = static_cast<uint8_t>(std::clamp(std::lround(srgb * 255.0f), 0L, 255L));
+        }
+        return values;
+    }();
+
+    QImage display(raw.size(), QImage::Format_RGB32);
+    for (int y = 0; y < raw.height(); ++y) {
+        const auto *src = reinterpret_cast<const uint16_t *>(raw.constScanLine(y));
+        auto       *dst = reinterpret_cast<QRgb *>(display.scanLine(y));
+        for (int x = 0; x < raw.width(); ++x) {
+            const uint16_t *pixel = src + 4 * x;
+            dst[x]                = qRgb(lut[pixel[0]], lut[pixel[1]], lut[pixel[2]]);
+        }
+    }
+    return display;
+}
 
 // ── Metadata format helpers ────────────────────────────────────────────────
 
@@ -1351,7 +1383,7 @@ void PhotoEditorApp::loadLoupeImage(const QString &path) {
                 m_loupeView->setOriginalRawImage(rawWatcher->result());
             rawWatcher->deleteLater();
         });
-        rawWatcher->setFuture(QtConcurrent::run([path]() { return RawLoader::load(path); }));
+        rawWatcher->setFuture(QtConcurrent::run([path]() { return linearRawToDisplay(RawLoader::load(path)); }));
     }
 }
 
