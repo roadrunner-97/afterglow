@@ -174,9 +174,8 @@ void WhiteBalanceEffect::onImageLoaded(const ImageMetadata &meta) {
     if (meta.colorTempK >= 1500.0f && meta.colorTempK <= 14000.0f) m_shotK = meta.colorTempK;
     else m_shotK = 5500.0f;
 
-    // Update the slider to the new default without firing any signals
-    // (ParamSlider::setValue blocks signals internally).
-    if (temperatureParam) temperatureParam->setValue(m_shotK);
+    // Update both the current value and double-click reset point without firing signals.
+    if (temperatureParam) temperatureParam->setDefaultValue(m_shotK);
 }
 
 QWidget *WhiteBalanceEffect::createControlsWidget() {
@@ -190,7 +189,7 @@ QWidget *WhiteBalanceEffect::createControlsWidget() {
     // Temperature: 2000 K – 12000 K, 50 K steps, default = as-shot (m_shotK).
     // Slider right = warmer (amber), left = cooler (blue).
     temperatureParam = new ParamSlider("Temperature", 2000.0, 12000.0, 50.0, 0);
-    temperatureParam->setValue(m_shotK);
+    temperatureParam->setDefaultValue(m_shotK);
     temperatureParam->setToolTip(
         "Colour temperature of the light source in Kelvin.\nLower = cooler/blue (e.g. overcast sky ~7000 K), higher = "
         "warmer/amber (e.g. tungsten ~3200 K).\nDefault is the as-shot value read from the RAW file metadata.");

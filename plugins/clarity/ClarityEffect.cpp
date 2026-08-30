@@ -186,7 +186,7 @@ QWidget *ClarityEffect::createControlsWidget() {
     layout->addWidget(amountParam);
 
     radiusParam = new ParamSlider("Radius", 10, 100);
-    radiusParam->setValue(30);
+    radiusParam->setDefaultValue(30);
     radiusParam->setToolTip("Radius (source pixels) of the blur used to define \"local\".\nLarger values affect "
                             "broader tonal regions; smaller values feel closer to sharpening.");
     connectSlider(radiusParam);

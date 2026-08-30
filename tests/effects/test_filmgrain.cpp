@@ -1,6 +1,7 @@
 #include <QTest>
 #include <QSignalSpy>
 #include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QSlider>
 #include <QWidget>
 #include "FilmGrainEffect.h"
@@ -220,7 +221,7 @@ private slots:
         QVERIFY(params.contains("lumWeight"));
         // Widget not yet built → fall-through defaults
         QCOMPARE(params["amount"].toInt(), 0);
-        QCOMPARE(params["size"].toInt(), 8);
+        QCOMPARE(params["size"].toDouble(), 1.0);
         QCOMPARE(params["seed"].toInt(), 0);
         QCOMPARE(params["lumWeight"].toBool(), true);
     }
@@ -237,9 +238,27 @@ private slots:
         e.createControlsWidget();
         auto params = e.getParameters();
         QCOMPARE(params["amount"].toInt(), 0);
-        QCOMPARE(params["size"].toInt(), 8);
+        QCOMPARE(params["size"].toDouble(), 1.0);
         QCOMPARE(params["seed"].toInt(), 0);
         QCOMPARE(params["lumWeight"].toBool(), true);
+    }
+
+    void controls_useReviewedRangesAndFractionalSize() {
+        FilmGrainEffect e;
+        QWidget        *w         = e.createControlsWidget();
+        auto            spinboxes = w->findChildren<QDoubleSpinBox *>();
+        QCOMPARE(spinboxes.size(), 3);
+
+        QCOMPARE(spinboxes[0]->minimum(), 0.0);
+        QCOMPARE(spinboxes[0]->maximum(), 20.0);
+        QCOMPARE(spinboxes[1]->minimum(), 0.1);
+        QCOMPARE(spinboxes[1]->maximum(), 8.0);
+        QCOMPARE(spinboxes[1]->singleStep(), 0.1);
+
+        QMap<QString, QVariant> params;
+        params["size"] = 2.5;
+        e.applyParameters(params);
+        QCOMPARE(e.getParameters()["size"].toDouble(), 2.5);
     }
 
     // Fire every slider's editingFinished + valueChanged path and the checkbox toggle.

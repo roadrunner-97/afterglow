@@ -95,6 +95,23 @@ private slots:
         QCOMPARE(spy.count(), 0);
     }
 
+    void doubleClick_resetsToConfiguredDefault() {
+        ParamSlider s("Radius", 1.0, 15.0);
+        s.setDefaultValue(2.0);
+        s.setValue(10.0);
+        auto *slider = s.findChild<QSlider *>();
+        QVERIFY(slider);
+
+        QSignalSpy valueSpy(&s, &ParamSlider::valueChanged);
+        QSignalSpy editSpy(&s, &ParamSlider::editingFinished);
+        QTest::mouseDClick(slider, Qt::LeftButton);
+
+        QCOMPARE(s.value(), 2.0);
+        QCOMPARE(valueSpy.count(), 1);
+        QCOMPARE(valueSpy.first().first().toDouble(), 2.0);
+        QCOMPARE(editSpy.count(), 1);
+    }
+
     // Slider range: constructed with integer steps, verify min/max round-trip
     void integerSlider_minAndMax() {
         ParamSlider s("Radius", 0.0, 100.0);

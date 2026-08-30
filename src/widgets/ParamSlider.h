@@ -17,7 +17,7 @@ class QDoubleSpinBox;
  * sensitivity), a fast flick is coarse (up to ~6×). Click-to-jump on the
  * groove is disabled — every press anchors at the current value and
  * accumulates from there. Hold Shift during a drag for forced fine-grain.
- * Double-click resets to 0.
+ * Double-click resets to the control's configured default value.
  *
  * Subclass and override sliderToValue()/valueToSlider() (plus pass a custom
  * Setup to the protected constructor) for non-linear mappings —
@@ -37,6 +37,7 @@ public:
 
     double value() const;
     void   setValue(double v);
+    void   setDefaultValue(double v); // sets both the current value and double-click reset point
 
 signals:
     void valueChanged(double value); // fires on every slider drag / spinbox sync
@@ -76,7 +77,8 @@ private:
     QString         m_labelPrefix;
 
     // Default linear mapping uses this. Subclasses with their own mapping ignore it.
-    double m_scaleFactor = 1.0;
+    double m_scaleFactor  = 1.0;
+    double m_defaultValue = 0.0;
 
     // Velocity-based drag state
     bool       m_dragging       = false;

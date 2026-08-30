@@ -151,14 +151,14 @@ QWidget *VignetteEffect::createControlsWidget() {
     layout->addWidget(amountParam);
 
     midpointParam = new ParamSlider("Midpoint", 0.0, 100.0, 0.1, 1);
-    midpointParam->setValue(50);
+    midpointParam->setDefaultValue(50);
     midpointParam->setToolTip("Centre of the transition, as a fraction of the way from image centre to corner.\nLower "
                               "values move the vignette inward.");
     connectSlider(midpointParam);
     layout->addWidget(midpointParam);
 
     featherParam = new ParamSlider("Feather", 0.0, 100.0, 0.1, 1);
-    featherParam->setValue(50);
+    featherParam->setDefaultValue(50);
     featherParam->setToolTip("Softness of the transition.\n0 is a hard edge; 100 fades across the full image.");
     connectSlider(featherParam);
     layout->addWidget(featherParam);
@@ -170,7 +170,7 @@ QWidget *VignetteEffect::createControlsWidget() {
     layout->addWidget(roundnessParam);
 
     centerXParam = new ParamSlider("Focal X", 0.0, 100.0, 0.1, 1);
-    centerXParam->setValue(m_center.x() * 100.0);
+    centerXParam->setDefaultValue(m_center.x() * 100.0);
     centerXParam->setToolTip("Horizontal focal point. You can also drag the crosshair on the image.");
     connect(centerXParam, &ParamSlider::valueChanged, this, [this](double value) {
         m_center.setX(value / 100.0);
@@ -180,7 +180,7 @@ QWidget *VignetteEffect::createControlsWidget() {
     layout->addWidget(centerXParam);
 
     centerYParam = new ParamSlider("Focal Y", 0.0, 100.0, 0.1, 1);
-    centerYParam->setValue(m_center.y() * 100.0);
+    centerYParam->setDefaultValue(m_center.y() * 100.0);
     centerYParam->setToolTip("Vertical focal point. You can also drag the crosshair on the image.");
     connect(centerYParam, &ParamSlider::valueChanged, this, [this](double value) {
         m_center.setY(value / 100.0);

@@ -168,6 +168,23 @@ private slots:
         QCOMPARE(params["shot_temp"].toDouble(), 3200.0);
     }
 
+    void doubleClickTemperature_resetsToAsShotValue() {
+        WhiteBalanceEffect e;
+        QWidget           *w = e.createControlsWidget();
+        ImageMetadata      meta;
+        meta.colorTempK = 3200.0f;
+        e.onImageLoaded(meta);
+
+        auto sliders = w->findChildren<ParamSlider *>();
+        QVERIFY(!sliders.isEmpty());
+        auto *temperatureSlider = sliders.first()->findChild<QSlider *>();
+        QVERIFY(temperatureSlider);
+        sliders.first()->setValue(8000.0);
+        QTest::mouseDClick(temperatureSlider, Qt::LeftButton);
+
+        QCOMPARE(e.getParameters()["temperature"].toDouble(), 3200.0);
+    }
+
     void onImageLoaded_outOfRange_fallsBackTo5500() {
         WhiteBalanceEffect e;
         e.createControlsWidget();

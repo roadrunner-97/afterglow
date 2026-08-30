@@ -214,13 +214,13 @@ private slots:
         QWidget        *w = makeControls(e);
         e.applyParameters({
             {"amount", 15},
-            {"size", 20},
+            {"size", 2.5},
             {"seed", 7},
             {"lumWeight", true},
         });
         auto p = e.getParameters();
         QCOMPARE(p.value("amount").toInt(), 15);
-        QCOMPARE(p.value("size").toInt(), 20);
+        QCOMPARE(p.value("size").toDouble(), 2.5);
         QCOMPARE(p.value("seed").toInt(), 7);
         QCOMPARE(p.value("lumWeight").toBool(), true);
 

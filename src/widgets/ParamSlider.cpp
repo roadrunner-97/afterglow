@@ -22,6 +22,7 @@ ParamSlider::ParamSlider(const QString &label, const Setup &s, QWidget *parent)
     : QWidget(parent), m_labelPrefix(label) {
     buildUi(label, s);
     wireSignals();
+    m_defaultValue = value();
 }
 
 void ParamSlider::buildUi(const QString &label, const Setup &s) {
@@ -95,6 +96,11 @@ void ParamSlider::setValue(double v) {
     updateLabel(v);
 }
 
+void ParamSlider::setDefaultValue(double v) {
+    setValue(v);
+    m_defaultValue = value();
+}
+
 double ParamSlider::sliderToValue(int sliderInt) const {
     return sliderInt / m_scaleFactor;
 }
@@ -118,8 +124,8 @@ bool ParamSlider::eventFilter(QObject *watched, QEvent *event) {
             auto *me = static_cast<QMouseEvent *>(event);
             if (me->button() == Qt::LeftButton) {
                 m_dragging = false;
-                setValue(0.0);
-                emit valueChanged(0.0);
+                setValue(m_defaultValue);
+                emit valueChanged(m_defaultValue);
                 emit editingFinished();
                 return true;
             }

@@ -122,7 +122,7 @@ QWidget *HotPixelEffect::createControlsWidget() {
 
     // Threshold slider: 0–100 (maps internally to per-channel deviation 0–255 / 0–65535)
     thresholdParam = new ParamSlider("Threshold", 0.0, 100.0, 0.1, 1);
-    thresholdParam->setValue(30);
+    thresholdParam->setDefaultValue(30);
     thresholdParam->setToolTip(
         "How far a pixel must deviate from its 8 neighbours to be considered a hot/dead pixel and replaced with the "
         "local average.\nLower values = more aggressive correction. Typical range: 20–40.");

@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QDebug>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace {
 
@@ -22,8 +23,8 @@ namespace {
 // real film grain is least visible in deep shadows / highlights.
 
 struct GrainArgs {
-    float    size;      // lattice spacing in source pixels, ≥1
-    float    amount;    // 0..1 (slider 0..40 → /100)
+    float    size;      // lattice spacing in source pixels, >= 0.1
+    float    amount;    // 0..0.2 (slider 0..20 -> /100)
     int      lumWeight; // 0 or 1
     unsigned seed;      // hashed user seed
     float    srcX0;     // source-pixel origin of preview pixel (0, 0)
@@ -31,10 +32,10 @@ struct GrainArgs {
     float    srcPPP; // source pixels per preview pixel (1.0 when run on full-res)
 };
 
-static GrainArgs makeArgs(float amount, int size, bool lumWeight, int userSeed, double srcX0 = 0.0, double srcY0 = 0.0,
-                          double srcPPP = 1.0) {
+static GrainArgs makeArgs(float amount, float size, bool lumWeight, int userSeed, double srcX0 = 0.0,
+                          double srcY0 = 0.0, double srcPPP = 1.0) {
     GrainArgs a;
-    a.size      = static_cast<float>(size < 1 ? 1 : size);
+    a.size      = std::max(size, 0.1f);
     a.amount    = amount / 100.0f;
     a.lumWeight = lumWeight ? 1 : 0;
     // Mix the user's seed into a well-distributed 32-bit value so adjacent
@@ -195,13 +196,13 @@ QWidget *FilmGrainEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
-    amountParam = new ParamSlider("Amount", 0.0, 40.0, 0.1, 1);
+    amountParam = new ParamSlider("Amount", 0.0, 20.0, 0.1, 1);
     amountParam->setToolTip("Strength of the grain.\n0 disables the effect.");
     connectSlider(amountParam);
     layout->addWidget(amountParam);
 
-    sizeParam = new ParamSlider("Size", 1, 50);
-    sizeParam->setValue(8);
+    sizeParam = new ParamSlider("Size", 0.1, 8.0, 0.1, 1);
+    sizeParam->setDefaultValue(1.0);
     sizeParam->setToolTip("Grain size in source-image pixels.\n"
                           "Larger values produce a coarser pattern.\n"
                           "Anchored to the image — grain does not scale with zoom.");
@@ -209,7 +210,7 @@ QWidget *FilmGrainEffect::createControlsWidget() {
     layout->addWidget(sizeParam);
 
     seedParam = new ParamSlider("Seed", 0, 999);
-    seedParam->setValue(0);
+    seedParam->setDefaultValue(0);
     seedParam->setToolTip("PRNG seed — change to get a different grain pattern.");
     connectSlider(seedParam);
     layout->addWidget(seedParam);
@@ -228,7 +229,7 @@ QWidget *FilmGrainEffect::createControlsWidget() {
 QMap<QString, QVariant> FilmGrainEffect::getParameters() const {
     QMap<QString, QVariant> params;
     params["amount"]    = amountParam ? amountParam->value() : 0.0;
-    params["size"]      = static_cast<int>(sizeParam ? sizeParam->value() : 8.0);
+    params["size"]      = sizeParam ? sizeParam->value() : 1.0;
     params["seed"]      = static_cast<int>(seedParam ? seedParam->value() : 0.0);
     params["lumWeight"] = lumWeightBox ? lumWeightBox->isChecked() : true;
     return params;
@@ -270,7 +271,7 @@ bool FilmGrainEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::B
     if (amount == 0.0f) return true; // no-op
 
     const GrainArgs a =
-        makeArgs(amount, params.value("size", 8).toInt(), params.value("lumWeight", true).toBool(),
+        makeArgs(amount, float(params.value("size", 1.0).toDouble()), params.value("lumWeight", true).toBool(),
                  params.value("seed", 0).toInt(), params.value("_cropX0", 0.0).toDouble(),
                  params.value("_cropY0", 0.0).toDouble(), params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble());
 
