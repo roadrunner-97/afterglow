@@ -15,8 +15,7 @@ class LoupeView : public QWidget {
 public:
     explicit LoupeView(QWidget *parent = nullptr);
 
-    // Set the pipeline-rendered proof.  Displayed automatically unless the
-    // user has toggled to Camera JPEG view.  Pass a null QImage to clear.
+    // Set the pipeline-rendered, edited RAW proof. Pass a null QImage to clear.
     void setProofImage(QImage proof);
 
     // Start displaying a different photo. Clears the previous proof and
@@ -26,6 +25,10 @@ public:
     // Replace the placeholder with the decoded camera/full preview without
     // clearing a proof that may already have arrived asynchronously.
     void setCameraJpegImage(QImage jpeg);
+
+    // Set the demosaiced RAW before any edits. Pass a null image when the
+    // current file is not RAW or decoding failed.
+    void setOriginalRawImage(QImage raw);
 
     // Show or hide the "Proofing…" overlay in the top-right of the image area.
     void setProofingState(bool proofing);
@@ -41,9 +44,8 @@ public:
     // Reset to fit-zoom centred (also called automatically when the image changes).
     void resetView();
 
-    // Hold-to-show "before edits" preview.  While true the displayed image
-    // falls back to the camera JPEG (no pipeline edits applied) without
-    // touching the user's persistent Camera-JPEG toggle.
+    // Hold-to-show "before edits" preview. While true the displayed image
+    // falls back to the camera JPEG without changing the persistent choice.
     void setShowBefore(bool on);
 
     bool isShowingProof() const {
@@ -91,14 +93,17 @@ private:
     // a second time cycles back to None, matching GridView's behaviour.
     void emitMarkToggle(GridView::Mark requested);
 
-    // Pick which image to render based on the current toggle state.
+    enum class ImageVersion { CameraJpeg, OriginalRaw, EditedRaw };
+
+    // Pick which image to render based on the current radio-style selection.
     void updateDisplayedImage();
 
-    QImage m_proofImage;                   // pipeline-rendered proof
-    QImage m_cameraJpegImage;              // camera-embedded JPEG
-    QImage m_image;                        // currently displayed (proof or JPEG)
-    bool   m_userForcedCameraJpeg = false; // true after user clicks toggle
-    bool   m_showBefore           = false; // backslash held — show JPEG transiently
+    QImage       m_proofImage;       // pipeline-rendered proof
+    QImage       m_cameraJpegImage;  // camera-embedded JPEG
+    QImage       m_originalRawImage; // demosaiced RAW, before effects
+    QImage       m_image;            // currently displayed version
+    ImageVersion m_selectedVersion = ImageVersion::EditedRaw;
+    bool         m_showBefore      = false; // backslash held — show JPEG transiently
 
     float   m_zoom   = 1.0f;         // 1.0 = fit-to-widget; >1 zooms in
     QPointF m_centre = {0.5f, 0.5f}; // image-space normalised
@@ -108,20 +113,22 @@ private:
     // Sidebar widgets — all live as direct children of LoupeView and are
     // positioned manually in resizeEvent().  Holding pointers here lets
     // setMetadata() swap text without rebuilding the layout.
-    QWidget     *m_sidebar       = nullptr;
-    QPushButton *m_btnAccept     = nullptr;
-    QPushButton *m_btnRefine     = nullptr;
-    QPushButton *m_btnDecline    = nullptr;
-    QPushButton *m_btnCameraJpeg = nullptr;
-    QLabel      *m_proofingLabel = nullptr; // "Proofing…" overlay
-    QLabel      *m_valCamera     = nullptr;
-    QLabel      *m_valLens       = nullptr;
-    QLabel      *m_valIso        = nullptr;
-    QLabel      *m_valShutter    = nullptr;
-    QLabel      *m_valAperture   = nullptr;
-    QLabel      *m_valFocal      = nullptr;
-    QLabel      *m_valDate       = nullptr;
-    QLabel      *m_valTempK      = nullptr;
+    QWidget     *m_sidebar        = nullptr;
+    QPushButton *m_btnAccept      = nullptr;
+    QPushButton *m_btnRefine      = nullptr;
+    QPushButton *m_btnDecline     = nullptr;
+    QPushButton *m_btnCameraJpeg  = nullptr;
+    QPushButton *m_btnOriginalRaw = nullptr;
+    QPushButton *m_btnEditedRaw   = nullptr;
+    QLabel      *m_proofingLabel  = nullptr; // "Proofing…" overlay
+    QLabel      *m_valCamera      = nullptr;
+    QLabel      *m_valLens        = nullptr;
+    QLabel      *m_valIso         = nullptr;
+    QLabel      *m_valShutter     = nullptr;
+    QLabel      *m_valAperture    = nullptr;
+    QLabel      *m_valFocal       = nullptr;
+    QLabel      *m_valDate        = nullptr;
+    QLabel      *m_valTempK       = nullptr;
 
     GridView::Mark m_currentMark = GridView::Mark::None;
 };

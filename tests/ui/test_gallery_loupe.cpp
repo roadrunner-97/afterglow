@@ -6,6 +6,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWheelEvent>
+#include <QPushButton>
 
 #include "EffectManager.h"
 #include "GridView.h"
@@ -92,6 +93,39 @@ private slots:
         loupe.setCameraJpegImage(decoded);
         QVERIFY(loupe.isShowingProof());
         QCOMPARE(loupe.displayedImageSize(), proof.size());
+    }
+
+    void imageVersionButtonsAreMutuallyExclusive() {
+        LoupeView loupe;
+        QImage    camera(40, 30, QImage::Format_RGB32);
+        QImage    original(80, 60, QImage::Format_RGB32);
+        QImage    edited(120, 90, QImage::Format_RGB32);
+        loupe.beginPhoto(camera);
+        loupe.setOriginalRawImage(original);
+        loupe.setProofImage(edited);
+
+        auto button = [&loupe](const QString &text) {
+            for (auto *candidate : loupe.findChildren<QPushButton *>())
+                if (candidate->text() == text) return candidate;
+            return static_cast<QPushButton *>(nullptr);
+        };
+        auto *cameraButton   = button("Camera JPEG");
+        auto *originalButton = button("Original RAW");
+        auto *editedButton   = button("Edited RAW");
+        QVERIFY(cameraButton);
+        QVERIFY(originalButton);
+        QVERIFY(editedButton);
+        QVERIFY(editedButton->isChecked());
+
+        originalButton->click();
+        QCOMPARE(loupe.displayedImageSize(), original.size());
+        QVERIFY(originalButton->isChecked());
+        QVERIFY(!editedButton->isChecked());
+
+        cameraButton->click();
+        QCOMPARE(loupe.displayedImageSize(), camera.size());
+        QVERIFY(cameraButton->isChecked());
+        QVERIFY(!originalButton->isChecked());
     }
 
     void selectingThenClickingLoupeLoadsSelectedPlaceholder() {

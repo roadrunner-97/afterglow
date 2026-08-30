@@ -1340,6 +1340,19 @@ void PhotoEditorApp::loadLoupeImage(const QString &path) {
         if (loaded.cameraJpeg.isNull()) loaded.cameraJpeg = decodeOriented(path);
         return loaded;
     }));
+
+    // Demosaicing can be much slower than extracting the embedded JPEG, so
+    // keep it on a separate future: Camera JPEG remains responsive while the
+    // Original RAW choice becomes available when its decode completes.
+    if (RawLoader::isRawFile(path)) {
+        auto *rawWatcher = new QFutureWatcher<QImage>(this);
+        connect(rawWatcher, &QFutureWatcher<QImage>::finished, this, [this, rawWatcher, path, generation]() {
+            if (generation == m_loupeLoadGeneration && path == m_loupePath)
+                m_loupeView->setOriginalRawImage(rawWatcher->result());
+            rawWatcher->deleteLater();
+        });
+        rawWatcher->setFuture(QtConcurrent::run([path]() { return RawLoader::load(path); }));
+    }
 }
 
 void PhotoEditorApp::onDevelopRequested() {

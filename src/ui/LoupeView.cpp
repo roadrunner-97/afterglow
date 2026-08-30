@@ -132,16 +132,44 @@ void LoupeView::buildSidebar() {
 
     outer->addLayout(btnRow);
 
-    // ── Camera JPEG toggle ────────────────────────────────────────────────
-    m_btnCameraJpeg = new QPushButton("Camera JPEG", m_sidebar);
-    m_btnCameraJpeg->setCheckable(true);
-    m_btnCameraJpeg->setToolTip("Compare against the camera's embedded JPEG (as-shot, no edits applied).\n"
-                                "Uncheck to return to the pipeline-rendered proof.");
-    connect(m_btnCameraJpeg, &QPushButton::toggled, this, [this](bool checked) {
-        m_userForcedCameraJpeg = checked;
+    // ── Image version selector ────────────────────────────────────────────
+    auto *versionHeader = new QLabel("Image", m_sidebar);
+    versionHeader->setProperty("role", "section");
+    outer->addWidget(versionHeader);
+
+    auto *versionRow = new QHBoxLayout();
+    versionRow->setSpacing(4);
+    auto makeVersionButton = [&](const QString &label) {
+        auto *button = new QPushButton(label, m_sidebar);
+        button->setCheckable(true);
+        versionRow->addWidget(button, 1);
+        return button;
+    };
+    m_btnCameraJpeg  = makeVersionButton("Camera JPEG");
+    m_btnOriginalRaw = makeVersionButton("Original RAW");
+    m_btnEditedRaw   = makeVersionButton("Edited RAW");
+    m_btnOriginalRaw->setEnabled(false);
+    m_btnEditedRaw->setChecked(true);
+
+    auto *versionGroup = new QButtonGroup(this);
+    versionGroup->setExclusive(true);
+    versionGroup->addButton(m_btnCameraJpeg);
+    versionGroup->addButton(m_btnOriginalRaw);
+    versionGroup->addButton(m_btnEditedRaw);
+
+    connect(m_btnCameraJpeg, &QPushButton::clicked, this, [this]() {
+        m_selectedVersion = ImageVersion::CameraJpeg;
         updateDisplayedImage();
     });
-    outer->addWidget(m_btnCameraJpeg);
+    connect(m_btnOriginalRaw, &QPushButton::clicked, this, [this]() {
+        m_selectedVersion = ImageVersion::OriginalRaw;
+        updateDisplayedImage();
+    });
+    connect(m_btnEditedRaw, &QPushButton::clicked, this, [this]() {
+        m_selectedVersion = ImageVersion::EditedRaw;
+        updateDisplayedImage();
+    });
+    outer->addLayout(versionRow);
 
     auto *sep = new QFrame(m_sidebar);
     sep->setFrameShape(QFrame::HLine);
@@ -190,17 +218,19 @@ void LoupeView::buildSidebar() {
 
 void LoupeView::setProofImage(QImage proof) {
     m_proofImage = proof;
-    // Reset the manual toggle so arriving proofs auto-display, but only if
-    // the user hasn't explicitly requested Camera JPEG for this photo.
-    if (!m_userForcedCameraJpeg) updateDisplayedImage();
+    if (m_selectedVersion == ImageVersion::EditedRaw) updateDisplayedImage();
 }
 
 void LoupeView::beginPhoto(QImage placeholder) {
-    m_cameraJpegImage      = std::move(placeholder);
-    m_userForcedCameraJpeg = false;
+    m_cameraJpegImage  = std::move(placeholder);
+    m_originalRawImage = {};
+    m_selectedVersion  = ImageVersion::EditedRaw;
     {
-        QSignalBlocker sb(m_btnCameraJpeg);
+        QSignalBlocker cameraBlock(m_btnCameraJpeg), originalBlock(m_btnOriginalRaw), editedBlock(m_btnEditedRaw);
         m_btnCameraJpeg->setChecked(false);
+        m_btnOriginalRaw->setChecked(false);
+        m_btnOriginalRaw->setEnabled(false);
+        m_btnEditedRaw->setChecked(true);
     }
     m_proofImage = {}; // clear stale proof from previous photo
     updateDisplayedImage();
@@ -208,7 +238,13 @@ void LoupeView::beginPhoto(QImage placeholder) {
 
 void LoupeView::setCameraJpegImage(QImage jpeg) {
     m_cameraJpegImage = std::move(jpeg);
-    if (m_proofImage.isNull() || m_userForcedCameraJpeg || m_showBefore) updateDisplayedImage();
+    if (m_selectedVersion == ImageVersion::CameraJpeg || m_proofImage.isNull() || m_showBefore) updateDisplayedImage();
+}
+
+void LoupeView::setOriginalRawImage(QImage raw) {
+    m_originalRawImage = std::move(raw);
+    m_btnOriginalRaw->setEnabled(!m_originalRawImage.isNull());
+    if (m_selectedVersion == ImageVersion::OriginalRaw) updateDisplayedImage();
 }
 
 void LoupeView::setProofingState(bool proofing) {
@@ -220,15 +256,24 @@ void LoupeView::setShowBefore(bool on) {
     m_showBefore = on;
     // Swap the displayed image without calling resetView() so the user's
     // current zoom/pan is preserved across the hold-and-release cycle.
-    const bool useProof = !m_proofImage.isNull() && !m_userForcedCameraJpeg && !m_showBefore;
-    m_image             = useProof ? m_proofImage : m_cameraJpegImage;
+    if (m_showBefore) {
+        m_image = m_cameraJpegImage;
+    } else if (m_selectedVersion == ImageVersion::OriginalRaw && !m_originalRawImage.isNull()) {
+        m_image = m_originalRawImage;
+    } else if (m_selectedVersion == ImageVersion::EditedRaw && !m_proofImage.isNull()) {
+        m_image = m_proofImage;
+    } else {
+        m_image = m_cameraJpegImage;
+    }
     update();
 }
 
 void LoupeView::updateDisplayedImage() {
-    // Show the proof if available and the user hasn't forced camera view.
-    const bool useProof = !m_proofImage.isNull() && !m_userForcedCameraJpeg && !m_showBefore;
-    m_image             = useProof ? m_proofImage : m_cameraJpegImage;
+    if (m_showBefore || m_selectedVersion == ImageVersion::CameraJpeg) m_image = m_cameraJpegImage;
+    else if (m_selectedVersion == ImageVersion::OriginalRaw && !m_originalRawImage.isNull())
+        m_image = m_originalRawImage;
+    else if (m_selectedVersion == ImageVersion::EditedRaw && !m_proofImage.isNull()) m_image = m_proofImage;
+    else m_image = m_cameraJpegImage;
     if (!m_image.isNull()) resetView();
     update();
 }
