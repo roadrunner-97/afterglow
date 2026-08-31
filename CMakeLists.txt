@@ -162,6 +162,8 @@ add_library(photoeditor_ui STATIC
     src/ui/EffectOrganizerDialog.h
     src/ui/PhotoEditorApp.cpp
     src/ui/PhotoEditorApp.h
+    src/ui/PreferencesDialog.cpp
+    src/ui/PreferencesDialog.h
     src/ui/UiServices.cpp
     src/ui/UiServices.h
     src/ui/ExportDialog.cpp

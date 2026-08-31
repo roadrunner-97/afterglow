@@ -46,6 +46,14 @@ private slots:
         QCOMPARE(p.pendingCount(), 3);
     }
 
+    void setDefaults_acceptsUpdatedPreferences() {
+        Proofer                    p(emptyMgr(), emptyDefaults(), m_cache);
+        SettingsImporter::Settings defaults;
+        defaults.image = "new-defaults";
+        p.setDefaults(std::move(defaults));
+        QCOMPARE(p.pendingCount(), 0);
+    }
+
     void setQueue_replacesExistingQueue() {
         Proofer p(emptyMgr(), emptyDefaults(), m_cache);
         p.pause();

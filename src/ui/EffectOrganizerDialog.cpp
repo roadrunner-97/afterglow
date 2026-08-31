@@ -1,7 +1,6 @@
 #include "EffectOrganizerDialog.h"
 #include "EffectManager.h"
 #include <QAbstractItemView>
-#include <QDialogButtonBox>
 #include <QLabel>
 #include <QListWidget>
 #include <QTimer>
@@ -23,13 +22,10 @@ QListWidget *makeEffectList(const char *objectName, QWidget *parent) {
 }
 } // namespace
 
-EffectOrganizerDialog::EffectOrganizerDialog(EffectManager *effects, QWidget *parent)
-    : QDialog(parent), m_effects(effects), m_available(makeEffectList("availableEffectsList", this)),
+EffectOrganizerWidget::EffectOrganizerWidget(EffectManager *effects, QWidget *parent)
+    : QWidget(parent), m_effects(effects), m_available(makeEffectList("availableEffectsList", this)),
       m_enabled(makeEffectList("enabledEffectsList", this)) {
-    setObjectName("effectOrganizerDialog");
-    setWindowTitle("Organize Effects");
-    setModal(false);
-    resize(560, 420);
+    setObjectName("effectOrganizerPage");
 
     auto *layout = new QVBoxLayout(this);
     auto *hint   = new QLabel("Drag effects between the lists. Drag within Enabled Effects to set processing order.");
@@ -51,10 +47,6 @@ EffectOrganizerDialog::EffectOrganizerDialog(EffectManager *effects, QWidget *pa
     addColumn("Enabled Effects", m_enabled);
     layout->addLayout(columns, 1);
 
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
-    layout->addWidget(buttons);
-
     auto scheduleApply = [this]() {
         if (m_rebuilding || m_applyPending) return;
         m_applyPending = true;
@@ -70,11 +62,11 @@ EffectOrganizerDialog::EffectOrganizerDialog(EffectManager *effects, QWidget *pa
     connect(m_enabled->model(), &QAbstractItemModel::rowsMoved, this, scheduleApply);
     connect(m_enabled->model(), &QAbstractItemModel::rowsRemoved, this, scheduleApply);
     connect(m_effects, &EffectManager::effectToggled, this, [this]() { rebuild(); });
-    connect(m_effects, &EffectManager::effectsReordered, this, &EffectOrganizerDialog::rebuild);
+    connect(m_effects, &EffectManager::effectsReordered, this, &EffectOrganizerWidget::rebuild);
     rebuild();
 }
 
-void EffectOrganizerDialog::rebuild() {
+void EffectOrganizerWidget::rebuild() {
     if (m_rebuilding) return;
     m_rebuilding = true;
     m_available->clear();
@@ -88,7 +80,7 @@ void EffectOrganizerDialog::rebuild() {
     m_rebuilding = false;
 }
 
-void EffectOrganizerDialog::applyLists() {
+void EffectOrganizerWidget::applyLists() {
     if (m_rebuilding) return;
     QVector<QPair<QString, bool>> configuration;
     configuration.reserve(m_enabled->count() + m_available->count());

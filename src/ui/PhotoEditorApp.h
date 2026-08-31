@@ -25,14 +25,13 @@
 #include "ViewportWidget.h"
 
 class QVBoxLayout;
-class QComboBox;
 class QLabel;
 class QStackedWidget;
 class QActionGroup;
 class LoupeView;
 class QThreadPool;
 class UiServices;
-class EffectOrganizerDialog;
+class PreferencesDialog;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -85,9 +84,11 @@ private:
     void                                      setupUI();
     void                                      setupToolBar();
     void                                      setupMenuBar();
-    void                                      setupGpuSelector(QVBoxLayout *rightLayout);
     void                                      setupEffectPanels(QVBoxLayout *rightLayout);
     void                                      reorderEffectPanels();
+    void                                      showPreferences(int page = 0);
+    void                                      saveEffectPreferences();
+    void                                      updateDefaultEffectOrganization();
     QVector<SettingsImporter::EffectSettings> currentSnapshot() const;
     QString                                   historySidecarPathFor(const QString &imagePath) const;
     void                                      flushHistorySidecar();
@@ -127,13 +128,13 @@ private:
     void                       copyDevelopSettingsFrom(const QString &path);
     void                       pasteDevelopSettingsTo(const QString &path);
 
-    MetadataTray                         *m_metadataTray    = nullptr;
-    HistoryTray                          *m_historyTray     = nullptr;
-    UndoHistory                          *m_history         = nullptr;
-    QAction                              *m_undoAct         = nullptr;
-    QAction                              *m_redoAct         = nullptr;
-    EffectOrganizerDialog                *m_effectOrganizer = nullptr;
-    QVBoxLayout                          *m_effectsLayout   = nullptr;
+    MetadataTray                         *m_metadataTray  = nullptr;
+    HistoryTray                          *m_historyTray   = nullptr;
+    UndoHistory                          *m_history       = nullptr;
+    QAction                              *m_undoAct       = nullptr;
+    QAction                              *m_redoAct       = nullptr;
+    PreferencesDialog                    *m_preferences   = nullptr;
+    QVBoxLayout                          *m_effectsLayout = nullptr;
     QHash<PhotoEditorEffect *, QWidget *> m_effectPanels;
 
     EffectManager              *m_effects;
@@ -154,7 +155,6 @@ private:
     LoupeView      *m_loupeView       = nullptr;
     ViewportWidget *m_viewport        = nullptr;
     QActionGroup   *m_modeGroup       = nullptr;
-    QComboBox      *m_gpuSelector     = nullptr;
     QLabel         *m_processingLabel = nullptr;
     QTimer         *m_resizeDebounce  = nullptr;
     QTimer         *m_panThrottle     = nullptr; // trailing edge of pan throttle

@@ -1,5 +1,5 @@
 #include "PhotoEditorApp.h"
-#include "EffectOrganizerDialog.h"
+#include "PreferencesDialog.h"
 #include "UiServices.h"
 #include "HistorySerializer.h"
 #include "CachePurger.h"
@@ -30,7 +30,6 @@
 #include <QAction>
 #include <QClipboard>
 #include <QStatusBar>
-#include <QComboBox>
 #include <QFrame>
 #include <QLabel>
 #include <QResizeEvent>
@@ -207,13 +206,35 @@ PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
     m_thumbnailPool = new QThreadPool(this);
     m_thumbnailPool->setMaxThreadCount(2);
 
+    QSettings           settings("Afterglow", "Afterglow");
+    const QStringList   effectOrder = settings.value("effects/order").toStringList();
+    const QStringList   enabledList = settings.value("effects/enabled").toStringList();
+    const QSet<QString> enabledEffects(enabledList.cbegin(), enabledList.cend());
+    if (!effectOrder.isEmpty()) {
+        QVector<QPair<QString, bool>> configuration;
+        configuration.reserve(effectOrder.size());
+        for (const QString &id : effectOrder) configuration.append({id, enabledEffects.contains(id)});
+        m_effects->configureEffects(configuration);
+    }
+
+    const QString savedDevice = settings.value("processing/openclDevice").toString();
+    if (!savedDevice.isEmpty()) {
+        const auto &devices = GpuDeviceRegistry::instance().devices();
+        for (int i = 0; i < static_cast<int>(devices.size()); ++i) {
+            const auto &device = devices[static_cast<size_t>(i)];
+            if (device.platformName + QChar('\n') + device.name == savedDevice) {
+                GpuDeviceRegistry::instance().setDevice(i);
+                break;
+            }
+        }
+    }
+
     setupToolBar();
     setupUI();
     snapshotDefaults();
     setWindowTitle("Afterglow");
 
     // Restore geometry and last-used directory from previous session
-    QSettings settings("Afterglow", "Afterglow");
     if (settings.contains("geometry")) restoreGeometry(settings.value("geometry").toByteArray());
     else setGeometry(100, 100, 1400, 900);
     m_lastDir = settings.value("lastDir", QDir::homePath()).toString();
@@ -415,12 +436,6 @@ void PhotoEditorApp::setupUI() {
     rightLayout->setContentsMargins(8, 8, 8, 8);
     rightLayout->setSpacing(6);
 
-    setupGpuSelector(rightLayout);
-
-    QFrame *sep = new QFrame();
-    sep->setFrameShape(QFrame::HLine);
-    rightLayout->addWidget(sep);
-
     QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
 
@@ -509,6 +524,12 @@ void PhotoEditorApp::setupMenuBar() {
     });
     connect(m_history, &UndoHistory::canRedoChanged, m_redoAct, &QAction::setEnabled);
 
+    editMenu->addSeparator();
+    QAction *preferencesAct = editMenu->addAction("Preferences…");
+    preferencesAct->setObjectName("actionPreferences");
+    preferencesAct->setShortcut(QKeySequence::Preferences);
+    connect(preferencesAct, &QAction::triggered, this, [this]() { showPreferences(); });
+
     QMenu   *developMenu     = menuBar()->addMenu("Develop");
     QAction *copySettingsAct = developMenu->addAction("Copy Develop Settings");
     copySettingsAct->setObjectName("actionCopyDevelopSettings");
@@ -523,20 +544,7 @@ void PhotoEditorApp::setupMenuBar() {
     QMenu   *viewMenu           = menuBar()->addMenu("View");
     QAction *organizeEffectsAct = viewMenu->addAction("Organize Effects…");
     organizeEffectsAct->setObjectName("actionOrganizeEffects");
-    connect(organizeEffectsAct, &QAction::triggered, this, [this]() {
-        if (!m_effectOrganizer) {
-            m_effectOrganizer = new EffectOrganizerDialog(m_effects, this);
-            connect(m_effectOrganizer, &EffectOrganizerDialog::organizationChanged, this, [this]() {
-                triggerReprocess();
-                writeSidecar();
-                m_history->recordFromCurrent(currentSnapshot());
-                refreshEditedState();
-            });
-        }
-        m_effectOrganizer->show();
-        m_effectOrganizer->raise();
-        m_effectOrganizer->activateWindow();
-    });
+    connect(organizeEffectsAct, &QAction::triggered, this, [this]() { showPreferences(0); });
 
     // Debug menu — import/export YAML presets.  Hidden behind its own menu so
     // it stays out of the way of the everyday File workflow but is also the
@@ -566,32 +574,6 @@ void PhotoEditorApp::setupMenuBar() {
     QAction *purgeCachesAct = debugMenu->addAction("Purge Photo Caches…");
     purgeCachesAct->setObjectName("actionPurgeCaches");
     connect(purgeCachesAct, &QAction::triggered, this, &PhotoEditorApp::purgeCaches);
-}
-
-void PhotoEditorApp::setupGpuSelector(QVBoxLayout *rightLayout) {
-    QLabel *label = new QLabel("GPU Device");
-    rightLayout->addWidget(label);
-
-    m_gpuSelector = new QComboBox();
-    m_gpuSelector->setObjectName("gpuDeviceSelector");
-    m_gpuSelector->setToolTip("Select the OpenCL compute device used to accelerate all image processing "
-                              "effects.\nChanging device reinitialises all GPU kernels and triggers a full reprocess.");
-
-    const auto &devs = GpuDeviceRegistry::instance().devices();
-    if (devs.empty()) {
-        m_gpuSelector->addItem("No OpenCL devices found");
-        m_gpuSelector->setEnabled(false);
-    } else {
-        for (const auto &d : devs) m_gpuSelector->addItem(d.name + " [" + d.platformName + " · " + d.typeName + "]");
-        m_gpuSelector->setCurrentIndex(GpuDeviceRegistry::instance().currentIndex());
-    }
-
-    connect(m_gpuSelector, QOverload<int>::of(&QComboBox::activated), this, [this](int idx) {
-        GpuDeviceRegistry::instance().setDevice(idx);
-        triggerReprocess();
-    });
-
-    rightLayout->addWidget(m_gpuSelector);
 }
 
 void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
@@ -685,6 +667,60 @@ void PhotoEditorApp::reorderEffectPanels() {
         QWidget *panel = m_effectPanels.value(entry.effect, nullptr);
         if (panel) m_effectsLayout->insertWidget(position++, panel);
     }
+}
+
+void PhotoEditorApp::showPreferences(int page) {
+    if (!m_preferences) {
+        m_preferences = new PreferencesDialog(m_effects, this);
+        connect(m_preferences, &PreferencesDialog::effectOrganizationChanged, this, [this]() {
+            saveEffectPreferences();
+            updateDefaultEffectOrganization();
+            if (m_proofer) m_proofer->setDefaults(m_defaults);
+            triggerReprocess();
+            writeSidecar();
+            m_history->recordFromCurrent(currentSnapshot());
+            refreshEditedState();
+        });
+        connect(m_preferences, &PreferencesDialog::gpuDeviceChanged, this, &PhotoEditorApp::triggerReprocess);
+    }
+    m_preferences->showPage(page);
+    m_preferences->show();
+    m_preferences->raise();
+    m_preferences->activateWindow();
+}
+
+void PhotoEditorApp::saveEffectPreferences() {
+    QStringList order;
+    QStringList enabled;
+    for (const EffectEntry &entry : m_effects->entries()) {
+        if (!entry.effect) continue;
+        const QString id = entry.effect->getId();
+        order.append(id);
+        if (entry.enabled) enabled.append(id);
+    }
+    QSettings settings("Afterglow", "Afterglow");
+    settings.setValue("effects/order", order);
+    settings.setValue("effects/enabled", enabled);
+}
+
+void PhotoEditorApp::updateDefaultEffectOrganization() {
+    QHash<QString, SettingsImporter::EffectSettings> defaultsById;
+    for (const auto &effect : m_defaults.effects) defaultsById.insert(effect.id, effect);
+
+    QVector<SettingsImporter::EffectSettings> reordered;
+    reordered.reserve(m_effects->entries().size());
+    for (const EffectEntry &entry : m_effects->entries()) {
+        if (!entry.effect) continue;
+        SettingsImporter::EffectSettings effect = defaultsById.value(entry.effect->getId());
+        if (effect.id.isEmpty()) {
+            effect.id         = entry.effect->getId();
+            effect.name       = entry.effect->getName();
+            effect.parameters = entry.effect->getParameters();
+        }
+        effect.enabled = entry.enabled;
+        reordered.append(effect);
+    }
+    m_defaults.effects = std::move(reordered);
 }
 
 void PhotoEditorApp::openImage() {

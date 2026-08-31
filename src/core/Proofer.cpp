@@ -98,6 +98,10 @@ Proofer::Proofer(std::unique_ptr<EffectManager> effects, SettingsImporter::Setti
 
 Proofer::~Proofer() = default;
 
+void Proofer::setDefaults(SettingsImporter::Settings defaults) {
+    m_defaults = std::move(defaults);
+}
+
 void Proofer::setQueue(QStringList paths) {
     ++m_queueGeneration;
     m_queue = std::move(paths);

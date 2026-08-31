@@ -40,6 +40,7 @@ public:
 
     // Invalidate any in-flight result for path and queue a fresh proof.
     void refresh(const QString &path);
+    void setDefaults(SettingsImporter::Settings defaults);
 
     // Stop dispatching new jobs.  Any in-progress job runs to completion.
     void pause();

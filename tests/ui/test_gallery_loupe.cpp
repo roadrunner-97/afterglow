@@ -7,9 +7,11 @@
 #include <QTest>
 #include <QWheelEvent>
 #include <QPushButton>
+#include <QSettings>
 
 #include "EffectManager.h"
 #include "EffectOrganizerDialog.h"
+#include "PreferencesDialog.h"
 #include "GridView.h"
 #include "LoupeView.h"
 #include "PhotoEditorApp.h"
@@ -97,11 +99,13 @@ private slots:
         QVERIFY(app.findChild<LoupeView *>("loupeView"));
         QVERIFY(app.findChild<ViewportWidget *>("developViewport"));
         QVERIFY(app.findChild<QWidget *>("processingIndicator"));
-        QVERIFY(app.findChild<QWidget *>("gpuDeviceSelector"));
+        QVERIFY(app.findChild<QAction *>("actionPreferences"));
         QVERIFY(app.findChild<QAction *>("actionOrganizeEffects"));
     }
 
     void organizerMovesEffectsBetweenListsAndReordersPipeline() {
+        QSettings settings("Afterglow", "Afterglow");
+        settings.remove("effects");
         EffectManager effects;
         effects.addEffect(std::make_unique<OrganizerTestEffect>("First"));
         effects.addEffect(std::make_unique<OrganizerTestEffect>("Second"), false);
@@ -109,7 +113,7 @@ private slots:
         PhotoEditorApp app(&effects);
 
         app.findChild<QAction *>("actionOrganizeEffects")->trigger();
-        auto *dialog    = app.findChild<EffectOrganizerDialog *>("effectOrganizerDialog");
+        auto *dialog    = app.findChild<PreferencesDialog *>("preferencesDialog");
         auto *available = dialog ? dialog->findChild<QListWidget *>("availableEffectsList") : nullptr;
         auto *enabled   = dialog ? dialog->findChild<QListWidget *>("enabledEffectsList") : nullptr;
         QVERIFY(dialog);
@@ -125,6 +129,19 @@ private slots:
         enabled->insertItem(0, enabled->takeItem(2));
         QTRY_COMPARE(effects.entries()[0].effect->getName(), QString("Third"));
         QCOMPARE(effects.entries()[1].effect->getName(), QString("Second"));
+        QCOMPARE(settings.value("effects/order").toStringList(), QStringList({"third", "second", "first"}));
+        settings.remove("effects");
+    }
+
+    void preferencesExposeProcessingPageAndGpuSelector() {
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.findChild<QAction *>("actionPreferences")->trigger();
+
+        auto *dialog = app.findChild<PreferencesDialog *>("preferencesDialog");
+        QVERIFY(dialog);
+        QVERIFY(dialog->findChild<QListWidget *>("preferencesPages"));
+        QVERIFY(dialog->findChild<QWidget *>("gpuDeviceSelector"));
     }
 
     void injectedOpenImageRunsDevelopWorkflowWithoutNativeDialogs() {

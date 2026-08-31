@@ -1,16 +1,16 @@
-#ifndef EFFECTORGANIZERDIALOG_H
-#define EFFECTORGANIZERDIALOG_H
+#ifndef EFFECTORGANIZERWIDGET_H
+#define EFFECTORGANIZERWIDGET_H
 
-#include <QDialog>
+#include <QWidget>
 
 class EffectManager;
 class QListWidget;
 
-class EffectOrganizerDialog : public QDialog {
+class EffectOrganizerWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit EffectOrganizerDialog(EffectManager *effects, QWidget *parent = nullptr);
+    explicit EffectOrganizerWidget(EffectManager *effects, QWidget *parent = nullptr);
 
 signals:
     void organizationChanged();
