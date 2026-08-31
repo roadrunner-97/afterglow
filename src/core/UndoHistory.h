@@ -34,6 +34,7 @@ public:
     // Diff current state against shadow; push per-effect entries and advance
     // cursor if anything changed. Truncates any redo tail. No-op while isApplying().
     void recordFromCurrent(const QVector<SettingsImporter::EffectSettings> &current);
+    void ensureTracked(const SettingsImporter::EffectSettings &current);
 
     bool canUndo() const;
     bool canRedo() const;

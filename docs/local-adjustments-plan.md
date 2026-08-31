@@ -60,6 +60,9 @@ after zoom or rotation, or encounter sticky or delayed manipulation.
 
 ### 1. Core mask model
 
+Status: complete for linear gradients. The ordered adjustment stack assigns
+stable IDs and is covered independently of UI and GPU code.
+
 - Add processing-independent mask and adjustment types.
 - Represent a linear mask with a center, direction toward the affected side,
   feather half-width, and inversion flag.
@@ -68,6 +71,11 @@ after zoom or rotation, or encounter sticky or delayed manipulation.
   out-of-bounds geometry with unit tests.
 
 ### 2. Serialization and history
+
+Status: complete for the current single-gradient slice. Version-2 sidecars
+round-trip local adjustment state, legacy histories learn the new synthetic
+state domain without losing their log, and committed mask/exposure gestures
+participate in the normal chronological undo/redo stream.
 
 - Version the sidecar representation and preserve stable adjustment IDs.
 - Round-trip mask geometry, parameters, ordering, names, and enabled state.
@@ -80,6 +88,9 @@ safe malformed-input handling, undo/redo for every operation, and one history
 entry per gesture rather than per mouse event.
 
 ### 3. GPU exposure slice
+
+Status: complete for linear exposure. Commit, live preview, pan/zoom cache,
+export, and background proofs share the analytical OpenCL mask evaluation.
 
 - Transport mask descriptions through the shared OpenCL pipeline.
 - Apply local exposure using the analytical mask weight.

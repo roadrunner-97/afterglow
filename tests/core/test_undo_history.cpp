@@ -419,6 +419,26 @@ private slots:
         h.undo();
         QVERIFY(gotFalse); // canRedo went true; signal fired with true
     }
+
+    void ensureTrackedAddsMissingDomainWithoutClearingLog() {
+        UndoHistory h;
+        auto        global = makeEff("brightness", true, {{"value", 0}});
+        h.seed({global});
+        global.parameters["value"] = 1;
+        h.recordFromCurrent({global});
+        QVERIFY(h.canUndo());
+
+        auto local = makeEff("local", true, {{"present", false}});
+        h.ensureTracked(local);
+        local.parameters["present"] = true;
+        h.ensureTracked(local); // Existing shadow must not be overwritten.
+        h.recordFromCurrent({global, local});
+
+        QCOMPARE(h.entries().size(), 2);
+        QCOMPARE(h.entries().last().effectId, QString("local"));
+        QCOMPARE(h.entries().last().params["present"].from, QVariant(false));
+        QCOMPARE(h.entries().last().params["present"].to, QVariant(true));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestUndoHistory)

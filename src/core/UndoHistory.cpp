@@ -70,6 +70,10 @@ void UndoHistory::recordFromCurrent(const QVector<SettingsImporter::EffectSettin
     emit historyChanged();
 }
 
+void UndoHistory::ensureTracked(const SettingsImporter::EffectSettings &current) {
+    if (!m_shadow.contains(current.id)) m_shadow.insert(current.id, current);
+}
+
 bool UndoHistory::canUndo() const {
     return m_cursor > 0;
 }

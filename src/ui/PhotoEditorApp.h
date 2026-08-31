@@ -94,6 +94,8 @@ private:
     void                                      updateDefaultEffectOrganization();
     void                                      commitLinearGradient();
     void                                      applyLocalAdjustments(const QVector<LocalAdjustment> &adjustments);
+    void                                      applyLocalHistoryEntry(const UndoHistory::Entry &entry, bool applyFrom);
+    SettingsImporter::EffectSettings          localAdjustmentSnapshot() const;
     SettingsImporter::Settings                currentSettings() const;
     QVector<SettingsImporter::EffectSettings> currentSnapshot() const;
     QString                                   historySidecarPathFor(const QString &imagePath) const;

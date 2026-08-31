@@ -65,6 +65,8 @@
 #include <memory>
 
 namespace {
+const QString LOCAL_ADJUSTMENTS_HISTORY_ID = QStringLiteral("__local_adjustments");
+
 struct LoupeLoadResult {
     QImage        cameraJpeg;
     ImageMetadata metadata;
@@ -166,6 +168,38 @@ QString entryLabel(const UndoHistory::Entry &e, const QString &effectName) {
     }
 
     return result.isEmpty() ? effectName : result;
+}
+
+QMap<QString, QVariant> localAdjustmentParameters(const LocalAdjustmentStack &stack) {
+    QMap<QString, QVariant> params;
+    params.insert("present", !stack.isEmpty());
+    if (stack.isEmpty()) return params;
+    const LocalAdjustment &item = stack.adjustments().first();
+    params.insert("id", item.id);
+    params.insert("name", item.name);
+    params.insert("enabled", item.enabled);
+    params.insert("exposure_ev", item.exposureEv);
+    params.insert("inverted", item.mask.isInverted());
+    params.insert("center_x", item.mask.center().x());
+    params.insert("center_y", item.mask.center().y());
+    params.insert("direction_x", item.mask.direction().x());
+    params.insert("direction_y", item.mask.direction().y());
+    params.insert("feather_half_width", item.mask.featherHalfWidth());
+    return params;
+}
+
+QVector<LocalAdjustment> localAdjustmentsFromParameters(const QMap<QString, QVariant> &params) {
+    if (!params.value("present").toBool()) return {};
+    LocalAdjustment item;
+    item.id         = params.value("id").toString();
+    item.name       = params.value("name").toString();
+    item.enabled    = params.value("enabled", true).toBool();
+    item.exposureEv = params.value("exposure_ev").toDouble();
+    item.mask =
+        LinearGradientMask({params.value("center_x", 0.5).toDouble(), params.value("center_y", 0.5).toDouble()},
+                           {params.value("direction_x", 0.0).toDouble(), params.value("direction_y", 1.0).toDouble()},
+                           params.value("feather_half_width", 0.25).toDouble(), params.value("inverted").toBool());
+    return {item};
 }
 } // namespace
 
@@ -487,7 +521,10 @@ void PhotoEditorApp::setupUI() {
     connect(m_linearGradientTool, &LinearGradientTool::maskChanged, m_viewport,
             QOverload<>::of(&ViewportWidget::update));
     connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this]() {
-        if (!m_localAdjustments.isEmpty()) triggerLiveReprocess();
+        if (m_localAdjustments.isEmpty() || !m_linearGradientTool->hasMask()) return;
+        LocalAdjustment *adjustment = m_localAdjustments.find(m_localAdjustments.adjustments().first().id);
+        if (adjustment) adjustment->mask = *m_linearGradientTool->mask();
+        triggerLiveReprocess();
     });
     connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this, invertGradient, deleteGradient]() {
         const bool hasMask = m_linearGradientTool->hasMask();
@@ -510,6 +547,8 @@ void PhotoEditorApp::setupUI() {
     connect(m_localExposure, &ParamSlider::editingFinished, this, [this]() {
         writeSidecar();
         triggerReprocess();
+        m_history->recordFromCurrent(currentSnapshot());
+        refreshEditedState();
     });
 
     QScrollArea *effectsScroll = new QScrollArea();
@@ -883,6 +922,7 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     } else {
         m_history->seed(currentSnapshot());
     }
+    m_history->ensureTracked(localAdjustmentSnapshot());
     refreshEditedState();
 
     m_metadataTray->setInfo(buildMetadataInfo(path, img.size(), meta));
@@ -960,6 +1000,7 @@ void PhotoEditorApp::importSettings() {
     }
 
     SettingsImporter::applyToManager(parsed, *m_effects);
+    applyLocalAdjustments(parsed.localAdjustments);
 
     // applyToManager blocks parametersChanged on each effect; fire one
     // definitive reprocess now that the full state is in place.
@@ -1111,7 +1152,7 @@ void PhotoEditorApp::exportSettings() {
     m_lastDir = QFileInfo(fileName).absolutePath();
 
     QString error;
-    if (!SettingsExporter::writeYaml(fileName, *m_effects, m_currentImagePath, &error)) {
+    if (!SettingsExporter::writeYaml(fileName, currentSettings(), m_currentImagePath, &error)) {
         m_uiServices->warning(this, "Export Failed",
                               QString("Could not write settings to:\n%1\n\n%2").arg(fileName, error));
     }
@@ -1673,7 +1714,8 @@ void PhotoEditorApp::refreshHistoryTray() {
     QVector<HistoryTray::Row> rows;
     rows.reserve(entries.size());
     for (const auto &e : entries) {
-        QString effectName = e.effectId;
+        QString effectName =
+            e.effectId == LOCAL_ADJUSTMENTS_HISTORY_ID ? QStringLiteral("Local Adjustment") : e.effectId;
         for (const auto &eff : m_effects->entries()) {
             if (eff.effect && eff.effect->getId() == e.effectId) {
                 effectName = eff.effect->getName();
@@ -1688,7 +1730,7 @@ void PhotoEditorApp::refreshHistoryTray() {
 QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() const {
     const auto                               &entries = m_effects->entries();
     QVector<SettingsImporter::EffectSettings> snap;
-    snap.reserve(entries.size());
+    snap.reserve(entries.size() + 1);
     for (const auto &e : entries) {
         if (!e.effect) continue;
         SettingsImporter::EffectSettings es;
@@ -1698,13 +1740,25 @@ QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() cons
         es.parameters = e.effect->getParameters();
         snap.append(es);
     }
+    snap.append(localAdjustmentSnapshot());
     return snap;
+}
+
+SettingsImporter::EffectSettings PhotoEditorApp::localAdjustmentSnapshot() const {
+    SettingsImporter::EffectSettings snapshot;
+    snapshot.id         = LOCAL_ADJUSTMENTS_HISTORY_ID;
+    snapshot.name       = "Local Adjustment";
+    snapshot.enabled    = true;
+    snapshot.parameters = localAdjustmentParameters(m_localAdjustments);
+    return snapshot;
 }
 
 SettingsImporter::Settings PhotoEditorApp::currentSettings() const {
     SettingsImporter::Settings settings;
-    settings.image            = m_currentImagePath;
-    settings.effects          = currentSnapshot();
+    settings.image   = m_currentImagePath;
+    settings.effects = currentSnapshot();
+    if (!settings.effects.isEmpty() && settings.effects.last().id == LOCAL_ADJUSTMENTS_HISTORY_ID)
+        settings.effects.removeLast();
     settings.localAdjustments = m_localAdjustments.adjustments();
     return settings;
 }
@@ -1734,6 +1788,8 @@ void PhotoEditorApp::commitLinearGradient() {
     }
     writeSidecar();
     triggerReprocess();
+    m_history->recordFromCurrent(currentSnapshot());
+    refreshEditedState();
 }
 
 QString PhotoEditorApp::historySidecarPathFor(const QString &imagePath) const {
@@ -1750,6 +1806,10 @@ void PhotoEditorApp::flushHistorySidecar() {
 }
 
 void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry &e, bool applyFrom) {
+    if (e.effectId == LOCAL_ADJUSTMENTS_HISTORY_ID) {
+        applyLocalHistoryEntry(e, applyFrom);
+        return;
+    }
     const auto &entries = m_effects->entries();
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].effect || entries[i].effect->getId() != e.effectId) continue;
@@ -1773,6 +1833,16 @@ void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry &e, bool applyFr
         }
         break;
     }
+}
+
+void PhotoEditorApp::applyLocalHistoryEntry(const UndoHistory::Entry &entry, bool applyFrom) {
+    QMap<QString, QVariant> params = localAdjustmentParameters(m_localAdjustments);
+    for (auto it = entry.params.cbegin(); it != entry.params.cend(); ++it) {
+        const QVariant &value = applyFrom ? it.value().from : it.value().to;
+        if (value.isValid()) params.insert(it.key(), value);
+        else params.remove(it.key());
+    }
+    applyLocalAdjustments(localAdjustmentsFromParameters(params));
 }
 
 void PhotoEditorApp::snapshotDefaults() {
