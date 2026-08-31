@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVariant>
 #include <QVector>
+#include "LocalAdjustment.h"
 
 class EffectManager;
 
@@ -23,8 +24,9 @@ struct EffectSettings {
 };
 
 struct Settings {
-    QString                 image;
-    QVector<EffectSettings> effects;
+    QString                  image;
+    QVector<EffectSettings>  effects;
+    QVector<LocalAdjustment> localAdjustments;
 };
 
 // Parses the line-oriented YAML subset emitted by SettingsExporter::toYaml.

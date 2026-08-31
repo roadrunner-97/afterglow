@@ -113,6 +113,8 @@ add_library(photoeditor_core STATIC
     src/core/Histogram.h
     src/core/LinearGradientMask.cpp
     src/core/LinearGradientMask.h
+    src/core/LocalAdjustment.cpp
+    src/core/LocalAdjustment.h
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h

@@ -19,6 +19,7 @@ public:
     bool                      isOverlayVisible() const;
 
     void beginCreation();
+    void setMask(const LinearGradientMask &mask);
     void clearMask();
     void setInverted(bool inverted);
     void setOverlayVisible(bool visible);

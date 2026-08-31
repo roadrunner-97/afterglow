@@ -54,6 +54,38 @@ private slots:
         QVERIFY(yaml.contains("exposure: 1.25"));
     }
 
+    void serializesLocalAdjustment() {
+        SettingsImporter::Settings settings;
+        LocalAdjustment            adjustment;
+        adjustment.id         = "gradient-1";
+        adjustment.name       = "Sky";
+        adjustment.enabled    = false;
+        adjustment.exposureEv = -1.25;
+        adjustment.mask       = LinearGradientMask({0.2, 0.3}, {1.0, 0.0}, 0.15, true);
+        settings.localAdjustments.append(adjustment);
+        const QString yaml = SettingsExporter::toYaml(settings);
+        QVERIFY(yaml.contains("version: 2"));
+        QVERIFY(yaml.contains("local_adjustments:"));
+        QVERIFY(yaml.contains("id: \"gradient-1\""));
+        QVERIFY(yaml.contains("name: \"Sky\""));
+        QVERIFY(yaml.contains("exposure_ev: -1.25"));
+        QVERIFY(yaml.contains("inverted: true"));
+        QVERIFY(yaml.contains("center_x: 0.2"));
+
+        SettingsImporter::Settings restored;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &restored));
+        QCOMPARE(restored.localAdjustments.size(), 1);
+        const LocalAdjustment &roundTrip = restored.localAdjustments.first();
+        QCOMPARE(roundTrip.id, adjustment.id);
+        QCOMPARE(roundTrip.name, adjustment.name);
+        QCOMPARE(roundTrip.enabled, adjustment.enabled);
+        QCOMPARE(roundTrip.exposureEv, adjustment.exposureEv);
+        QCOMPARE(roundTrip.mask.center(), adjustment.mask.center());
+        QCOMPARE(roundTrip.mask.direction(), adjustment.mask.direction());
+        QCOMPARE(roundTrip.mask.featherHalfWidth(), adjustment.mask.featherHalfWidth());
+        QCOMPARE(roundTrip.mask.isInverted(), adjustment.mask.isInverted());
+    }
+
     void emptyManager_emitsEmptyEffectsList() {
         EffectManager mgr;
         const QString yaml = SettingsExporter::toYaml(mgr);

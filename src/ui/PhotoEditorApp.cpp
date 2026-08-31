@@ -475,7 +475,10 @@ void PhotoEditorApp::setupUI() {
         m_viewport->setFocus();
     });
     connect(invertGradient, &QPushButton::toggled, m_linearGradientTool, &LinearGradientTool::setInverted);
-    connect(deleteGradient, &QPushButton::clicked, m_linearGradientTool, &LinearGradientTool::clearMask);
+    connect(deleteGradient, &QPushButton::clicked, this, [this]() {
+        m_linearGradientTool->clearMask();
+        commitLinearGradient();
+    });
     connect(showOverlay, &QCheckBox::toggled, m_linearGradientTool, &LinearGradientTool::setOverlayVisible);
     connect(m_linearGradientTool, &LinearGradientTool::maskChanged, m_viewport,
             QOverload<>::of(&ViewportWidget::update));
@@ -488,6 +491,7 @@ void PhotoEditorApp::setupUI() {
     });
     connect(m_linearGradientTool, &LinearGradientTool::creationModeChanged, addGradient,
             [addGradient](bool creating) { addGradient->setText(creating ? "Drag on image…" : "Linear Gradient"); });
+    connect(m_linearGradientTool, &LinearGradientTool::gestureFinished, this, &PhotoEditorApp::commitLinearGradient);
 
     QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
@@ -815,6 +819,8 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     m_developedPath    = path;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
+    m_localAdjustments.clear();
+    m_linearGradientTool->clearMask();
 
     // Reset every effect to its constructor-time state before touching the
     // new image: otherwise a brightness/crop tweak from the previous photo
@@ -834,8 +840,10 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     if (QFile::exists(sidecar)) {
         SettingsImporter::Settings parsed;
         QString                    error;
-        if (SettingsImporter::readYaml(sidecar, &parsed, &error)) SettingsImporter::applyToManager(parsed, *m_effects);
-        else qWarning() << "Sidecar parse failed for" << sidecar << ":" << error;
+        if (SettingsImporter::readYaml(sidecar, &parsed, &error)) {
+            SettingsImporter::applyToManager(parsed, *m_effects);
+            applyLocalAdjustments(parsed.localAdjustments);
+        } else qWarning() << "Sidecar parse failed for" << sidecar << ":" << error;
     } else {
         writeSidecar();
     }
@@ -1552,9 +1560,8 @@ void PhotoEditorApp::onMarkChanged(const QString &path, GridView::Mark mark) {
 
 SettingsImporter::Settings PhotoEditorApp::settingsForPath(const QString &path) const {
     if (path == m_developedPath && !m_originalImage.isNull()) {
-        SettingsImporter::Settings settings;
-        settings.image   = path;
-        settings.effects = currentSnapshot();
+        SettingsImporter::Settings settings = currentSettings();
+        settings.image                      = path;
         return settings;
     }
 
@@ -1593,6 +1600,7 @@ void PhotoEditorApp::pasteDevelopSettingsTo(const QString &path) {
 
     if (path == m_developedPath && !m_originalImage.isNull()) {
         SettingsImporter::applyToManager(copied, *m_effects);
+        applyLocalAdjustments(copied.localAdjustments);
         syncCommittedGeometry();
         syncViewportRotation();
         triggerReprocess();
@@ -1670,6 +1678,33 @@ QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() cons
     return snap;
 }
 
+SettingsImporter::Settings PhotoEditorApp::currentSettings() const {
+    SettingsImporter::Settings settings;
+    settings.image            = m_currentImagePath;
+    settings.effects          = currentSnapshot();
+    settings.localAdjustments = m_localAdjustments.adjustments();
+    return settings;
+}
+
+void PhotoEditorApp::applyLocalAdjustments(const QVector<LocalAdjustment> &adjustments) {
+    m_localAdjustments.clear();
+    for (const LocalAdjustment &adjustment : adjustments) m_localAdjustments.appendRestored(adjustment);
+    if (m_localAdjustments.isEmpty()) m_linearGradientTool->clearMask();
+    else m_linearGradientTool->setMask(m_localAdjustments.adjustments().first().mask);
+}
+
+void PhotoEditorApp::commitLinearGradient() {
+    if (!m_linearGradientTool->hasMask()) {
+        m_localAdjustments.clear();
+    } else if (m_localAdjustments.isEmpty()) {
+        m_localAdjustments.addLinearGradient(*m_linearGradientTool->mask());
+    } else {
+        LocalAdjustment *adjustment = m_localAdjustments.find(m_localAdjustments.adjustments().first().id);
+        if (adjustment) adjustment->mask = *m_linearGradientTool->mask();
+    }
+    writeSidecar();
+}
+
 QString PhotoEditorApp::historySidecarPathFor(const QString &imagePath) const {
     const QFileInfo fi(imagePath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + ".history.yml");
@@ -1728,7 +1763,7 @@ void PhotoEditorApp::writeSidecar() {
     if (m_currentImagePath.isEmpty()) return;
     const QString path = sidecarPathFor(m_currentImagePath);
     QString       error;
-    if (!SettingsExporter::writeYaml(path, *m_effects, m_currentImagePath, &error))
+    if (!SettingsExporter::writeYaml(path, currentSettings(), m_currentImagePath, &error))
         qWarning() << "Sidecar write failed for" << path << ":" << error;
 
     // Invalidate the proof for this photo: the pipeline output has changed.

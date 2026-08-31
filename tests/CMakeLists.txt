@@ -8,6 +8,14 @@ set_target_properties(test_linear_gradient_mask PROPERTIES
 )
 add_test(NAME LinearGradientMask COMMAND test_linear_gradient_mask)
 
+add_executable(test_local_adjustment core/test_local_adjustment.cpp)
+target_link_libraries(test_local_adjustment PRIVATE photoeditor_core Qt6::Test Qt6::Core)
+set_target_properties(test_local_adjustment PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME LocalAdjustment COMMAND test_local_adjustment)
+
 add_executable(test_linear_gradient_tool ui/test_linear_gradient_tool.cpp)
 target_link_libraries(test_linear_gradient_tool PRIVATE photoeditor_ui photoeditor_core Qt6::Test Qt6::Widgets Qt6::Gui)
 target_include_directories(test_linear_gradient_tool PRIVATE ${CMAKE_SOURCE_DIR}/src/ui)

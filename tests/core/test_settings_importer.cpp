@@ -67,6 +67,36 @@ private slots:
         QVERIFY(SettingsImporter::fromYaml("", &s, nullptr));
         QVERIFY(s.image.isEmpty());
         QVERIFY(s.effects.isEmpty());
+        QVERIFY(s.localAdjustments.isEmpty());
+    }
+
+    void parsesLocalAdjustmentAndIgnoresType() {
+        const QString              yaml = QStringLiteral("version: 2\n"
+                                                         "effects:\n"
+                                                         "local_adjustments:\n"
+                                                         "  - id: \"gradient-1\"\n"
+                                                         "    type: linear_gradient\n"
+                                                         "    name: \"Sky\"\n"
+                                                         "    enabled: false\n"
+                                                         "    exposure_ev: -1.5\n"
+                                                         "    inverted: true\n"
+                                                         "    center_x: 0.2\n"
+                                                         "    center_y: 0.3\n"
+                                                         "    direction_x: 1\n"
+                                                         "    direction_y: 0\n"
+                                                         "    feather_half_width: 0.15\n");
+        SettingsImporter::Settings settings;
+        QVERIFY(SettingsImporter::fromYaml(yaml, &settings));
+        QCOMPARE(settings.localAdjustments.size(), 1);
+        const LocalAdjustment &item = settings.localAdjustments.first();
+        QCOMPARE(item.id, QString("gradient-1"));
+        QCOMPARE(item.name, QString("Sky"));
+        QVERIFY(!item.enabled);
+        QCOMPARE(item.exposureEv, -1.5);
+        QVERIFY(item.mask.isInverted());
+        QCOMPARE(item.mask.center(), QPointF(0.2, 0.3));
+        QCOMPARE(item.mask.direction(), QPointF(1.0, 0.0));
+        QCOMPARE(item.mask.featherHalfWidth(), 0.15);
     }
 
     void parses_imageAndScalarTypes() {

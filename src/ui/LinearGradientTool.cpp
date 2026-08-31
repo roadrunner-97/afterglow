@@ -38,6 +38,15 @@ void LinearGradientTool::beginCreation() {
     emit creationModeChanged(true);
 }
 
+void LinearGradientTool::setMask(const LinearGradientMask &mask) {
+    m_mask = mask;
+    m_beforeGesture.reset();
+    m_drag         = Drag::None;
+    m_creationMode = false;
+    emit maskChanged();
+    emit creationModeChanged(false);
+}
+
 void LinearGradientTool::clearMask() {
     if (!m_mask && !m_creationMode) return;
     m_mask.reset();

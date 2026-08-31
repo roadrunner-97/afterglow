@@ -75,13 +75,14 @@ QString formatScalar(const QVariant &v) {
 
 namespace SettingsExporter {
 
-static QString effectsToYaml(const QVector<SettingsImporter::EffectSettings> &effects, const QString &sourceImagePath) {
+static QString settingsToYaml(const SettingsImporter::Settings &settings, const QString &sourceImagePath) {
     QString out;
     out.append("# Afterglow effect settings\n");
+    out.append("version: 2\n");
     if (!sourceImagePath.isEmpty()) out.append("image: ").append(quoteString(sourceImagePath)).append('\n');
 
     out.append("effects:\n");
-    for (const auto &entry : effects) {
+    for (const auto &entry : settings.effects) {
         out.append("  - id: ").append(quoteString(entry.id)).append('\n');
         out.append("    enabled: ").append(entry.enabled ? "true" : "false").append('\n');
 
@@ -95,6 +96,20 @@ static QString effectsToYaml(const QVector<SettingsImporter::EffectSettings> &ef
                 out.append("      ").append(it.key()).append(": ").append(formatScalar(it.value())).append('\n');
         }
     }
+    out.append("local_adjustments:\n");
+    for (const LocalAdjustment &entry : settings.localAdjustments) {
+        out.append("  - id: ").append(quoteString(entry.id)).append('\n');
+        out.append("    type: linear_gradient\n");
+        out.append("    name: ").append(quoteString(entry.name)).append('\n');
+        out.append("    enabled: ").append(entry.enabled ? "true" : "false").append('\n');
+        out.append("    exposure_ev: ").append(formatScalar(entry.exposureEv)).append('\n');
+        out.append("    inverted: ").append(entry.mask.isInverted() ? "true" : "false").append('\n');
+        out.append("    center_x: ").append(formatScalar(entry.mask.center().x())).append('\n');
+        out.append("    center_y: ").append(formatScalar(entry.mask.center().y())).append('\n');
+        out.append("    direction_x: ").append(formatScalar(entry.mask.direction().x())).append('\n');
+        out.append("    direction_y: ").append(formatScalar(entry.mask.direction().y())).append('\n');
+        out.append("    feather_half_width: ").append(formatScalar(entry.mask.featherHalfWidth())).append('\n');
+    }
     return out;
 }
 
@@ -105,11 +120,11 @@ QString toYaml(const EffectManager &mgr, const QString &sourceImagePath) {
         settings.effects.append(
             {entry.effect->getId(), entry.effect->getName(), entry.enabled, entry.effect->getParameters()});
     }
-    return effectsToYaml(settings.effects, sourceImagePath);
+    return settingsToYaml(settings, sourceImagePath);
 }
 
 QString toYaml(const SettingsImporter::Settings &settings, const QString &sourceImagePath) {
-    return effectsToYaml(settings.effects, sourceImagePath);
+    return settingsToYaml(settings, sourceImagePath);
 }
 
 bool writeYaml(const QString &path, const EffectManager &mgr, const QString &sourceImagePath, QString *error) {

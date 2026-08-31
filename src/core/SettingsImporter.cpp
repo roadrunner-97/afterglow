@@ -101,10 +101,14 @@ namespace SettingsImporter {
 bool fromYaml(const QString &yaml, Settings *out, QString *error) {
     out->image.clear();
     out->effects.clear();
+    out->localAdjustments.clear();
     if (error) error->clear();
 
-    EffectSettings   *current = nullptr;
-    const QStringList lines   = yaml.split('\n');
+    enum class Section { None, Effects, LocalAdjustments };
+    Section           section      = Section::None;
+    EffectSettings   *current      = nullptr;
+    LocalAdjustment  *currentLocal = nullptr;
+    const QStringList lines        = yaml.split('\n');
 
     int lineNo = 0;
     for (const QString &raw : lines) {
@@ -133,23 +137,49 @@ bool fromYaml(const QString &yaml, Settings *out, QString *error) {
         if (indent == 0) {
             if (!splitKeyValue(rest, &k, &v)) continue;
             if (k == QStringLiteral("image")) out->image = parseScalar(v).toString();
-            // "effects:" header is implicit — its children appear at indent 2+
+            else if (k == QStringLiteral("effects")) section = Section::Effects;
+            else if (k == QStringLiteral("local_adjustments")) section = Section::LocalAdjustments;
         } else if (indent == 2) {
             if (!rest.startsWith(QStringLiteral("- "))) continue;
             const QString afterDash = rest.mid(2).trimmed();
             if (!splitKeyValue(afterDash, &k, &v)) continue;
-            EffectSettings entry;
-            if (k == QStringLiteral("id")) entry.id = parseScalar(v).toString();
-            else if (k == QStringLiteral("name")) entry.name = parseScalar(v).toString();
-            out->effects.append(entry);
-            current = &out->effects.last();
+            if (section == Section::LocalAdjustments) {
+                LocalAdjustment entry;
+                if (k == QStringLiteral("id")) entry.id = parseScalar(v).toString();
+                out->localAdjustments.append(entry);
+                currentLocal = &out->localAdjustments.last();
+                current      = nullptr;
+            } else {
+                EffectSettings entry;
+                if (k == QStringLiteral("id")) entry.id = parseScalar(v).toString();
+                else if (k == QStringLiteral("name")) entry.name = parseScalar(v).toString();
+                out->effects.append(entry);
+                current      = &out->effects.last();
+                currentLocal = nullptr;
+            }
         } else if (indent == 4) {
-            if (!current) continue;
             if (!splitKeyValue(rest, &k, &v)) continue;
-            if (k == QStringLiteral("enabled")) current->enabled = parseScalar(v).toBool();
-            else if (k == QStringLiteral("id")) current->id = parseScalar(v).toString();
-            else if (k == QStringLiteral("name")) current->name = parseScalar(v).toString();
-            // "parameters:" is implicit — child entries follow at indent 6
+            if (section == Section::LocalAdjustments && currentLocal) {
+                const QVariant value = parseScalar(v);
+                if (k == QStringLiteral("name")) currentLocal->name = value.toString();
+                else if (k == QStringLiteral("enabled")) currentLocal->enabled = value.toBool();
+                else if (k == QStringLiteral("exposure_ev")) currentLocal->exposureEv = value.toDouble();
+                else if (k == QStringLiteral("inverted")) currentLocal->mask.setInverted(value.toBool());
+                else if (k == QStringLiteral("center_x"))
+                    currentLocal->mask.setCenter({value.toDouble(), currentLocal->mask.center().y()});
+                else if (k == QStringLiteral("center_y"))
+                    currentLocal->mask.setCenter({currentLocal->mask.center().x(), value.toDouble()});
+                else if (k == QStringLiteral("direction_x"))
+                    currentLocal->mask.setDirection({value.toDouble(), currentLocal->mask.direction().y()});
+                else if (k == QStringLiteral("direction_y"))
+                    currentLocal->mask.setDirection({currentLocal->mask.direction().x(), value.toDouble()});
+                else if (k == QStringLiteral("feather_half_width"))
+                    currentLocal->mask.setFeatherHalfWidth(value.toDouble());
+            } else if (current) {
+                if (k == QStringLiteral("enabled")) current->enabled = parseScalar(v).toBool();
+                else if (k == QStringLiteral("id")) current->id = parseScalar(v).toString();
+                else if (k == QStringLiteral("name")) current->name = parseScalar(v).toString();
+            }
         } else if (indent == 6) {
             if (!current) continue;
             if (!splitKeyValue(rest, &k, &v)) continue;

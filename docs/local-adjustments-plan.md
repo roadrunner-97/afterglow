@@ -15,7 +15,23 @@ GPU; brush masks may later own tiled raster data.
 
 ## Milestones
 
+### Related viewport follow-up
+
+- Allow zooming below fit-to-window scale so a configurable margin of canvas
+  is visible around the entire image. This makes edge-to-edge crop placement
+  easier to inspect.
+- Keep fit-to-window as the Ctrl+0 target; zooming out is an intentional user
+  state, not a change to fit behavior.
+- Crop and mask coordinates remain clamped to the source image even while the
+  surrounding canvas is visible.
+- Preserve cursor-centered wheel zoom and ensure rotated image corners can all
+  be brought into view.
+
 ### 0. Linear-gradient interaction prototype
+
+Status: accepted after human review. On-canvas tools have exclusive ownership;
+the gradient uses a transparent-to-blue feather visualization whose affected
+side visibly swaps when inverted.
 
 - Drag to create a gradient.
 - Display start, midpoint, and end handles.
