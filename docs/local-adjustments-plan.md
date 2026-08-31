@@ -102,6 +102,12 @@ export, and background proofs share the analytical OpenCL mask evaluation.
 
 ### 4. Production linear-gradient UI
 
+Status: implemented for human review. A mask layer can currently combine
+Exposure (including tonal zones), Saturation & Vibrancy, and Grayscale. Effect
+panels switch explicitly between preserved global parameters and the selected
+mask's parameters; the same generic per-effect map is persisted and used by
+preview, proof, and export.
+
 - Add a Local Adjustments panel and adjustment list.
 - Add, rename, enable, invert, duplicate, reorder, and delete gradients.
 - Expose local exposure and overlay visibility controls.
@@ -141,11 +147,12 @@ affected region is unclear without toggling inversion.
 
 ### 6. Additional parameters
 
-Add exposure first, followed by temperature/tint, saturation, highlights and
-shadows, clarity, sharpness, and denoise. Define how each composes with its
-global counterpart and test neutral values, overlaps, both pixel formats, and
-preview/export parity. Neighborhood operations require deliberate pipeline
-design so they do not multiply blur passes or GPU transfers.
+Exposure (including highlights and shadows), Saturation & Vibrancy, and
+Grayscale are the first review slice. Follow with temperature/tint, clarity,
+sharpness, and denoise. Define how each composes with its global counterpart
+and test neutral values, overlaps, both pixel formats, and preview/export
+parity. Neighborhood operations require deliberate pipeline design so they do
+not multiply blur passes or GPU transfers.
 
 Humans must review temperature, clarity, sharpening, and denoise for natural
 transitions, halos, banding, and agreement between fit view, 100% view, and

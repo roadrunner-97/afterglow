@@ -103,6 +103,10 @@ private:
     LocalAdjustment                          *selectedLocalAdjustment();
     const LocalAdjustment                    *selectedLocalAdjustment() const;
     PhotoEditorEffect                        *exposureEffect() const;
+    PhotoEditorEffect                        *effectById(const QString &id) const;
+    bool                                      isLocallySupportedEffect(const QString &id) const;
+    QMap<QString, QVariant>                   neutralLocalParameters(const QString &id) const;
+    void                                      beginMaskedEffect(const QString &effectId);
     void                                      enterLocalExposureContext();
     void                                      leaveLocalExposureContext();
     void                                      applyLocalAdjustments(const QVector<LocalAdjustment> &adjustments);
@@ -170,27 +174,29 @@ private:
     QString                     m_latestDevelopPreviewPath;
     QString                     m_lastDir;
 
-    QStackedWidget         *m_stack              = nullptr;
-    GridView               *m_gridView           = nullptr;
-    LoupeView              *m_loupeView          = nullptr;
-    ViewportWidget         *m_viewport           = nullptr;
-    LinearGradientTool     *m_linearGradientTool = nullptr;
-    LocalAdjustmentStack    m_localAdjustments;
-    QString                 m_selectedLocalAdjustmentId;
-    QListWidget            *m_localAdjustmentList        = nullptr;
-    QPushButton            *m_invertLocalAdjustment      = nullptr;
-    QPushButton            *m_deleteLocalAdjustment      = nullptr;
-    QPushButton            *m_duplicateLocalAdjustment   = nullptr;
-    QCheckBox              *m_showLocalAdjustmentOverlay = nullptr;
-    bool                    m_updatingLocalUi            = false;
-    bool                    m_localExposureContext       = false;
-    QMap<QString, QVariant> m_globalExposureParameters;
-    QActionGroup           *m_modeGroup       = nullptr;
-    QLabel                 *m_processingLabel = nullptr;
-    QTimer                 *m_resizeDebounce  = nullptr;
-    QTimer                 *m_panThrottle     = nullptr; // trailing edge of pan throttle
-    QThreadPool            *m_thumbnailPool   = nullptr;
-    QElapsedTimer           m_lastPanDispatch; // invalid until first dispatch
+    QStackedWidget                         *m_stack              = nullptr;
+    GridView                               *m_gridView           = nullptr;
+    LoupeView                              *m_loupeView          = nullptr;
+    ViewportWidget                         *m_viewport           = nullptr;
+    LinearGradientTool                     *m_linearGradientTool = nullptr;
+    LocalAdjustmentStack                    m_localAdjustments;
+    QString                                 m_selectedLocalAdjustmentId;
+    QListWidget                            *m_localAdjustmentList        = nullptr;
+    QLabel                                 *m_localContextLabel          = nullptr;
+    QPushButton                            *m_invertLocalAdjustment      = nullptr;
+    QPushButton                            *m_deleteLocalAdjustment      = nullptr;
+    QPushButton                            *m_duplicateLocalAdjustment   = nullptr;
+    QCheckBox                              *m_showLocalAdjustmentOverlay = nullptr;
+    bool                                    m_updatingLocalUi            = false;
+    bool                                    m_localExposureContext       = false;
+    QHash<QString, QMap<QString, QVariant>> m_globalLocalEffectParameters;
+    QString                                 m_pendingLocalEffectId;
+    QActionGroup                           *m_modeGroup       = nullptr;
+    QLabel                                 *m_processingLabel = nullptr;
+    QTimer                                 *m_resizeDebounce  = nullptr;
+    QTimer                                 *m_panThrottle     = nullptr; // trailing edge of pan throttle
+    QThreadPool                            *m_thumbnailPool   = nullptr;
+    QElapsedTimer                           m_lastPanDispatch; // invalid until first dispatch
 
     QString                                m_currentFolder;
     QStringList                            m_currentPaths;  // photos shown in the gallery, in display order

@@ -707,6 +707,58 @@ private slots:
         QImage neutral        = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit, {adjustment}).image;
         QCOMPARE(disabled, neutral);
     }
+
+    void localGradientComposesExposureSaturationAndGrayscale() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage input = makeSolid(64, 32, 90, 55, 25);
+
+        LocalAdjustment adjustment;
+        adjustment.id                             = "multi-effect";
+        adjustment.mask                           = LinearGradientMask({0.5, 0.5}, {1.0, 0.0}, 0.1);
+        adjustment.effects["exposure"].parameters = {
+            {"exposure", 1.0}, {"whites", 0.0}, {"highlights", 0.0}, {"shadows", 0.0}, {"blacks", 0.0}};
+        adjustment.effects["saturation_vibrancy"].parameters = {{"saturation", 50.0}, {"vibrancy", 0.0}};
+        adjustment.effects["grayscale"].parameters           = {{"active", true}};
+        adjustment.effects["brightness_contrast"].parameters = {{"brightness", 100.0}};
+
+        QVector<GpuPipelineCall> calls = {call(&m_exposure), call(&m_saturation), call(&m_grayscale),
+                                          call(&m_brightness)};
+        for (GpuPipelineCall &pipelineCall : calls) pipelineCall.enabled = false;
+        QImage output = m_pipeline.run(input, calls, fullViewport(input), RunMode::Commit, {adjustment}).image;
+
+        const QColor unaffected = output.pixelColor(2, 16);
+        const QColor affected   = output.pixelColor(61, 16);
+        QVERIFY(std::abs(unaffected.red() - unaffected.green()) > 10);
+        QCOMPARE(affected.red(), affected.green());
+        QCOMPARE(affected.green(), affected.blue());
+
+        adjustment.effects.remove("exposure");
+        const QImage withoutExposure =
+            m_pipeline.run(input, calls, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        QVERIFY(affected.red() > withoutExposure.pixelColor(61, 16).red());
+    }
+
+    void localGradientSaturationAffectsOnlyMaskedSide() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage          input = makeSolid(64, 32, 100, 70, 50);
+        LocalAdjustment adjustment;
+        adjustment.id                                        = "saturation";
+        adjustment.mask                                      = LinearGradientMask({0.5, 0.5}, {1.0, 0.0}, 0.1);
+        adjustment.effects["saturation_vibrancy"].parameters = {{"saturation", 100.0}, {"vibrancy", 0.0}};
+        GpuPipelineCall saturationCall                       = call(&m_saturation);
+        saturationCall.enabled                               = false;
+        QImage live =
+            m_pipeline.run(input, {saturationCall}, fullViewport(input), RunMode::LiveDrag, {adjustment}).image;
+        QImage output =
+            m_pipeline.run(input, {saturationCall}, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        const QImage cached =
+            m_pipeline.run(input, {saturationCall}, fullViewport(input), RunMode::PanZoom, {adjustment}).image;
+        QCOMPARE(live, output);
+        QCOMPARE(cached, output);
+        const QColor left  = output.pixelColor(2, 16);
+        const QColor right = output.pixelColor(61, 16);
+        QVERIFY(right.red() - right.blue() > left.red() - left.blue());
+    }
 };
 
 QTEST_MAIN(TestGpuPipeline)

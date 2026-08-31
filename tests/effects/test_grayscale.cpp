@@ -104,6 +104,22 @@ private slots:
         QVERIFY(allPixels(out, [](QRgb px) { return qRed(px) == 200 && qGreen(px) == 100 && qBlue(px) == 50; }));
     }
 
+    void parametersRoundTripAndUpdateControls() {
+        GrayscaleEffect e;
+        QCOMPARE(e.getParameters().value("active").toBool(), false);
+        e.applyParameters({{"unknown", 1}});
+        QCOMPARE(e.getParameters().value("active").toBool(), false);
+        e.applyParameters({{"active", true}});
+        QCOMPARE(e.getParameters().value("active").toBool(), true);
+
+        QWidget *controls = e.createControlsWidget();
+        auto    *checkbox = controls->findChild<QCheckBox *>();
+        QVERIFY(checkbox);
+        QVERIFY(checkbox->isChecked());
+        e.applyParameters({{"active", false}});
+        QVERIFY(!checkbox->isChecked());
+    }
+
     // Non-square (wide) image: luminosity conversion runs per-pixel.  Output
     // dimensions must match input and every pixel must be grey (R=G=B).
     void nonSquare_active_convertsToGrey() {

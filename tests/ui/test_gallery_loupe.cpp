@@ -3,6 +3,7 @@
 #include <QSignalSpy>
 #include <QStackedWidget>
 #include <QListWidget>
+#include <QLabel>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWheelEvent>
@@ -101,6 +102,9 @@ private slots:
         QVERIFY(app.findChild<QWidget *>("processingIndicator"));
         QVERIFY(app.findChild<QAction *>("actionPreferences"));
         QVERIFY(app.findChild<QAction *>("actionOrganizeEffects"));
+        QVERIFY(app.findChild<QListWidget *>("localAdjustmentList"));
+        QVERIFY(app.findChild<QPushButton *>("editGlobalAdjustmentsButton"));
+        QVERIFY(app.findChild<QLabel *>("localAdjustmentContextLabel"));
     }
 
     void organizerMovesEffectsBetweenListsAndReordersPipeline() {
@@ -131,6 +135,23 @@ private slots:
         QCOMPARE(effects.entries()[1].effect->getName(), QString("Second"));
         QCOMPARE(settings.value("effects/order").toStringList(), QStringList({"third", "second", "first"}));
         settings.remove("effects");
+    }
+
+    void supportedEffectsExposeMaskEntryPoints() {
+        EffectManager effects;
+        effects.addEffect(std::make_unique<OrganizerTestEffect>("Exposure"));
+        effects.addEffect(std::make_unique<OrganizerTestEffect>("Saturation & Vibrancy"));
+        effects.addEffect(std::make_unique<OrganizerTestEffect>("Grayscale"));
+        PhotoEditorApp app(&effects);
+
+        auto *exposure = app.findChild<QPushButton *>("addMaskButton_exposure");
+        QVERIFY(exposure);
+        QVERIFY(app.findChild<QPushButton *>("addMaskButton_saturation_vibrancy"));
+        QVERIFY(app.findChild<QPushButton *>("addMaskButton_grayscale"));
+        exposure->click();
+        QVERIFY(app.findChild<QLabel *>("localAdjustmentContextLabel")->text().contains("Exposure"));
+        app.findChild<QPushButton *>("editGlobalAdjustmentsButton")->click();
+        QCOMPARE(app.findChild<QLabel *>("localAdjustmentContextLabel")->text(), QString("Editing: Global"));
     }
 
     void preferencesExposeProcessingPageAndGpuSelector() {

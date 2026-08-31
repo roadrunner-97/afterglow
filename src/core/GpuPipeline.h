@@ -23,6 +23,7 @@ struct GpuPipelineCall {
     PhotoEditorEffect      *effect;
     IGpuEffect             *gpu; // pre-resolved interface pointer; never null
     QMap<QString, QVariant> params;
+    bool                    enabled = true;
 };
 
 struct ViewportRequest {
@@ -94,8 +95,9 @@ private:
     QImage packAndReadbackLocked(cl::Buffer &src, int w, int h);
     bool   processedCacheMatches(const QVector<GpuPipelineCall> &calls,
                                  const QVector<LocalAdjustment> &localAdjustments) const;
-    void   enqueueLocalAdjustmentsLocked(cl::Buffer &buffer, int width, int height, float cropX0, float cropY0,
-                                         float cropX1, float cropY1, const QVector<LocalAdjustment> &localAdjustments);
+    void enqueueLocalAdjustmentsLocked(cl::Buffer &buffer, cl::Buffer &aux, int width, int height, float cropX0,
+                                       float cropY0, float cropX1, float cropY1, const QVector<GpuPipelineCall> &calls,
+                                       const QVector<LocalAdjustment> &localAdjustments);
 
     std::mutex       m_mutex;
     cl::Context      m_context;
@@ -119,6 +121,7 @@ private:
     cl::Kernel m_decodeKernel16Linear;     // 1:1 decode: 16-bit linear ushort → float4 linear
     cl::Kernel m_packKernel;               // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
     cl::Kernel m_localExposureKernel;      // analytical linear-gradient exposure in source coordinates
+    cl::Kernel m_localBlendKernel;         // locally-effected buffer blended through an analytical mask
 
     int m_previewW = 0;
     int m_previewH = 0;

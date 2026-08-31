@@ -4,6 +4,8 @@
 #include "PhotoEditorEffect.h"
 
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QHash>
 #include <QSignalBlocker>
 #include <QStringList>
@@ -11,6 +13,19 @@
 #include <climits>
 
 namespace {
+void parseLocalEffects(const QString &json, LocalAdjustment *adjustment) {
+    const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+    if (!document.isObject()) return;
+    const QJsonObject effects = document.object();
+    for (auto it = effects.begin(); it != effects.end(); ++it) {
+        if (!it.value().isObject()) continue;
+        const QJsonObject     object = it.value().toObject();
+        LocalEffectAdjustment effect;
+        effect.enabled    = object.value("enabled").toBool(true);
+        effect.parameters = object.value("parameters").toObject().toVariantMap();
+        adjustment->effects.insert(it.key(), effect);
+    }
+}
 
 QString unquote(const QString &token) {
     if (token.size() < 2 || !token.startsWith('"') || !token.endsWith('"')) return token;
@@ -163,8 +178,15 @@ bool fromYaml(const QString &yaml, Settings *out, QString *error) {
                 const QVariant value = parseScalar(v);
                 if (k == QStringLiteral("name")) currentLocal->name = value.toString();
                 else if (k == QStringLiteral("enabled")) currentLocal->enabled = value.toBool();
-                else if (k == QStringLiteral("exposure_ev")) currentLocal->exposureEv = value.toDouble();
-                else if (k == QStringLiteral("inverted")) currentLocal->mask.setInverted(value.toBool());
+                else if (k == QStringLiteral("exposure_ev")) {
+                    currentLocal->exposureEv = value.toDouble();
+                    LocalEffectAdjustment effect;
+                    effect.parameters.insert("exposure", currentLocal->exposureEv);
+                    currentLocal->effects.insert("exposure", effect);
+                } else if (k == QStringLiteral("effects_json")) {
+                    currentLocal->effects.clear();
+                    parseLocalEffects(value.toString(), currentLocal);
+                } else if (k == QStringLiteral("inverted")) currentLocal->mask.setInverted(value.toBool());
                 else if (k == QStringLiteral("center_x"))
                     currentLocal->mask.setCenter({value.toDouble(), currentLocal->mask.center().y()});
                 else if (k == QStringLiteral("center_y"))

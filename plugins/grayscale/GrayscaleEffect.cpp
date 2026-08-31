@@ -3,6 +3,7 @@
 #include <QCheckBox>
 #include <QVBoxLayout>
 #include <QDebug>
+#include <QSignalBlocker>
 
 // ============================================================================
 // Pipeline kernel — float4 linear sRGB, used by GpuPipeline via enqueueGpu.
@@ -42,8 +43,8 @@ bool GrayscaleEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
 }
 
 bool GrayscaleEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer & /*aux*/, int w, int h,
-                                 const QMap<QString, QVariant> & /*params*/) {
-    if (!m_active) return true; // no-op when checkbox is unchecked
+                                 const QMap<QString, QVariant> &params) {
+    if (!params.value("active", m_active).toBool()) return true; // no-op when unchecked
 
     m_kernelLinear.setArg(0, buf);
     m_kernelLinear.setArg(1, w);
@@ -80,6 +81,7 @@ QWidget *GrayscaleEffect::createControlsWidget() {
     layout->setContentsMargins(0, 2, 0, 2);
 
     QCheckBox *check = new QCheckBox("Convert to Grayscale");
+    m_checkbox       = check;
     check->setStyleSheet("color: #2C2018;");
     check->setToolTip("Converts the image to grayscale using the perceptual luminosity formula:\n29.9% red + 58.7% "
                       "green + 11.4% blue.");
@@ -90,4 +92,17 @@ QWidget *GrayscaleEffect::createControlsWidget() {
     });
     layout->addWidget(check);
     return w;
+}
+
+QMap<QString, QVariant> GrayscaleEffect::getParameters() const {
+    return {{"active", m_active}};
+}
+
+void GrayscaleEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
+    if (parameters.contains("active")) m_active = parameters.value("active").toBool();
+    if (m_checkbox) {
+        const QSignalBlocker blocker(m_checkbox);
+        m_checkbox->setChecked(m_active);
+    }
+    emit parametersChanged();
 }

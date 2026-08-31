@@ -5,13 +5,25 @@
 
 #include <QString>
 #include <QVector>
+#include <QMap>
+#include <QVariant>
+
+struct LocalEffectAdjustment {
+    bool                    enabled = true;
+    QMap<QString, QVariant> parameters;
+
+    bool operator==(const LocalEffectAdjustment &other) const {
+        return enabled == other.enabled && parameters == other.parameters;
+    }
+};
 
 struct LocalAdjustment {
-    QString            id;
-    QString            name;
-    bool               enabled    = true;
-    double             exposureEv = 0.0;
-    LinearGradientMask mask;
+    QString                              id;
+    QString                              name;
+    bool                                 enabled    = true;
+    double                               exposureEv = 0.0;
+    QMap<QString, LocalEffectAdjustment> effects;
+    LinearGradientMask                   mask;
 };
 
 // Ordered, processing-independent collection of local adjustments. IDs are

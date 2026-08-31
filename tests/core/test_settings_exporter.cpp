@@ -61,7 +61,10 @@ private slots:
         adjustment.name       = "Sky";
         adjustment.enabled    = false;
         adjustment.exposureEv = -1.25;
-        adjustment.mask       = LinearGradientMask({0.2, 0.3}, {1.0, 0.0}, 0.15, true);
+        LocalEffectAdjustment saturation;
+        saturation.parameters = {{"saturation", 35.0}, {"vibrancy", 12.0}};
+        adjustment.effects.insert("saturation_vibrancy", saturation);
+        adjustment.mask = LinearGradientMask({0.2, 0.3}, {1.0, 0.0}, 0.15, true);
         settings.localAdjustments.append(adjustment);
         const QString yaml = SettingsExporter::toYaml(settings);
         QVERIFY(yaml.contains("version: 2"));
@@ -80,6 +83,7 @@ private slots:
         QCOMPARE(roundTrip.name, adjustment.name);
         QCOMPARE(roundTrip.enabled, adjustment.enabled);
         QCOMPARE(roundTrip.exposureEv, adjustment.exposureEv);
+        QCOMPARE(roundTrip.effects, adjustment.effects);
         QCOMPARE(roundTrip.mask.center(), adjustment.mask.center());
         QCOMPARE(roundTrip.mask.direction(), adjustment.mask.direction());
         QCOMPARE(roundTrip.mask.featherHalfWidth(), adjustment.mask.featherHalfWidth());

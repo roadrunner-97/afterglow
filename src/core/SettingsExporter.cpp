@@ -4,12 +4,24 @@
 #include "PhotoEditorEffect.h"
 
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QFileInfo>
 #include <QMap>
 #include <QString>
 #include <QVariant>
 
 namespace {
+QString localEffectsJson(const LocalAdjustment &entry) {
+    QJsonObject effects;
+    for (auto it = entry.effects.cbegin(); it != entry.effects.cend(); ++it) {
+        QJsonObject effect;
+        effect.insert("enabled", it.value().enabled);
+        effect.insert("parameters", QJsonObject::fromVariantMap(it.value().parameters));
+        effects.insert(it.key(), effect);
+    }
+    return QString::fromUtf8(QJsonDocument(effects).toJson(QJsonDocument::Compact));
+}
 
 // Quote a string as a YAML 1.2 double-quoted scalar with the minimum required
 // escapes.  Used for any value that could otherwise be misread as a number,
@@ -103,6 +115,8 @@ static QString settingsToYaml(const SettingsImporter::Settings &settings, const 
         out.append("    name: ").append(quoteString(entry.name)).append('\n');
         out.append("    enabled: ").append(entry.enabled ? "true" : "false").append('\n');
         out.append("    exposure_ev: ").append(formatScalar(entry.exposureEv)).append('\n');
+        if (!entry.effects.isEmpty())
+            out.append("    effects_json: ").append(quoteString(localEffectsJson(entry))).append('\n');
         out.append("    inverted: ").append(entry.mask.isInverted() ? "true" : "false").append('\n');
         out.append("    center_x: ").append(formatScalar(entry.mask.center().x())).append('\n');
         out.append("    center_y: ").append(formatScalar(entry.mask.center().y())).append('\n');
