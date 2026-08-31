@@ -22,6 +22,7 @@ Benchmark groups:
 - `AllEffects`: the complete stack in live-preview and full-resolution commit
   modes, plus the cached pan/zoom path.
 
-The standard cases use a 1920x1080 source and 960x540 live preview. Pass a
+Every group runs at 1920x1080, 3840x2160, and 6000x4000. Live-preview cases
+use a half-width, half-height viewport for each source resolution. Pass a
 Google Benchmark filter to select a smaller subset when investigating one
 effect, for example `--benchmark_filter='Blur|Denoise'`.

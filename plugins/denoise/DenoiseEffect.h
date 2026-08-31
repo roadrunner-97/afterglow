@@ -42,6 +42,10 @@ private:
     cl::Kernel m_kernelDenoiseBlendLinear;
     cl::Kernel m_kernelColorNoiseBlendLinear;
     cl::Kernel m_kernelBilateralDenoiseLinear;
+
+    cl::Buffer m_tempBuf;
+    int        m_tempBufW = 0;
+    int        m_tempBufH = 0;
 };
 
 #endif // DENOISEEFFECT_H

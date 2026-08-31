@@ -39,17 +39,25 @@
     "    int x = get_global_id(0), y = get_global_id(1);\n"                                                            \
     "    if (x >= w || y >= h) return;\n"                                                                              \
     "\n"                                                                                                               \
-    "    float sigma = max((float)radius / 3.0f, 0.5f);\n"                                                             \
-    "    float4 sum = (float4)(0.0f, 0.0f, 0.0f, 0.0f);\n"                                                             \
-    "    float wsum = 0.0f;\n"                                                                                         \
-    "    for (int dx = -radius; dx <= radius; ++dx) {\n"                                                               \
-    "        int sx = clamp(x + dx, 0, w - 1);\n"                                                                      \
-    "        float4 p = in[y * w + sx];\n"                                                                             \
-    "        float ww = isGaussian ? native_exp(-0.5f * (float)(dx * dx) / (sigma * sigma)) : 1.0f;\n"                 \
-    "        sum.x += ww * p.x;\n"                                                                                     \
-    "        sum.y += ww * p.y;\n"                                                                                     \
-    "        sum.z += ww * p.z;\n"                                                                                     \
-    "        wsum += ww;\n"                                                                                            \
+    "    float4 sum = in[y * w + x];\n"                                                                                \
+    "    float wsum = 1.0f;\n"                                                                                         \
+    "    if (isGaussian) {\n"                                                                                          \
+    "        float sigma = max((float)radius / 3.0f, 0.5f);\n"                                                         \
+    "        float invSigma2 = 1.0f / (sigma * sigma);\n"                                                              \
+    "        float ratio = native_exp(-0.5f * invSigma2);\n"                                                           \
+    "        float ratioStep = native_exp(-invSigma2);\n"                                                              \
+    "        float ww = 1.0f;\n"                                                                                       \
+    "        for (int d = 1; d <= radius; ++d) {\n"                                                                    \
+    "            ww *= ratio; ratio *= ratioStep;\n"                                                                   \
+    "            float4 a = in[y * w + clamp(x - d, 0, w - 1)];\n"                                                     \
+    "            float4 b = in[y * w + clamp(x + d, 0, w - 1)];\n"                                                     \
+    "            sum += ww * (a + b); wsum += 2.0f * ww;\n"                                                            \
+    "        }\n"                                                                                                      \
+    "    } else {\n"                                                                                                   \
+    "        for (int d = 1; d <= radius; ++d) {\n"                                                                    \
+    "            sum += in[y * w + clamp(x - d, 0, w - 1)] + in[y * w + clamp(x + d, 0, w - 1)];\n"                    \
+    "            wsum += 2.0f;\n"                                                                                      \
+    "        }\n"                                                                                                      \
     "    }\n"                                                                                                          \
     "    float inv = 1.0f / wsum;\n"                                                                                   \
     "    out[y * w + x] = (float4)(sum.x * inv, sum.y * inv, sum.z * inv, 1.0f);\n"                                    \
@@ -61,17 +69,25 @@
     "    int x = get_global_id(0), y = get_global_id(1);\n"                                                            \
     "    if (x >= w || y >= h) return;\n"                                                                              \
     "\n"                                                                                                               \
-    "    float sigma = max((float)radius / 3.0f, 0.5f);\n"                                                             \
-    "    float4 sum = (float4)(0.0f, 0.0f, 0.0f, 0.0f);\n"                                                             \
-    "    float wsum = 0.0f;\n"                                                                                         \
-    "    for (int dy = -radius; dy <= radius; ++dy) {\n"                                                               \
-    "        int sy = clamp(y + dy, 0, h - 1);\n"                                                                      \
-    "        float4 p = in[sy * w + x];\n"                                                                             \
-    "        float ww = isGaussian ? native_exp(-0.5f * (float)(dy * dy) / (sigma * sigma)) : 1.0f;\n"                 \
-    "        sum.x += ww * p.x;\n"                                                                                     \
-    "        sum.y += ww * p.y;\n"                                                                                     \
-    "        sum.z += ww * p.z;\n"                                                                                     \
-    "        wsum += ww;\n"                                                                                            \
+    "    float4 sum = in[y * w + x];\n"                                                                                \
+    "    float wsum = 1.0f;\n"                                                                                         \
+    "    if (isGaussian) {\n"                                                                                          \
+    "        float sigma = max((float)radius / 3.0f, 0.5f);\n"                                                         \
+    "        float invSigma2 = 1.0f / (sigma * sigma);\n"                                                              \
+    "        float ratio = native_exp(-0.5f * invSigma2);\n"                                                           \
+    "        float ratioStep = native_exp(-invSigma2);\n"                                                              \
+    "        float ww = 1.0f;\n"                                                                                       \
+    "        for (int d = 1; d <= radius; ++d) {\n"                                                                    \
+    "            ww *= ratio; ratio *= ratioStep;\n"                                                                   \
+    "            float4 a = in[clamp(y - d, 0, h - 1) * w + x];\n"                                                     \
+    "            float4 b = in[clamp(y + d, 0, h - 1) * w + x];\n"                                                     \
+    "            sum += ww * (a + b); wsum += 2.0f * ww;\n"                                                            \
+    "        }\n"                                                                                                      \
+    "    } else {\n"                                                                                                   \
+    "        for (int d = 1; d <= radius; ++d) {\n"                                                                    \
+    "            sum += in[clamp(y - d, 0, h - 1) * w + x] + in[clamp(y + d, 0, h - 1) * w + x];\n"                    \
+    "            wsum += 2.0f;\n"                                                                                      \
+    "        }\n"                                                                                                      \
     "    }\n"                                                                                                          \
     "    float inv = 1.0f / wsum;\n"                                                                                   \
     "    out[y * w + x] = (float4)(sum.x * inv, sum.y * inv, sum.z * inv, 1.0f);\n"                                    \

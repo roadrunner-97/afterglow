@@ -30,8 +30,7 @@ namespace {
 // mask is evaluated on sRGB-encoded luminance so its triangular tent
 // (centred at 0.5 perceptual grey) behaves like the test path.  We then
 // modulate the original linear RGB by the midtone weight * detail to preserve
-// hue.  Flow: H(buf→aux) → V(aux→blurBuf) → combine(buf+blurBuf → aux) →
-// copy(aux→buf).
+// hue.  Flow: H(buf→aux) → V(aux→blurBuf) → combine(buf+blurBuf → buf).
 // ============================================================================
 static const char *PIPELINE_KERNEL_SOURCE = COLOR_KERNELS_SRC SHARED_BLUR_KERNELS_F4 R"CL(
 
@@ -129,17 +128,16 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buf
     m_kernelBlurVLinear.setArg(5, 1);
     queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
 
-    // Combine: (original=buf, blurred=m_blurBuf) → aux
+    // Each work-item reads and replaces only its own original pixel, so the
+    // combine can write directly to buf without a full-frame copy.
     m_kernelClarityLinear.setArg(0, buf);
     m_kernelClarityLinear.setArg(1, m_blurBuf);
-    m_kernelClarityLinear.setArg(2, aux);
+    m_kernelClarityLinear.setArg(2, buf);
     m_kernelClarityLinear.setArg(3, w);
     m_kernelClarityLinear.setArg(4, h);
     m_kernelClarityLinear.setArg(5, amount);
     queue.enqueueNDRangeKernel(m_kernelClarityLinear, cl::NullRange, global, cl::NullRange);
 
-    // Final result must live in buf.
-    queue.enqueueCopyBuffer(aux, buf, 0, 0, f4Bytes);
     return true;
 }
 

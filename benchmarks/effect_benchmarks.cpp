@@ -39,10 +39,6 @@
 
 namespace {
 
-constexpr int kSourceW   = 1920;
-constexpr int kSourceH   = 1080;
-constexpr int kPreviewW  = 960;
-constexpr int kPreviewH  = 540;
 constexpr int kBurstSize = 12;
 
 using EffectFactory = std::function<std::unique_ptr<PhotoEditorEffect>()>;
@@ -149,7 +145,7 @@ std::unique_ptr<PhotoEditorEffect> makeConfiguredEffect(const EffectSpec &spec) 
     return effect;
 }
 
-QMap<QString, QVariant> pipelineParameters(const EffectSpec &spec, double variation = 0.0) {
+QMap<QString, QVariant> pipelineParameters(const EffectSpec &spec, int sourceW, int sourceH, double variation = 0.0) {
     QMap<QString, QVariant> params = spec.parameters;
     if (spec.varyKey && spec.varyStep != 0.0)
         params.insert(QString::fromLatin1(spec.varyKey),
@@ -157,15 +153,16 @@ QMap<QString, QVariant> pipelineParameters(const EffectSpec &spec, double variat
     params.insert("_srcPixelsPerPreviewPixel", 1.0);
     params.insert("_cropX0", 0.0);
     params.insert("_cropY0", 0.0);
-    params.insert("_srcW", kSourceW);
-    params.insert("_srcH", kSourceH);
+    params.insert("_srcW", sourceW);
+    params.insert("_srcH", sourceH);
     return params;
 }
 
-QVector<GpuPipelineCall> singleCall(PhotoEditorEffect *effect, const EffectSpec &spec, double variation = 0.0) {
+QVector<GpuPipelineCall> singleCall(PhotoEditorEffect *effect, const EffectSpec &spec, int sourceW, int sourceH,
+                                    double variation = 0.0) {
     auto *gpu = dynamic_cast<IGpuEffect *>(effect);
     if (!gpu) throw std::runtime_error(std::string(spec.name) + " has no GPU implementation");
-    return {{effect, gpu, pipelineParameters(spec, variation)}};
+    return {{effect, gpu, pipelineParameters(spec, sourceW, sourceH, variation)}};
 }
 
 void setRateCounters(benchmark::State &state, int w, int h) {
@@ -175,6 +172,8 @@ void setRateCounters(benchmark::State &state, int w, int h) {
 }
 
 void benchmarkKernelOnly(benchmark::State &state, EffectSpec spec) {
+    const int    width  = static_cast<int>(state.range(0));
+    const int    height = static_cast<int>(state.range(1));
     cl::Device   device;
     cl::Platform platform;
     if (!GpuDeviceRegistryOCL::getSelectedDevice(device, platform)) {
@@ -190,32 +189,36 @@ void benchmarkKernelOnly(benchmark::State &state, EffectSpec spec) {
         return;
     }
 
-    const size_t    bytes = static_cast<size_t>(kSourceW) * static_cast<size_t>(kSourceH) * sizeof(cl_float4);
+    const size_t    bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(cl_float4);
     cl::Buffer      buf(context, CL_MEM_READ_WRITE, bytes);
     cl::Buffer      aux(context, CL_MEM_READ_WRITE, bytes);
     const cl_float4 fill = {{0.18f, 0.35f, 0.62f, 1.0f}};
     queue.enqueueFillBuffer(buf, fill, 0, bytes);
     queue.finish();
-    const auto params = pipelineParameters(spec);
+    const auto params = pipelineParameters(spec, width, height);
 
     for (auto _ : state) {
         (void)_;
-        if (!gpu->enqueueGpu(queue, buf, aux, kSourceW, kSourceH, params)) {
+        if (!gpu->enqueueGpu(queue, buf, aux, width, height, params)) {
             state.SkipWithError("enqueueGpu failed");
             break;
         }
         queue.finish();
         benchmark::ClobberMemory();
     }
-    setRateCounters(state, kSourceW, kSourceH);
+    setRateCounters(state, width, height);
 }
 
 void benchmarkTransfer(benchmark::State &state, EffectSpec spec) {
-    auto                  effect = makeConfiguredEffect(spec);
+    const int             sourceW  = static_cast<int>(state.range(0));
+    const int             sourceH  = static_cast<int>(state.range(1));
+    const int             previewW = std::max(1, sourceW / 2);
+    const int             previewH = std::max(1, sourceH / 2);
+    auto                  effect   = makeConfiguredEffect(spec);
     GpuPipeline           pipeline;
-    QImage                image = makeImage(kSourceW, kSourceH);
-    const ViewportRequest viewport{{kPreviewW, kPreviewH}, 1.0f, {0.5, 0.5}};
-    auto                  calls = singleCall(effect.get(), spec);
+    QImage                image = makeImage(sourceW, sourceH);
+    const ViewportRequest viewport{{previewW, previewH}, 1.0f, {0.5, 0.5}};
+    auto                  calls = singleCall(effect.get(), spec, sourceW, sourceH);
     if (pipeline.run(image, calls, viewport, RunMode::LiveDrag).image.isNull()) {
         state.SkipWithError("Pipeline warm-up failed");
         return;
@@ -233,12 +236,11 @@ void benchmarkTransfer(benchmark::State &state, EffectSpec spec) {
             break;
         }
     }
-    setRateCounters(state, kPreviewW, kPreviewH);
-    state.counters["UploadMB"] =
-        benchmark::Counter(static_cast<double>(state.iterations()) * kSourceW * kSourceH * 4.0 / 1.0e6,
-                           benchmark::Counter::kAvgIterations);
+    setRateCounters(state, previewW, previewH);
+    state.counters["UploadMB"] = benchmark::Counter(
+        static_cast<double>(state.iterations()) * sourceW * sourceH * 4.0 / 1.0e6, benchmark::Counter::kAvgIterations);
     state.counters["DownloadMB"] =
-        benchmark::Counter(static_cast<double>(state.iterations()) * kPreviewW * kPreviewH * 4.0 / 1.0e6,
+        benchmark::Counter(static_cast<double>(state.iterations()) * previewW * previewH * 4.0 / 1.0e6,
                            benchmark::Counter::kAvgIterations);
 }
 
@@ -261,11 +263,15 @@ bool runAndWait(ImageProcessor &processor, int timeoutMs, int &delivered, const 
 }
 
 void benchmarkRepeated(benchmark::State &state, EffectSpec spec) {
+    const int     sourceW  = static_cast<int>(state.range(0));
+    const int     sourceH  = static_cast<int>(state.range(1));
+    const int     previewW = std::max(1, sourceW / 2);
+    const int     previewH = std::max(1, sourceH / 2);
     EffectManager manager;
     manager.addEffect(makeConfiguredEffect(spec));
     ImageProcessor        processor;
-    const QImage          image = makeImage(kSourceW, kSourceH);
-    const ViewportRequest viewport{{kPreviewW, kPreviewH}, 1.0f, {0.5, 0.5}};
+    const QImage          image = makeImage(sourceW, sourceH);
+    const ViewportRequest viewport{{previewW, previewH}, 1.0f, {0.5, 0.5}};
 
     int warmDelivered = 0;
     if (!runAndWait(processor, 30000, warmDelivered,
@@ -306,12 +312,12 @@ struct EffectStack {
     QVector<GpuPipelineCall>                        calls;
 };
 
-EffectStack makeStack() {
+EffectStack makeStack(int sourceW, int sourceH) {
     EffectStack stack;
     for (const auto &spec : effectSpecs()) {
         auto  effect = makeConfiguredEffect(spec);
         auto *gpu    = dynamic_cast<IGpuEffect *>(effect.get());
-        auto  params = pipelineParameters(spec);
+        auto  params = pipelineParameters(spec, sourceW, sourceH);
         params.insert("_userCropX0", 0.05);
         params.insert("_userCropY0", 0.05);
         params.insert("_userCropX1", 0.95);
@@ -324,10 +330,14 @@ EffectStack makeStack() {
 }
 
 void benchmarkAllEffects(benchmark::State &state, RunMode mode) {
-    auto                  stack = makeStack();
+    const int             sourceW  = static_cast<int>(state.range(0));
+    const int             sourceH  = static_cast<int>(state.range(1));
+    const int             previewW = std::max(1, sourceW / 2);
+    const int             previewH = std::max(1, sourceH / 2);
+    auto                  stack    = makeStack(sourceW, sourceH);
     GpuPipeline           pipeline;
-    const QImage          image = makeImage(kSourceW, kSourceH);
-    const ViewportRequest viewport{{kPreviewW, kPreviewH}, 1.0f, {0.5, 0.5}};
+    const QImage          image = makeImage(sourceW, sourceH);
+    const ViewportRequest viewport{{previewW, previewH}, 1.0f, {0.5, 0.5}};
 
     if (mode == RunMode::PanZoom) {
         if (pipeline.run(image, stack.calls, viewport, RunMode::Commit).image.isNull()) {
@@ -348,32 +358,38 @@ void benchmarkAllEffects(benchmark::State &state, RunMode mode) {
             break;
         }
     }
-    setRateCounters(state, mode == RunMode::Commit ? kSourceW : kPreviewW,
-                    mode == RunMode::Commit ? kSourceH : kPreviewH);
+    setRateCounters(state, mode == RunMode::Commit ? sourceW : previewW, mode == RunMode::Commit ? sourceH : previewH);
+}
+
+benchmark::Benchmark *atResolutions(benchmark::Benchmark *bench) {
+    return bench->Args({1920, 1080})->Args({3840, 2160})->Args({6000, 4000});
 }
 
 void registerBenchmarks() {
     for (const auto &spec : effectSpecs()) {
-        benchmark::RegisterBenchmark((std::string("KernelOnly/") + spec.name).c_str(), benchmarkKernelOnly, spec)
-            ->Unit(benchmark::kMillisecond)
-            ->UseRealTime();
-        benchmark::RegisterBenchmark((std::string("Transfer/") + spec.name).c_str(), benchmarkTransfer, spec)
-            ->Unit(benchmark::kMillisecond)
-            ->UseRealTime();
-        benchmark::RegisterBenchmark((std::string("Repeated/") + spec.name).c_str(), benchmarkRepeated, spec)
-            ->Unit(benchmark::kMillisecond)
-            ->UseRealTime()
-            ->Iterations(3);
+        atResolutions(
+            benchmark::RegisterBenchmark((std::string("KernelOnly/") + spec.name).c_str(), benchmarkKernelOnly, spec)
+                ->Unit(benchmark::kMillisecond)
+                ->UseRealTime());
+        atResolutions(
+            benchmark::RegisterBenchmark((std::string("Transfer/") + spec.name).c_str(), benchmarkTransfer, spec)
+                ->Unit(benchmark::kMillisecond)
+                ->UseRealTime());
+        atResolutions(
+            benchmark::RegisterBenchmark((std::string("Repeated/") + spec.name).c_str(), benchmarkRepeated, spec)
+                ->Unit(benchmark::kMillisecond)
+                ->UseRealTime()
+                ->Iterations(3));
     }
-    benchmark::RegisterBenchmark("AllEffects/LivePreview", benchmarkAllEffects, RunMode::LiveDrag)
-        ->Unit(benchmark::kMillisecond)
-        ->UseRealTime();
-    benchmark::RegisterBenchmark("AllEffects/Commit", benchmarkAllEffects, RunMode::Commit)
-        ->Unit(benchmark::kMillisecond)
-        ->UseRealTime();
-    benchmark::RegisterBenchmark("AllEffects/CachedPanZoom", benchmarkAllEffects, RunMode::PanZoom)
-        ->Unit(benchmark::kMillisecond)
-        ->UseRealTime();
+    atResolutions(benchmark::RegisterBenchmark("AllEffects/LivePreview", benchmarkAllEffects, RunMode::LiveDrag)
+                      ->Unit(benchmark::kMillisecond)
+                      ->UseRealTime());
+    atResolutions(benchmark::RegisterBenchmark("AllEffects/Commit", benchmarkAllEffects, RunMode::Commit)
+                      ->Unit(benchmark::kMillisecond)
+                      ->UseRealTime());
+    atResolutions(benchmark::RegisterBenchmark("AllEffects/CachedPanZoom", benchmarkAllEffects, RunMode::PanZoom)
+                      ->Unit(benchmark::kMillisecond)
+                      ->UseRealTime());
 }
 
 } // namespace
