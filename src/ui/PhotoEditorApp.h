@@ -34,7 +34,9 @@ class QThreadPool;
 class UiServices;
 class PreferencesDialog;
 class LinearGradientTool;
-class ParamSlider;
+class QListWidget;
+class QPushButton;
+class QCheckBox;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -93,6 +95,13 @@ private:
     void                                      saveEffectPreferences();
     void                                      updateDefaultEffectOrganization();
     void                                      commitLinearGradient();
+    void                                      beginLinearGradientCreation();
+    void                                      refreshLocalAdjustmentsUi();
+    void                                      selectLocalAdjustment(const QString &id);
+    void                                      deleteSelectedLocalAdjustment();
+    void                                      duplicateSelectedLocalAdjustment();
+    LocalAdjustment                          *selectedLocalAdjustment();
+    const LocalAdjustment                    *selectedLocalAdjustment() const;
     void                                      applyLocalAdjustments(const QVector<LocalAdjustment> &adjustments);
     void                                      applyLocalHistoryEntry(const UndoHistory::Entry &entry, bool applyFrom);
     SettingsImporter::EffectSettings          localAdjustmentSnapshot() const;
@@ -164,12 +173,18 @@ private:
     ViewportWidget      *m_viewport           = nullptr;
     LinearGradientTool  *m_linearGradientTool = nullptr;
     LocalAdjustmentStack m_localAdjustments;
-    ParamSlider         *m_localExposure   = nullptr;
-    QActionGroup        *m_modeGroup       = nullptr;
-    QLabel              *m_processingLabel = nullptr;
-    QTimer              *m_resizeDebounce  = nullptr;
-    QTimer              *m_panThrottle     = nullptr; // trailing edge of pan throttle
-    QThreadPool         *m_thumbnailPool   = nullptr;
+    QString              m_selectedLocalAdjustmentId;
+    QListWidget         *m_localAdjustmentList        = nullptr;
+    QPushButton         *m_invertLocalAdjustment      = nullptr;
+    QPushButton         *m_deleteLocalAdjustment      = nullptr;
+    QPushButton         *m_duplicateLocalAdjustment   = nullptr;
+    QCheckBox           *m_showLocalAdjustmentOverlay = nullptr;
+    bool                 m_updatingLocalUi            = false;
+    QActionGroup        *m_modeGroup                  = nullptr;
+    QLabel              *m_processingLabel            = nullptr;
+    QTimer              *m_resizeDebounce             = nullptr;
+    QTimer              *m_panThrottle                = nullptr; // trailing edge of pan throttle
+    QThreadPool         *m_thumbnailPool              = nullptr;
     QElapsedTimer        m_lastPanDispatch; // invalid until first dispatch
 
     QString                                m_currentFolder;

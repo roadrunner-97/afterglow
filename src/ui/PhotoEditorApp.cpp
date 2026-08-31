@@ -8,7 +8,6 @@
 #include "ExportResize.h"
 #include "LoupeView.h"
 #include "LinearGradientTool.h"
-#include "ParamSlider.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
 #include <QtConcurrent/QtConcurrent>
@@ -54,6 +53,7 @@
 #include <QThreadPool>
 #include <QImageReader>
 #include <QSet>
+#include <QListWidget>
 #include <QDebug>
 #include <QDateTime>
 #include <QFileInfo>
@@ -172,34 +172,44 @@ QString entryLabel(const UndoHistory::Entry &e, const QString &effectName) {
 
 QMap<QString, QVariant> localAdjustmentParameters(const LocalAdjustmentStack &stack) {
     QMap<QString, QVariant> params;
-    params.insert("present", !stack.isEmpty());
-    if (stack.isEmpty()) return params;
-    const LocalAdjustment &item = stack.adjustments().first();
-    params.insert("id", item.id);
-    params.insert("name", item.name);
-    params.insert("enabled", item.enabled);
-    params.insert("exposure_ev", item.exposureEv);
-    params.insert("inverted", item.mask.isInverted());
-    params.insert("center_x", item.mask.center().x());
-    params.insert("center_y", item.mask.center().y());
-    params.insert("direction_x", item.mask.direction().x());
-    params.insert("direction_y", item.mask.direction().y());
-    params.insert("feather_half_width", item.mask.featherHalfWidth());
+    params.insert("count", stack.adjustments().size());
+    for (qsizetype i = 0; i < stack.adjustments().size(); ++i) {
+        const LocalAdjustment &item   = stack.adjustments()[i];
+        const QString          prefix = QStringLiteral("item_%1_").arg(i);
+        params.insert(prefix + "id", item.id);
+        params.insert(prefix + "name", item.name);
+        params.insert(prefix + "enabled", item.enabled);
+        params.insert(prefix + "exposure_ev", item.exposureEv);
+        params.insert(prefix + "inverted", item.mask.isInverted());
+        params.insert(prefix + "center_x", item.mask.center().x());
+        params.insert(prefix + "center_y", item.mask.center().y());
+        params.insert(prefix + "direction_x", item.mask.direction().x());
+        params.insert(prefix + "direction_y", item.mask.direction().y());
+        params.insert(prefix + "feather_half_width", item.mask.featherHalfWidth());
+    }
     return params;
 }
 
 QVector<LocalAdjustment> localAdjustmentsFromParameters(const QMap<QString, QVariant> &params) {
-    if (!params.value("present").toBool()) return {};
-    LocalAdjustment item;
-    item.id         = params.value("id").toString();
-    item.name       = params.value("name").toString();
-    item.enabled    = params.value("enabled", true).toBool();
-    item.exposureEv = params.value("exposure_ev").toDouble();
-    item.mask =
-        LinearGradientMask({params.value("center_x", 0.5).toDouble(), params.value("center_y", 0.5).toDouble()},
-                           {params.value("direction_x", 0.0).toDouble(), params.value("direction_y", 1.0).toDouble()},
-                           params.value("feather_half_width", 0.25).toDouble(), params.value("inverted").toBool());
-    return {item};
+    QVector<LocalAdjustment> result;
+    const bool               legacy = !params.contains("count");
+    const int count = legacy ? (params.value("present").toBool() ? 1 : 0) : params.value("count").toInt();
+    result.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        const QString   prefix = legacy ? QString() : QStringLiteral("item_%1_").arg(i);
+        LocalAdjustment item;
+        item.id         = params.value(prefix + "id").toString();
+        item.name       = params.value(prefix + "name").toString();
+        item.enabled    = params.value(prefix + "enabled", true).toBool();
+        item.exposureEv = params.value(prefix + "exposure_ev").toDouble();
+        item.mask       = LinearGradientMask(
+            {params.value(prefix + "center_x", 0.5).toDouble(), params.value(prefix + "center_y", 0.5).toDouble()},
+            {params.value(prefix + "direction_x", 0.0).toDouble(),
+             params.value(prefix + "direction_y", 1.0).toDouble()},
+            params.value(prefix + "feather_half_width", 0.25).toDouble(), params.value(prefix + "inverted").toBool());
+        result.append(item);
+    }
+    return result;
 }
 } // namespace
 
@@ -478,78 +488,84 @@ void PhotoEditorApp::setupUI() {
     localPanel->setObjectName("localAdjustmentsPanel");
     QVBoxLayout *localLayout = new QVBoxLayout(localPanel);
     localLayout->setContentsMargins(6, 4, 6, 6);
-    auto *localTitle = new QLabel("<b>Local Adjustments (Prototype)</b>");
+    auto *localTitle = new QLabel("<b>Local Adjustments</b>");
     localLayout->addWidget(localTitle);
-    auto *localHint = new QLabel("Overlay only — does not alter the image or export yet.");
+    auto *localHint = new QLabel("Select a layer to edit its mask and adjustments.");
     localHint->setWordWrap(true);
     localLayout->addWidget(localHint);
+    m_localAdjustmentList = new QListWidget();
+    m_localAdjustmentList->setObjectName("localAdjustmentList");
+    m_localAdjustmentList->setMaximumHeight(120);
+    m_localAdjustmentList->setToolTip(
+        "Double-click a layer name to rename it; use its checkbox to enable or disable it.");
+    localLayout->addWidget(m_localAdjustmentList);
     auto *localButtons = new QHBoxLayout();
-    auto *addGradient  = new QPushButton("Linear Gradient");
+    auto *addGradient  = new QPushButton("+ Gradient");
     addGradient->setObjectName("addLinearGradientButton");
-    auto *invertGradient = new QPushButton("Invert");
-    invertGradient->setObjectName("invertLinearGradientButton");
-    invertGradient->setCheckable(true);
-    auto *deleteGradient = new QPushButton("Delete");
-    deleteGradient->setObjectName("deleteLinearGradientButton");
-    invertGradient->setEnabled(false);
-    deleteGradient->setEnabled(false);
+    m_duplicateLocalAdjustment = new QPushButton("Duplicate");
+    m_duplicateLocalAdjustment->setObjectName("duplicateLocalAdjustmentButton");
+    m_deleteLocalAdjustment = new QPushButton("Delete");
+    m_deleteLocalAdjustment->setObjectName("deleteLinearGradientButton");
+    m_duplicateLocalAdjustment->setEnabled(false);
+    m_deleteLocalAdjustment->setEnabled(false);
     localButtons->addWidget(addGradient);
-    localButtons->addWidget(invertGradient);
-    localButtons->addWidget(deleteGradient);
+    localButtons->addWidget(m_duplicateLocalAdjustment);
+    localButtons->addWidget(m_deleteLocalAdjustment);
     localLayout->addLayout(localButtons);
-    auto *showOverlay = new QCheckBox("Show overlay");
-    showOverlay->setObjectName("showLinearGradientOverlayCheck");
-    showOverlay->setChecked(true);
-    localLayout->addWidget(showOverlay);
-    m_localExposure = new ParamSlider("Exposure", -4.0, 4.0, 0.1, 1);
-    m_localExposure->setEnabled(false);
-    localLayout->addWidget(m_localExposure);
+    auto *maskOptions       = new QHBoxLayout();
+    m_invertLocalAdjustment = new QPushButton("Invert mask");
+    m_invertLocalAdjustment->setObjectName("invertLinearGradientButton");
+    m_invertLocalAdjustment->setCheckable(true);
+    m_invertLocalAdjustment->setEnabled(false);
+    m_showLocalAdjustmentOverlay = new QCheckBox("Show overlay");
+    m_showLocalAdjustmentOverlay->setObjectName("showLinearGradientOverlayCheck");
+    m_showLocalAdjustmentOverlay->setChecked(true);
+    maskOptions->addWidget(m_invertLocalAdjustment);
+    maskOptions->addWidget(m_showLocalAdjustmentOverlay);
+    localLayout->addLayout(maskOptions);
     rightLayout->addWidget(localPanel);
 
     m_linearGradientTool = new LinearGradientTool(this);
-    connect(addGradient, &QPushButton::clicked, this, [this]() {
-        m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
-        m_linearGradientTool->beginCreation();
-        m_viewport->setFocus();
+    connect(addGradient, &QPushButton::clicked, this, &PhotoEditorApp::beginLinearGradientCreation);
+    connect(m_duplicateLocalAdjustment, &QPushButton::clicked, this, &PhotoEditorApp::duplicateSelectedLocalAdjustment);
+    connect(m_deleteLocalAdjustment, &QPushButton::clicked, this, &PhotoEditorApp::deleteSelectedLocalAdjustment);
+    connect(m_invertLocalAdjustment, &QPushButton::toggled, m_linearGradientTool, &LinearGradientTool::setInverted);
+    connect(m_showLocalAdjustmentOverlay, &QCheckBox::toggled, m_linearGradientTool,
+            &LinearGradientTool::setOverlayVisible);
+    connect(m_localAdjustmentList, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *current) {
+        if (!m_updatingLocalUi) selectLocalAdjustment(current ? current->data(Qt::UserRole).toString() : QString());
     });
-    connect(invertGradient, &QPushButton::toggled, m_linearGradientTool, &LinearGradientTool::setInverted);
-    connect(deleteGradient, &QPushButton::clicked, this, [this]() {
-        m_linearGradientTool->clearMask();
-        commitLinearGradient();
-    });
-    connect(showOverlay, &QCheckBox::toggled, m_linearGradientTool, &LinearGradientTool::setOverlayVisible);
-    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, m_viewport,
-            QOverload<>::of(&ViewportWidget::update));
-    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this]() {
-        if (m_localAdjustments.isEmpty() || !m_linearGradientTool->hasMask()) return;
-        LocalAdjustment *adjustment = m_localAdjustments.find(m_localAdjustments.adjustments().first().id);
-        if (adjustment) adjustment->mask = *m_linearGradientTool->mask();
-        triggerLiveReprocess();
-    });
-    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this, invertGradient, deleteGradient]() {
-        const bool hasMask = m_linearGradientTool->hasMask();
-        invertGradient->setEnabled(hasMask);
-        deleteGradient->setEnabled(hasMask);
-        m_localExposure->setEnabled(hasMask);
-        const QSignalBlocker blocker(invertGradient);
-        invertGradient->setChecked(hasMask && m_linearGradientTool->mask()->isInverted());
-    });
-    connect(m_linearGradientTool, &LinearGradientTool::creationModeChanged, addGradient,
-            [addGradient](bool creating) { addGradient->setText(creating ? "Drag on image…" : "Linear Gradient"); });
-    connect(m_linearGradientTool, &LinearGradientTool::gestureFinished, this, &PhotoEditorApp::commitLinearGradient);
-    connect(m_localExposure, &ParamSlider::valueChanged, this, [this](double value) {
-        if (m_localAdjustments.isEmpty()) return;
-        LocalAdjustment *adjustment = m_localAdjustments.find(m_localAdjustments.adjustments().first().id);
+    connect(m_localAdjustmentList, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
+        if (m_updatingLocalUi || !item) return;
+        LocalAdjustment *adjustment = m_localAdjustments.find(item->data(Qt::UserRole).toString());
         if (!adjustment) return;
-        adjustment->exposureEv = value;
-        triggerLiveReprocess();
-    });
-    connect(m_localExposure, &ParamSlider::editingFinished, this, [this]() {
+        adjustment->name    = item->text().trimmed().isEmpty() ? adjustment->name : item->text().trimmed();
+        adjustment->enabled = item->checkState() == Qt::Checked;
+        refreshLocalAdjustmentsUi();
         writeSidecar();
         triggerReprocess();
         m_history->recordFromCurrent(currentSnapshot());
         refreshEditedState();
     });
+    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, m_viewport,
+            QOverload<>::of(&ViewportWidget::update));
+    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this]() {
+        if (m_updatingLocalUi || !m_linearGradientTool->hasMask()) return;
+        LocalAdjustment *adjustment = selectedLocalAdjustment();
+        if (adjustment) adjustment->mask = *m_linearGradientTool->mask();
+        triggerLiveReprocess();
+    });
+    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this]() {
+        const bool hasMask = m_linearGradientTool->hasMask();
+        m_invertLocalAdjustment->setEnabled(hasMask);
+        m_deleteLocalAdjustment->setEnabled(selectedLocalAdjustment());
+        m_duplicateLocalAdjustment->setEnabled(selectedLocalAdjustment());
+        const QSignalBlocker blocker(m_invertLocalAdjustment);
+        m_invertLocalAdjustment->setChecked(hasMask && m_linearGradientTool->mask()->isInverted());
+    });
+    connect(m_linearGradientTool, &LinearGradientTool::creationModeChanged, addGradient,
+            [addGradient](bool creating) { addGradient->setText(creating ? "Drag on image…" : "+ Gradient"); });
+    connect(m_linearGradientTool, &LinearGradientTool::gestureFinished, this, &PhotoEditorApp::commitLinearGradient);
 
     QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
@@ -721,6 +737,14 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
             connect(editOnImageBtn, &QPushButton::clicked, this,
                     [this, interactive]() { m_viewport->setActiveInteractiveEffect(interactive); });
             titleLayout->addWidget(editOnImageBtn);
+        }
+
+        if (effect->getId() == QStringLiteral("exposure")) {
+            QPushButton *maskBtn = new QPushButton("Mask");
+            maskBtn->setObjectName("addExposureMaskButton");
+            maskBtn->setToolTip("Create a local gradient with an Exposure adjustment.");
+            connect(maskBtn, &QPushButton::clicked, this, &PhotoEditorApp::beginLinearGradientCreation);
+            titleLayout->addWidget(maskBtn);
         }
 
         QPushButton *collapseBtn = new QPushButton("−");
@@ -1766,26 +1790,103 @@ SettingsImporter::Settings PhotoEditorApp::currentSettings() const {
 void PhotoEditorApp::applyLocalAdjustments(const QVector<LocalAdjustment> &adjustments) {
     m_localAdjustments.clear();
     for (const LocalAdjustment &adjustment : adjustments) m_localAdjustments.appendRestored(adjustment);
-    if (m_localAdjustments.isEmpty()) {
-        m_linearGradientTool->clearMask();
-        m_localExposure->setValue(0.0);
-    } else {
-        const LocalAdjustment &first = m_localAdjustments.adjustments().first();
-        m_linearGradientTool->setMask(first.mask);
-        m_localExposure->setValue(first.exposureEv);
-    }
+    if (m_localAdjustments.find(m_selectedLocalAdjustmentId) == nullptr)
+        m_selectedLocalAdjustmentId =
+            m_localAdjustments.isEmpty() ? QString() : m_localAdjustments.adjustments().first().id;
+    refreshLocalAdjustmentsUi();
+    selectLocalAdjustment(m_selectedLocalAdjustmentId);
 }
 
 void PhotoEditorApp::commitLinearGradient() {
-    if (!m_linearGradientTool->hasMask()) {
-        m_localAdjustments.clear();
-        m_localExposure->setValue(0.0);
-    } else if (m_localAdjustments.isEmpty()) {
-        m_localAdjustments.addLinearGradient(*m_linearGradientTool->mask());
+    if (!m_linearGradientTool->hasMask()) return;
+    LocalAdjustment *adjustment = selectedLocalAdjustment();
+    if (!adjustment) {
+        m_selectedLocalAdjustmentId = m_localAdjustments.addLinearGradient(*m_linearGradientTool->mask());
+    } else adjustment->mask = *m_linearGradientTool->mask();
+    refreshLocalAdjustmentsUi();
+    writeSidecar();
+    triggerReprocess();
+    m_history->recordFromCurrent(currentSnapshot());
+    refreshEditedState();
+}
+
+LocalAdjustment *PhotoEditorApp::selectedLocalAdjustment() {
+    return m_localAdjustments.find(m_selectedLocalAdjustmentId);
+}
+
+const LocalAdjustment *PhotoEditorApp::selectedLocalAdjustment() const {
+    return m_localAdjustments.find(m_selectedLocalAdjustmentId);
+}
+
+void PhotoEditorApp::beginLinearGradientCreation() {
+    m_selectedLocalAdjustmentId.clear();
+    m_updatingLocalUi = true;
+    m_localAdjustmentList->clearSelection();
+    m_linearGradientTool->clearMask();
+    m_updatingLocalUi = false;
+    refreshLocalAdjustmentsUi();
+    m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
+    m_linearGradientTool->beginCreation();
+    m_viewport->setFocus();
+}
+
+void PhotoEditorApp::selectLocalAdjustment(const QString &id) {
+    m_selectedLocalAdjustmentId       = id;
+    const LocalAdjustment *adjustment = selectedLocalAdjustment();
+    m_updatingLocalUi                 = true;
+    if (adjustment) {
+        m_linearGradientTool->setMask(adjustment->mask);
+        m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
     } else {
-        LocalAdjustment *adjustment = m_localAdjustments.find(m_localAdjustments.adjustments().first().id);
-        if (adjustment) adjustment->mask = *m_linearGradientTool->mask();
+        m_linearGradientTool->clearMask();
     }
+    m_updatingLocalUi   = false;
+    const bool selected = adjustment != nullptr;
+    m_invertLocalAdjustment->setEnabled(selected);
+    m_deleteLocalAdjustment->setEnabled(selected);
+    m_duplicateLocalAdjustment->setEnabled(selected);
+    const QSignalBlocker blocker(m_invertLocalAdjustment);
+    m_invertLocalAdjustment->setChecked(selected && adjustment->mask.isInverted());
+    m_viewport->update();
+}
+
+void PhotoEditorApp::refreshLocalAdjustmentsUi() {
+    m_updatingLocalUi = true;
+    m_localAdjustmentList->clear();
+    for (const LocalAdjustment &adjustment : m_localAdjustments.adjustments()) {
+        auto *item = new QListWidgetItem(adjustment.name, m_localAdjustmentList);
+        item->setData(Qt::UserRole, adjustment.id);
+        item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsUserCheckable);
+        item->setCheckState(adjustment.enabled ? Qt::Checked : Qt::Unchecked);
+        if (adjustment.id == m_selectedLocalAdjustmentId) m_localAdjustmentList->setCurrentItem(item);
+    }
+    m_updatingLocalUi = false;
+}
+
+void PhotoEditorApp::deleteSelectedLocalAdjustment() {
+    const QString id = m_selectedLocalAdjustmentId;
+    if (id.isEmpty() || !m_localAdjustments.remove(id)) return;
+    m_selectedLocalAdjustmentId =
+        m_localAdjustments.isEmpty() ? QString() : m_localAdjustments.adjustments().first().id;
+    refreshLocalAdjustmentsUi();
+    selectLocalAdjustment(m_selectedLocalAdjustmentId);
+    writeSidecar();
+    triggerReprocess();
+    m_history->recordFromCurrent(currentSnapshot());
+    refreshEditedState();
+}
+
+void PhotoEditorApp::duplicateSelectedLocalAdjustment() {
+    const LocalAdjustment *source = selectedLocalAdjustment();
+    if (!source) return;
+    const LocalAdjustment copy = *source;
+    const QString         id   = m_localAdjustments.addLinearGradient(copy.mask, copy.name + QStringLiteral(" copy"));
+    LocalAdjustment      *duplicate = m_localAdjustments.find(id);
+    duplicate->enabled              = copy.enabled;
+    duplicate->exposureEv           = copy.exposureEv;
+    m_selectedLocalAdjustmentId     = id;
+    refreshLocalAdjustmentsUi();
+    selectLocalAdjustment(id);
     writeSidecar();
     triggerReprocess();
     m_history->recordFromCurrent(currentSnapshot());

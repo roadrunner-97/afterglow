@@ -82,13 +82,27 @@ QPointF LinearGradientTool::normalizedToScreen(QPointF normalized, const Viewpor
 
 LinearGradientTool::Handles LinearGradientTool::handles(const ViewportTransform &vt) const {
     if (!m_mask) return {};
-    const QPointF axis = m_mask->direction() * m_mask->featherHalfWidth();
-    return {normalizedToScreen(m_mask->center() - axis, vt), normalizedToScreen(m_mask->center(), vt),
-            normalizedToScreen(m_mask->center() + axis, vt)};
+    const QPointF center = normalizedToScreen(m_mask->center(), vt);
+    const QPointF basisX = normalizedToScreen(m_mask->center() + QPointF(1.0, 0.0), vt) - center;
+    const QPointF basisY = normalizedToScreen(m_mask->center() + QPointF(0.0, 1.0), vt) - center;
+
+    // The mask direction is a normal (a covector) in normalized image
+    // coordinates. Transform it with the inverse transpose so the on-screen
+    // guides remain parallel to the actual constant-weight lines on images
+    // whose width and height differ.
+    const double determinant = basisX.x() * basisY.y() - basisY.x() * basisX.y();
+    if (std::abs(determinant) < 1e-9) return {center, center, center};
+    const QPointF direction = m_mask->direction();
+    const QPointF screenNormal((basisY.y() * direction.x() - basisX.y() * direction.y()) / determinant,
+                               (-basisY.x() * direction.x() + basisX.x() * direction.y()) / determinant);
+    const double  normalSquared = QPointF::dotProduct(screenNormal, screenNormal);
+    const QPointF offset =
+        normalSquared > 0.0 ? screenNormal * (m_mask->featherHalfWidth() / normalSquared) : QPointF();
+    return {center - offset, center, center + offset};
 }
 
 LinearGradientTool::Drag LinearGradientTool::hitTest(QPointF screen, const ViewportTransform &vt) const {
-    if (!m_mask || !m_overlayVisible) return Drag::None;
+    if (!m_mask) return Drag::None;
     const Handles h  = handles(vt);
     const double  r2 = HIT_RADIUS * HIT_RADIUS;
     if (distanceSquared(screen, h.center) <= r2) return Drag::Move;
@@ -97,13 +111,22 @@ LinearGradientTool::Drag LinearGradientTool::hitTest(QPointF screen, const Viewp
     return Drag::None;
 }
 
-void LinearGradientTool::setFromEndpoints(QPointF start, QPointF end) {
-    const QPointF axis      = end - start;
-    const double  length    = std::hypot(axis.x(), axis.y());
-    const QPointF center    = (start + end) * 0.5;
-    const QPointF direction = length > 0.0 ? axis / length : QPointF(0.0, 1.0);
-    const bool    inverted  = m_mask && m_mask->isInverted();
-    m_mask.emplace(center, direction, length * 0.5, inverted);
+void LinearGradientTool::setFromScreenEndpoints(QPointF start, QPointF end, const ViewportTransform &vt) {
+    const QPointF screenAxis      = end - start;
+    const double  screenLength    = std::hypot(screenAxis.x(), screenAxis.y());
+    const QPointF normalizedStart = screenToNormalized(start, vt);
+    const QPointF normalizedEnd   = screenToNormalized(end, vt);
+    const QPointF center          = (normalizedStart + normalizedEnd) * 0.5;
+    const QPointF centerScreen    = normalizedToScreen(center, vt);
+    const QPointF basisX          = normalizedToScreen(center + QPointF(1.0, 0.0), vt) - centerScreen;
+    const QPointF basisY          = normalizedToScreen(center + QPointF(0.0, 1.0), vt) - centerScreen;
+    QPointF       direction(basisX.x() * screenAxis.x() + basisX.y() * screenAxis.y(),
+                            basisY.x() * screenAxis.x() + basisY.y() * screenAxis.y());
+    const double  directionLength = std::hypot(direction.x(), direction.y());
+    direction                     = directionLength > 0.0 ? direction / directionLength : QPointF(0.0, 1.0);
+    const double halfWidth        = std::abs(QPointF::dotProduct(normalizedEnd - center, direction));
+    const bool   inverted         = m_mask && m_mask->isInverted();
+    m_mask.emplace(center, direction, screenLength > 0.0 ? halfWidth : 0.0, inverted);
 }
 
 void LinearGradientTool::cancelGesture() {
@@ -116,7 +139,7 @@ void LinearGradientTool::cancelGesture() {
 }
 
 void LinearGradientTool::paintOverlay(QPainter &painter, const ViewportTransform &vt) {
-    if (!m_mask || !m_overlayVisible || vt.imageSize.isEmpty()) return;
+    if (!m_mask || vt.imageSize.isEmpty()) return;
     const Handles h    = handles(vt);
     QPointF       axis = h.end - h.start;
     const double  len  = std::hypot(axis.x(), axis.y());
@@ -134,16 +157,18 @@ void LinearGradientTool::paintOverlay(QPainter &painter, const ViewportTransform
     const QColor transparent(84, 190, 210, 0);
     const QColor affected(84, 190, 210, 48);
 
-    QLinearGradient feather(h.start, h.end);
-    feather.setSpread(QGradient::PadSpread);
-    if (m_mask->isInverted()) {
-        feather.setColorAt(0.0, affected);
-        feather.setColorAt(1.0, transparent);
-    } else {
-        feather.setColorAt(0.0, transparent);
-        feather.setColorAt(1.0, affected);
+    if (m_overlayVisible) {
+        QLinearGradient feather(h.start, h.end);
+        feather.setSpread(QGradient::PadSpread);
+        if (m_mask->isInverted()) {
+            feather.setColorAt(0.0, affected);
+            feather.setColorAt(1.0, transparent);
+        } else {
+            feather.setColorAt(0.0, transparent);
+            feather.setColorAt(1.0, affected);
+        }
+        painter.fillRect(QRectF(QPointF(0.0, 0.0), QSizeF(vt.viewportSize)), feather);
     }
-    painter.fillRect(QRectF(QPointF(0.0, 0.0), QSizeF(vt.viewportSize)), feather);
 
     auto drawBoundary = [&](QPointF point, Qt::PenStyle style, const QColor &color) {
         painter.setPen(QPen(shadow, 3.0, style));
@@ -186,9 +211,9 @@ bool LinearGradientTool::mousePress(QMouseEvent *event, const ViewportTransform 
     const QPointF normalized = screenToNormalized(event->position(), vt);
     if (m_creationMode) {
         m_beforeGesture = m_mask;
-        m_anchor        = normalized;
+        m_anchor        = event->position();
         m_drag          = Drag::Create;
-        setFromEndpoints(normalized, normalized);
+        setFromScreenEndpoints(m_anchor, m_anchor, vt);
         emit maskChanged();
         return true;
     }
@@ -198,8 +223,8 @@ bool LinearGradientTool::mousePress(QMouseEvent *event, const ViewportTransform 
     m_beforeGesture = m_mask;
     m_dragStart     = normalized;
     if (m_mask) {
-        const QPointF axis = m_mask->direction() * m_mask->featherHalfWidth();
-        m_anchor           = m_drag == Drag::Start ? m_mask->center() + axis : m_mask->center() - axis;
+        const Handles h = handles(vt);
+        m_anchor        = m_drag == Drag::Start ? h.end : h.start;
     }
     return true;
 }
@@ -207,9 +232,9 @@ bool LinearGradientTool::mousePress(QMouseEvent *event, const ViewportTransform 
 bool LinearGradientTool::mouseMove(QMouseEvent *event, const ViewportTransform &vt) {
     if (m_drag == Drag::None || !m_mask) return false;
     const QPointF normalized = screenToNormalized(event->position(), vt);
-    if (m_drag == Drag::Create) setFromEndpoints(m_anchor, normalized);
-    else if (m_drag == Drag::Start) setFromEndpoints(normalized, m_anchor);
-    else if (m_drag == Drag::End) setFromEndpoints(m_anchor, normalized);
+    if (m_drag == Drag::Create) setFromScreenEndpoints(m_anchor, event->position(), vt);
+    else if (m_drag == Drag::Start) setFromScreenEndpoints(event->position(), m_anchor, vt);
+    else if (m_drag == Drag::End) setFromScreenEndpoints(m_anchor, event->position(), vt);
     else if (m_beforeGesture) {
         const QPointF delta = normalized - m_dragStart;
         m_mask->setCenter(m_beforeGesture->center() + delta);

@@ -51,7 +51,7 @@ private:
     QPointF normalizedToScreen(QPointF normalized, const ViewportTransform &vt) const;
     Handles handles(const ViewportTransform &vt) const;
     Drag    hitTest(QPointF screen, const ViewportTransform &vt) const;
-    void    setFromEndpoints(QPointF start, QPointF end);
+    void    setFromScreenEndpoints(QPointF start, QPointF end, const ViewportTransform &vt);
     void    cancelGesture();
 
     std::optional<LinearGradientMask> m_mask;

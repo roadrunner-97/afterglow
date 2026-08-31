@@ -14,6 +14,10 @@ class TestLinearGradientTool : public QObject {
         return {{100, 100}, {100, 100}, {0.5, 0.5}, 1.0f};
     }
 
+    static ViewportTransform portraitTransform() {
+        return {{100, 200}, {100, 200}, {0.5, 0.5}, 1.0f};
+    }
+
     static QMouseEvent mouse(QEvent::Type type, QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons) {
         return {type, position, position, button, buttons, Qt::NoModifier};
     }
@@ -29,6 +33,23 @@ class TestLinearGradientTool : public QObject {
     }
 
 private slots:
+    void portraitImageKeepsHandlesOnGradientNormal() {
+        LinearGradientTool tool;
+        tool.beginCreation();
+        auto press = mouse(QEvent::MouseButtonPress, {20, 40}, Qt::LeftButton, Qt::LeftButton);
+        QVERIFY(tool.mousePress(&press, portraitTransform()));
+        auto move = mouse(QEvent::MouseMove, {80, 160}, Qt::NoButton, Qt::LeftButton);
+        QVERIFY(tool.mouseMove(&move, portraitTransform()));
+        auto release = mouse(QEvent::MouseButtonRelease, {80, 160}, Qt::LeftButton, Qt::NoButton);
+        QVERIFY(tool.mouseRelease(&release, portraitTransform()));
+
+        // Both endpoints remain on the dragged screen-space normal even though
+        // its normalized-coordinate direction is aspect-ratio corrected.
+        QCOMPARE(tool.cursorFor({20, 40}, portraitTransform()).shape(), Qt::OpenHandCursor);
+        QCOMPARE(tool.cursorFor({80, 160}, portraitTransform()).shape(), Qt::OpenHandCursor);
+        QVERIFY(tool.mask()->direction().y() > tool.mask()->direction().x());
+    }
+
     void createMoveAndResize() {
         LinearGradientTool tool;
         QSignalSpy         changed(&tool, &LinearGradientTool::maskChanged);
@@ -87,7 +108,8 @@ private slots:
 
         tool.setOverlayVisible(false);
         QVERIFY(!tool.isOverlayVisible());
-        QCOMPARE(tool.cursorFor({50, 50}, transform()).shape(), Qt::ArrowCursor);
+        // Hiding the blue mask tint must not disable its on-canvas controls.
+        QCOMPARE(tool.cursorFor({50, 50}, transform()).shape(), Qt::SizeAllCursor);
         tool.setOverlayVisible(false);
         tool.setOverlayVisible(true);
 
