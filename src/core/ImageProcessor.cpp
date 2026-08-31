@@ -46,13 +46,15 @@ static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager &effects) {
 }
 
 void ImageProcessor::processImageAsync(const QImage &originalImage, const EffectManager &effects,
-                                       ViewportRequest viewport, RunMode mode, bool bypassEffects) {
+                                       ViewportRequest viewport, RunMode mode, bool bypassEffects,
+                                       const QVector<LocalAdjustment> &localAdjustments) {
     auto     genPtr = generationPtr;
     uint64_t myGen  = ++(*genPtr);
 
     // Snapshot parameters on the calling (main) thread so effect QObjects
     // are never touched from the worker thread.
-    QVector<GpuPipelineCall> calls = bypassEffects ? QVector<GpuPipelineCall>{} : buildGpuCalls(effects);
+    QVector<GpuPipelineCall> calls  = bypassEffects ? QVector<GpuPipelineCall>{} : buildGpuCalls(effects);
+    QVector<LocalAdjustment> locals = bypassEffects ? QVector<LocalAdjustment>{} : localAdjustments;
 
     emit processingStarted();
 
@@ -67,14 +69,14 @@ void ImageProcessor::processImageAsync(const QImage &originalImage, const Effect
 
     auto pipeline = m_pipeline;
     watcher->setFuture(QtConcurrent::run([image = originalImage, calls = std::move(calls), genPtr, myGen, pipeline,
-                                          viewport, mode]() -> GpuPipelineResult {
+                                          viewport, mode, locals = std::move(locals)]() -> GpuPipelineResult {
         if (genPtr->load(std::memory_order_relaxed) != myGen) return {};
-        return pipeline->run(image, calls, viewport, mode);
+        return pipeline->run(image, calls, viewport, mode, locals);
     }));
 }
 
 uint64_t ImageProcessor::exportImageAsync(const QImage &originalImage, const EffectManager &effects,
-                                          QString destinationPath) {
+                                          QString destinationPath, const QVector<LocalAdjustment> &localAdjustments) {
     QVector<GpuPipelineCall> calls     = buildGpuCalls(effects);
     const uint64_t           requestId = ++m_nextExportRequestId;
 
@@ -85,11 +87,12 @@ uint64_t ImageProcessor::exportImageAsync(const QImage &originalImage, const Eff
     });
 
     auto pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run([image = originalImage, calls = std::move(calls), pipeline]() -> QImage {
-        // Export has no viewport, so the pipeline returns the full-resolution
-        // image with offset (0, 0).  Strip the offset; exportComplete only
-        // needs the pixels.
-        return pipeline->run(image, calls, {}, RunMode::Commit).image;
-    }));
+    watcher->setFuture(QtConcurrent::run(
+        [image = originalImage, calls = std::move(calls), pipeline, locals = localAdjustments]() -> QImage {
+            // Export has no viewport, so the pipeline returns the full-resolution
+            // image with offset (0, 0).  Strip the offset; exportComplete only
+            // needs the pixels.
+            return pipeline->run(image, calls, {}, RunMode::Commit, locals).image;
+        }));
     return requestId;
 }

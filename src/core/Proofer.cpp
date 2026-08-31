@@ -168,6 +168,7 @@ void Proofer::dispatchNext() {
                 }
                 if (!replaced) effectiveSettings.effects.append(overrideSettings);
             }
+            effectiveSettings.localAdjustments = parsed.localAdjustments;
         } else qWarning() << "Proofer: sidecar parse failed for" << sidecar << ":" << err;
     }
 
@@ -199,23 +200,23 @@ void Proofer::dispatchNext() {
 
     const bool isRaw    = RawLoader::isRawFile(path);
     auto       pipeline = m_pipeline;
-    watcher->setFuture(QtConcurrent::run(
-        [path, calls = std::move(calls), pipeline, isRaw, cropSource, activeCrop, activeAngle]() -> QImage {
-            QImage img;
-            if (isRaw) img = RawLoader::load(path);
-            if (img.isNull()) {
-                QImageReader reader(path);
-                reader.setAutoTransform(true);
-                img = reader.read();
-            }
-            if (img.isNull()) return {};
-            if (cropSource) img = cropSource->applyCommittedGeometry(img);
-            img           = scaleProof(img);
-            QImage result = pipeline->run(img, calls, {}, RunMode::Commit).image;
-            if (result.isNull()) return {};
-            result = applyActiveCropAndRotate(result, activeCrop, activeAngle);
-            return result;
-        }));
+    watcher->setFuture(QtConcurrent::run([path, calls = std::move(calls), pipeline, isRaw, cropSource, activeCrop,
+                                          activeAngle, locals = effectiveSettings.localAdjustments]() -> QImage {
+        QImage img;
+        if (isRaw) img = RawLoader::load(path);
+        if (img.isNull()) {
+            QImageReader reader(path);
+            reader.setAutoTransform(true);
+            img = reader.read();
+        }
+        if (img.isNull()) return {};
+        if (cropSource) img = cropSource->applyCommittedGeometry(img);
+        img           = scaleProof(img);
+        QImage result = pipeline->run(img, calls, {}, RunMode::Commit, locals).image;
+        if (result.isNull()) return {};
+        result = applyActiveCropAndRotate(result, activeCrop, activeAngle);
+        return result;
+    }));
 }
 
 // GCOVR_EXCL_STOP

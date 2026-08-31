@@ -27,9 +27,11 @@ public:
     // \-key "before" preview so the viewport falls back to the raw,
     // un-edited image without disturbing per-effect enabled flags.
     void processImageAsync(const QImage &originalImage, const EffectManager &effects, ViewportRequest viewport = {},
-                           RunMode mode = RunMode::Commit, bool bypassEffects = false);
+                           RunMode mode = RunMode::Commit, bool bypassEffects = false,
+                           const QVector<LocalAdjustment> &localAdjustments = {});
 
-    uint64_t exportImageAsync(const QImage &originalImage, const EffectManager &effects, QString destinationPath);
+    uint64_t exportImageAsync(const QImage &originalImage, const EffectManager &effects, QString destinationPath,
+                              const QVector<LocalAdjustment> &localAdjustments = {});
 
 signals:
     void processingStarted();

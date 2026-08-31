@@ -34,6 +34,7 @@ class QThreadPool;
 class UiServices;
 class PreferencesDialog;
 class LinearGradientTool;
+class ParamSlider;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -161,6 +162,7 @@ private:
     ViewportWidget      *m_viewport           = nullptr;
     LinearGradientTool  *m_linearGradientTool = nullptr;
     LocalAdjustmentStack m_localAdjustments;
+    ParamSlider         *m_localExposure   = nullptr;
     QActionGroup        *m_modeGroup       = nullptr;
     QLabel              *m_processingLabel = nullptr;
     QTimer              *m_resizeDebounce  = nullptr;

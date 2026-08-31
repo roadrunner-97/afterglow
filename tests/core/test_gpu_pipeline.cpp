@@ -665,6 +665,48 @@ private slots:
         QImage outCommit = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit).image;
         QVERIFY(!outCommit.isNull());
     }
+
+    void localGradientExposure_commitAndInvert() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage          input = makeSolid(64, 32, 100, 100, 100);
+        LocalAdjustment adjustment;
+        adjustment.id         = "gradient";
+        adjustment.exposureEv = 1.0;
+        adjustment.mask       = LinearGradientMask({0.5, 0.5}, {1.0, 0.0}, 0.1);
+
+        QImage normal = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        QVERIFY(normal.pixelColor(60, 16).red() > normal.pixelColor(3, 16).red() + 25);
+
+        adjustment.mask.setInverted(true);
+        QImage inverted = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        QVERIFY(inverted.pixelColor(3, 16).red() > inverted.pixelColor(60, 16).red() + 25);
+    }
+
+    void localGradientExposure_liveAndCacheInvalidation() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QImage          input = makeSolid(64, 32, 100, 100, 100);
+        LocalAdjustment adjustment;
+        adjustment.id         = "gradient";
+        adjustment.exposureEv = 1.0;
+        adjustment.mask       = LinearGradientMask({0.5, 0.5}, {1.0, 0.0}, 0.2);
+
+        QImage live = m_pipeline.run(input, {}, fullViewport(input), RunMode::LiveDrag, {adjustment}).image;
+        QVERIFY(live.pixelColor(60, 16).red() > live.pixelColor(3, 16).red());
+
+        QImage committed = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        QImage cacheHit  = m_pipeline.run(input, {}, fullViewport(input), RunMode::PanZoom, {adjustment}).image;
+        QCOMPARE(cacheHit, committed);
+        adjustment.exposureEv = -1.0;
+        QImage changed        = m_pipeline.run(input, {}, fullViewport(input), RunMode::PanZoom, {adjustment}).image;
+        QVERIFY(committed.pixelColor(60, 16).red() > changed.pixelColor(60, 16).red());
+
+        adjustment.enabled    = false;
+        QImage disabled       = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        adjustment.enabled    = true;
+        adjustment.exposureEv = 0.0;
+        QImage neutral        = m_pipeline.run(input, {}, fullViewport(input), RunMode::Commit, {adjustment}).image;
+        QCOMPARE(disabled, neutral);
+    }
 };
 
 QTEST_MAIN(TestGpuPipeline)

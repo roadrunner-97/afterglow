@@ -203,12 +203,36 @@ __kernel void pack_linear_to_srgb_rgb32(
     uint bi = (uint)(clamp(b, 0.0f, 1.0f) * 255.0f + 0.5f);
     dst[y*w + x] = 0xFF000000u | (ri << 16) | (gi << 8) | bi;
 }
+
+__kernel void local_linear_gradient_exposure(
+    __global float4* pixels, int w, int h, int srcW, int srcH,
+    float cropX0, float cropY0, float cropX1, float cropY1,
+    float centerX, float centerY, float directionX, float directionY,
+    float featherHalfWidth, float exposureEv, int inverted)
+{
+    int x = get_global_id(0), y = get_global_id(1);
+    if (x >= w || y >= h) return;
+    float sourceX = cropX0 + ((float)x + 0.5f) * (cropX1 - cropX0) / (float)w;
+    float sourceY = cropY0 + ((float)y + 0.5f) * (cropY1 - cropY0) / (float)h;
+    float nx = sourceX / (float)srcW;
+    float ny = sourceY / (float)srcH;
+    float projection = (nx - centerX) * directionX + (ny - centerY) * directionY;
+    float weight = featherHalfWidth == 0.0f
+        ? (projection >= 0.0f ? 1.0f : 0.0f)
+        : clamp(0.5f + projection / (2.0f * featherHalfWidth), 0.0f, 1.0f);
+    if (inverted) weight = 1.0f - weight;
+    float multiplier = exp2(exposureEv * weight);
+    int i = y*w + x;
+    float4 p = pixels[i];
+    pixels[i] = (float4)(p.x * multiplier, p.y * multiplier, p.z * multiplier, p.w);
+}
 )CL";
 
 // ── run ──────────────────────────────────────────────────────────────────────
 
 GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelineCall> &calls,
-                                   const ViewportRequest &viewport, RunMode mode) {
+                                   const ViewportRequest &viewport, RunMode mode,
+                                   const QVector<LocalAdjustment> &localAdjustments) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     const int rev = GpuDeviceRegistry::instance().revision();
@@ -221,6 +245,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         m_processedValid = false;
         m_processedBytes = 0;
         m_processedCalls.clear();
+        m_processedLocalAdjustments.clear();
         if (!initContext()) return {}; // GCOVR_EXCL_LINE
         m_revision = rev;
     }
@@ -301,7 +326,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         // ── PanZoom fast path ─────────────────────────────────────────────────
         // If the cache is valid the visible preview can be produced with a
         // single float4→float4 downsample plus pack+readback.  No effect work.
-        if (mode == RunMode::PanZoom && m_processedValid && processedCacheMatches(calls)) {
+        if (mode == RunMode::PanZoom && m_processedValid && processedCacheMatches(calls, localAdjustments)) {
             cl::Kernel &ds = m_downsampleKernelFloat4;
             ds.setArg(0, m_processedBuf);
             ds.setArg(1, m_workBuf);
@@ -341,8 +366,11 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
                     return {};
                 }
             }
-            m_processedValid = true;
-            m_processedCalls = calls;
+            enqueueLocalAdjustmentsLocked(m_processedBuf, m_width, m_height, 0.0f, 0.0f, static_cast<float>(m_width),
+                                          static_cast<float>(m_height), localAdjustments);
+            m_processedValid            = true;
+            m_processedCalls            = calls;
+            m_processedLocalAdjustments = localAdjustments;
 
             // Downsample cache → workBuf at the visible-region dimensions.
             cl::Kernel &ds = m_downsampleKernelFloat4;
@@ -370,6 +398,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         // since a new drag-state overrides the last committed frame.
         m_processedValid = false;
         m_processedCalls.clear();
+        m_processedLocalAdjustments.clear();
 
         cl::Kernel *dsKernel = nullptr;
         if (m_is16bit) dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
@@ -405,6 +434,7 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
                 // GCOVR_EXCL_STOP
             }
         }
+        enqueueLocalAdjustmentsLocked(m_workBuf, imgW, imgH, clipX0, clipY0, clipX1, clipY1, localAdjustments);
         return {packAndReadbackLocked(m_workBuf, imgW, imgH), offset};
     }
     // GCOVR_EXCL_START
@@ -416,12 +446,48 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
     // GCOVR_EXCL_STOP
 }
 
-bool GpuPipeline::processedCacheMatches(const QVector<GpuPipelineCall> &calls) const {
+static bool sameLocalAdjustment(const LocalAdjustment &a, const LocalAdjustment &b) {
+    return a.id == b.id && a.enabled == b.enabled && a.exposureEv == b.exposureEv &&
+           a.mask.center() == b.mask.center() && a.mask.direction() == b.mask.direction() &&
+           a.mask.featherHalfWidth() == b.mask.featherHalfWidth() && a.mask.isInverted() == b.mask.isInverted();
+}
+
+bool GpuPipeline::processedCacheMatches(const QVector<GpuPipelineCall> &calls,
+                                        const QVector<LocalAdjustment> &localAdjustments) const {
     if (calls.size() != m_processedCalls.size()) return false;
     for (qsizetype i = 0; i < calls.size(); ++i) {
         if (calls[i].gpu != m_processedCalls[i].gpu || calls[i].params != m_processedCalls[i].params) return false;
     }
+    if (localAdjustments.size() != m_processedLocalAdjustments.size()) return false;
+    for (qsizetype i = 0; i < localAdjustments.size(); ++i)
+        if (!sameLocalAdjustment(localAdjustments[i], m_processedLocalAdjustments[i])) return false;
     return true;
+}
+
+void GpuPipeline::enqueueLocalAdjustmentsLocked(cl::Buffer &buffer, int width, int height, float cropX0, float cropY0,
+                                                float cropX1, float cropY1,
+                                                const QVector<LocalAdjustment> &localAdjustments) {
+    for (const LocalAdjustment &adjustment : localAdjustments) {
+        if (!adjustment.enabled || adjustment.exposureEv == 0.0) continue;
+        m_localExposureKernel.setArg(0, buffer);
+        m_localExposureKernel.setArg(1, width);
+        m_localExposureKernel.setArg(2, height);
+        m_localExposureKernel.setArg(3, m_width);
+        m_localExposureKernel.setArg(4, m_height);
+        m_localExposureKernel.setArg(5, cropX0);
+        m_localExposureKernel.setArg(6, cropY0);
+        m_localExposureKernel.setArg(7, cropX1);
+        m_localExposureKernel.setArg(8, cropY1);
+        m_localExposureKernel.setArg(9, static_cast<float>(adjustment.mask.center().x()));
+        m_localExposureKernel.setArg(10, static_cast<float>(adjustment.mask.center().y()));
+        m_localExposureKernel.setArg(11, static_cast<float>(adjustment.mask.direction().x()));
+        m_localExposureKernel.setArg(12, static_cast<float>(adjustment.mask.direction().y()));
+        m_localExposureKernel.setArg(13, static_cast<float>(adjustment.mask.featherHalfWidth()));
+        m_localExposureKernel.setArg(14, static_cast<float>(adjustment.exposureEv));
+        m_localExposureKernel.setArg(15, adjustment.mask.isInverted() ? 1 : 0);
+        m_queue.enqueueNDRangeKernel(m_localExposureKernel, cl::NullRange,
+                                     cl::NDRange(static_cast<size_t>(width), static_cast<size_t>(height)));
+    }
 }
 
 bool GpuPipeline::decodeFullResLocked() {
@@ -509,6 +575,7 @@ bool GpuPipeline::initDownsampleKernels() {
         m_decodeKernel16Srgb       = cl::Kernel(prog, "fullres_decode_16bit_srgb_to_linear");
         m_decodeKernel16Linear     = cl::Kernel(prog, "fullres_decode_16bit_linear");
         m_packKernel               = cl::Kernel(prog, "pack_linear_to_srgb_rgb32");
+        m_localExposureKernel      = cl::Kernel(prog, "local_linear_gradient_exposure");
         return true;
     }
     // GCOVR_EXCL_START

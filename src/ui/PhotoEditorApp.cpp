@@ -8,6 +8,7 @@
 #include "ExportResize.h"
 #include "LoupeView.h"
 #include "LinearGradientTool.h"
+#include "ParamSlider.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
 #include <QtConcurrent/QtConcurrent>
@@ -466,6 +467,9 @@ void PhotoEditorApp::setupUI() {
     showOverlay->setObjectName("showLinearGradientOverlayCheck");
     showOverlay->setChecked(true);
     localLayout->addWidget(showOverlay);
+    m_localExposure = new ParamSlider("Exposure", -4.0, 4.0, 0.1, 1);
+    m_localExposure->setEnabled(false);
+    localLayout->addWidget(m_localExposure);
     rightLayout->addWidget(localPanel);
 
     m_linearGradientTool = new LinearGradientTool(this);
@@ -482,16 +486,31 @@ void PhotoEditorApp::setupUI() {
     connect(showOverlay, &QCheckBox::toggled, m_linearGradientTool, &LinearGradientTool::setOverlayVisible);
     connect(m_linearGradientTool, &LinearGradientTool::maskChanged, m_viewport,
             QOverload<>::of(&ViewportWidget::update));
+    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this]() {
+        if (!m_localAdjustments.isEmpty()) triggerLiveReprocess();
+    });
     connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this, invertGradient, deleteGradient]() {
         const bool hasMask = m_linearGradientTool->hasMask();
         invertGradient->setEnabled(hasMask);
         deleteGradient->setEnabled(hasMask);
+        m_localExposure->setEnabled(hasMask);
         const QSignalBlocker blocker(invertGradient);
         invertGradient->setChecked(hasMask && m_linearGradientTool->mask()->isInverted());
     });
     connect(m_linearGradientTool, &LinearGradientTool::creationModeChanged, addGradient,
             [addGradient](bool creating) { addGradient->setText(creating ? "Drag on image…" : "Linear Gradient"); });
     connect(m_linearGradientTool, &LinearGradientTool::gestureFinished, this, &PhotoEditorApp::commitLinearGradient);
+    connect(m_localExposure, &ParamSlider::valueChanged, this, [this](double value) {
+        if (m_localAdjustments.isEmpty()) return;
+        LocalAdjustment *adjustment = m_localAdjustments.find(m_localAdjustments.adjustments().first().id);
+        if (!adjustment) return;
+        adjustment->exposureEv = value;
+        triggerLiveReprocess();
+    });
+    connect(m_localExposure, &ParamSlider::editingFinished, this, [this]() {
+        writeSidecar();
+        triggerReprocess();
+    });
 
     QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
@@ -914,7 +933,8 @@ void PhotoEditorApp::saveImage() {
     m_lastDir = opts.destinationDir;
     PendingExport pending{opts, std::nullopt};
     if (auto *cs = m_effects->activeCropSource()) pending.crop = CropSnapshot{cs->userCropRect(), cs->userCropAngle()};
-    const uint64_t requestId = m_processor->exportImageAsync(m_originalImage, *m_effects, destPath);
+    const uint64_t requestId =
+        m_processor->exportImageAsync(m_originalImage, *m_effects, destPath, m_localAdjustments.adjustments());
     m_pendingExports.insert(requestId, std::move(pending));
 }
 
@@ -983,8 +1003,8 @@ void PhotoEditorApp::saveTestCase() {
     // bit-exact for the SSIM check that test_golden does at runtime.
     PendingExport pending;
     if (auto *cs = m_effects->activeCropSource()) pending.crop = CropSnapshot{cs->userCropRect(), cs->userCropAngle()};
-    const uint64_t requestId =
-        m_processor->exportImageAsync(m_originalImage, *m_effects, QDir(dir).filePath("expected.png"));
+    const uint64_t requestId = m_processor->exportImageAsync(
+        m_originalImage, *m_effects, QDir(dir).filePath("expected.png"), m_localAdjustments.adjustments());
     m_pendingExports.insert(requestId, std::move(pending));
 }
 
@@ -1197,13 +1217,15 @@ void PhotoEditorApp::syncCommittedGeometry() {
 void PhotoEditorApp::triggerReprocess() {
     if (m_originalImage.isNull()) return;
 
-    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::Commit);
+    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::Commit, false,
+                                   m_localAdjustments.adjustments());
 }
 
 void PhotoEditorApp::triggerLiveReprocess() {
     if (m_originalImage.isNull()) return;
 
-    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::LiveDrag);
+    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::LiveDrag, false,
+                                   m_localAdjustments.adjustments());
 }
 
 void PhotoEditorApp::triggerViewportUpdate() {
@@ -1232,7 +1254,8 @@ void PhotoEditorApp::dispatchViewportUpdate() {
     if (m_originalImage.isNull()) return;
     m_lastPanDispatch.start();
 
-    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::PanZoom);
+    m_processor->processImageAsync(m_originalImage, *m_effects, m_viewport->viewportRequest(), RunMode::PanZoom, false,
+                                   m_localAdjustments.adjustments());
 }
 
 bool PhotoEditorApp::eventFilter(QObject *obj, QEvent *event) {
@@ -1689,13 +1712,20 @@ SettingsImporter::Settings PhotoEditorApp::currentSettings() const {
 void PhotoEditorApp::applyLocalAdjustments(const QVector<LocalAdjustment> &adjustments) {
     m_localAdjustments.clear();
     for (const LocalAdjustment &adjustment : adjustments) m_localAdjustments.appendRestored(adjustment);
-    if (m_localAdjustments.isEmpty()) m_linearGradientTool->clearMask();
-    else m_linearGradientTool->setMask(m_localAdjustments.adjustments().first().mask);
+    if (m_localAdjustments.isEmpty()) {
+        m_linearGradientTool->clearMask();
+        m_localExposure->setValue(0.0);
+    } else {
+        const LocalAdjustment &first = m_localAdjustments.adjustments().first();
+        m_linearGradientTool->setMask(first.mask);
+        m_localExposure->setValue(first.exposureEv);
+    }
 }
 
 void PhotoEditorApp::commitLinearGradient() {
     if (!m_linearGradientTool->hasMask()) {
         m_localAdjustments.clear();
+        m_localExposure->setValue(0.0);
     } else if (m_localAdjustments.isEmpty()) {
         m_localAdjustments.addLinearGradient(*m_linearGradientTool->mask());
     } else {
@@ -1703,6 +1733,7 @@ void PhotoEditorApp::commitLinearGradient() {
         if (adjustment) adjustment->mask = *m_linearGradientTool->mask();
     }
     writeSidecar();
+    triggerReprocess();
 }
 
 QString PhotoEditorApp::historySidecarPathFor(const QString &imagePath) const {

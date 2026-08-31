@@ -7,6 +7,7 @@
 #include <CL/opencl.hpp>
 
 #include "PhotoEditorEffect.h"
+#include "LocalAdjustment.h"
 #include <QImage>
 #include <QMap>
 #include <QPointF>
@@ -79,7 +80,7 @@ public:
     // without opt-in.  The returned image contains only visible image pixels;
     // letterbox padding is the viewport widget's responsibility.
     GpuPipelineResult run(const QImage &image, const QVector<GpuPipelineCall> &calls, const ViewportRequest &viewport,
-                          RunMode mode = RunMode::Commit);
+                          RunMode mode = RunMode::Commit, const QVector<LocalAdjustment> &localAdjustments = {});
 
 private:
     // All must be called with m_mutex held.
@@ -91,7 +92,10 @@ private:
     bool decodeFullResLocked();
     // float4 → uint sRGB pack + readback from the given source buffer.
     QImage packAndReadbackLocked(cl::Buffer &src, int w, int h);
-    bool   processedCacheMatches(const QVector<GpuPipelineCall> &calls) const;
+    bool   processedCacheMatches(const QVector<GpuPipelineCall> &calls,
+                                 const QVector<LocalAdjustment> &localAdjustments) const;
+    void   enqueueLocalAdjustmentsLocked(cl::Buffer &buffer, int width, int height, float cropX0, float cropY0,
+                                         float cropX1, float cropY1, const QVector<LocalAdjustment> &localAdjustments);
 
     std::mutex       m_mutex;
     cl::Context      m_context;
@@ -114,6 +118,7 @@ private:
     cl::Kernel m_decodeKernel16Srgb;       // 1:1 decode: 16-bit sRGB ushort → float4 linear
     cl::Kernel m_decodeKernel16Linear;     // 1:1 decode: 16-bit linear ushort → float4 linear
     cl::Kernel m_packKernel;               // float4 linear → uint sRGB (clamp + gamma + pack RGB32)
+    cl::Kernel m_localExposureKernel;      // analytical linear-gradient exposure in source coordinates
 
     int m_previewW = 0;
     int m_previewH = 0;
@@ -130,6 +135,7 @@ private:
     bool                     m_processedValid = false;
     size_t                   m_processedBytes = 0;
     QVector<GpuPipelineCall> m_processedCalls;
+    QVector<LocalAdjustment> m_processedLocalAdjustments;
 
     bool   m_available    = false;
     int    m_revision     = -1;
