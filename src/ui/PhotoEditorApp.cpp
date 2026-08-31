@@ -470,7 +470,7 @@ void PhotoEditorApp::setupUI() {
 
     m_linearGradientTool = new LinearGradientTool(this);
     connect(addGradient, &QPushButton::clicked, this, [this]() {
-        m_viewport->setActiveInteractiveEffectWithBackground(m_linearGradientTool);
+        m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
         m_linearGradientTool->beginCreation();
         m_viewport->setFocus();
     });

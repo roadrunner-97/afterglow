@@ -41,13 +41,10 @@ public:
     // Build the ViewportRequest to hand to ImageProcessor.
     ViewportRequest viewportRequest() const;
 
-    // Set the currently active interactive effect (nullptr to clear).
-    // Triggers an immediate repaint so the overlay appears/disappears.
+    // Give one on-canvas tool exclusive ownership of overlay painting and
+    // pointer/key input. Activating a tool replaces the previous one so crop,
+    // masks, red-eye, vignette placement, etc. never present competing handles.
     void setActiveInteractiveEffect(IInteractiveEffect *effect);
-    // Activates a tool while retaining the current tool as a passive overlay.
-    // Used by local masks so crop geometry remains visible but does not
-    // compete for pointer input.
-    void setActiveInteractiveEffectWithBackground(IInteractiveEffect *effect);
     void clearActiveInteractiveEffect(IInteractiveEffect *effect);
 
     // Rotation applied to the displayed image (and the overlay, which uses
@@ -104,8 +101,7 @@ private:
     bool    m_panning = false;
 
     // Optional overlay / event consumer
-    IInteractiveEffect *m_active            = nullptr;
-    IInteractiveEffect *m_backgroundOverlay = nullptr;
+    IInteractiveEffect *m_active = nullptr;
 
     // Image rotation (degrees, CCW-positive on screen) applied in the GL
     // quad's vertex shader.  Pivot is normalised source coords.
