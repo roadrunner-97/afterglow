@@ -17,6 +17,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -fPIC \
 
 # Coverage instrumentation — overrides -O3 with -O0 for accurate results
 option(COVERAGE "Enable gcov coverage instrumentation (requires gcovr)" OFF)
+option(BUILD_BENCHMARKS "Build the Google Benchmark performance suite" OFF)
 if(COVERAGE)
     string(REPLACE "-O3" "-O0" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     add_compile_options(--coverage)
@@ -223,6 +224,10 @@ set_target_properties(afterglow PROPERTIES
 
 enable_testing()
 add_subdirectory(tests)
+
+if(BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
 
 # ============================================================================
 # Coverage report (gcovr)
