@@ -111,6 +111,8 @@ add_library(photoeditor_core STATIC
     src/core/blur_kernels.h
     src/core/Histogram.cpp
     src/core/Histogram.h
+    src/core/LinearGradientMask.cpp
+    src/core/LinearGradientMask.h
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h
