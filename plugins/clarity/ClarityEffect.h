@@ -5,6 +5,7 @@
 #include "IGpuEffect.h"
 
 class ParamSlider;
+class QCheckBox;
 
 class ClarityEffect : public PhotoEditorEffect, public IGpuEffect {
     Q_OBJECT
@@ -28,8 +29,10 @@ public:
 
 private:
     QWidget     *controlsWidget;
-    ParamSlider *amountParam; // -100 – 100: clarity strength (%)
-    ParamSlider *radiusParam; //   10 – 100: blur radius in source pixels
+    ParamSlider *amountParam;  // -100 – 100: clarity strength (%)
+    ParamSlider *textureParam; // -100 – 100: fine-detail strength (%)
+    ParamSlider *radiusParam;  //   10 – 100: blur radius in source pixels
+    QCheckBox   *advancedToggle;
 
     cl::Context m_pipelineCtx; // saved in initGpuKernels for temp buffer allocation
     // Pipeline (float4 linear) kernels.

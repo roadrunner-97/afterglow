@@ -79,9 +79,10 @@ private slots:
     void clarity() {
         ClarityEffect e;
         QWidget      *w = makeControls(e);
-        e.applyParameters({{"amount", 30}, {"radius", 25}});
+        e.applyParameters({{"amount", 30}, {"texture", -15}, {"radius", 25}});
         const auto p = e.getParameters();
         QCOMPARE(p.value("amount").toInt(), 30);
+        QCOMPARE(p.value("texture").toInt(), -15);
         QCOMPARE(p.value("radius").toInt(), 25);
         delete w;
     }

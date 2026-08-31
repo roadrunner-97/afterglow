@@ -1,6 +1,7 @@
 #include <QTest>
 #include <QSignalSpy>
 #include <QSlider>
+#include <QCheckBox>
 #include <QWidget>
 #include "ClarityEffect.h"
 #include "GpuTestBase.h"
@@ -103,6 +104,20 @@ private slots:
         QVERIFY(pixelR(out, 66, 32) < 160);
     }
 
+    void midtoneEdge_positiveTexture_increasesFineContrast() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        ClarityEffect           e;
+        QImage                  input = makeSplit(64, 32, 100, 100, 100, 160, 160, 160);
+        QMap<QString, QVariant> params;
+        params["texture"] = 100;
+        params["amount"]  = 0;
+        params["radius"]  = 30;
+        QImage out        = runEffect(e, input, params);
+        QVERIFY(!out.isNull());
+        QVERIFY(pixelR(out, 31, 16) < 100);
+        QVERIFY(pixelR(out, 32, 16) > 160);
+    }
+
     // Non-square (tall) image: clarity's internal blur is 2D (separable H+V
     // with different extents).  On a 64x128 top/bottom midtone split, positive
     // clarity must still increase local contrast across the horizontal edge.
@@ -151,9 +166,11 @@ private slots:
         ClarityEffect e;
         auto          params = e.getParameters();
         QVERIFY(params.contains("amount"));
+        QVERIFY(params.contains("texture"));
         QVERIFY(params.contains("radius"));
         // Widget not yet built → fall-through defaults
         QCOMPARE(params["amount"].toInt(), 0);
+        QCOMPARE(params["texture"].toInt(), 0);
         QCOMPARE(params["radius"].toInt(), 30);
     }
 
@@ -170,7 +187,23 @@ private slots:
         e.createControlsWidget();
         auto params = e.getParameters();
         QCOMPARE(params["amount"].toInt(), 0);
+        QCOMPARE(params["texture"].toInt(), 0);
         QCOMPARE(params["radius"].toInt(), 30);
+    }
+
+    void advancedToggle_controlsRadiusVisibility() {
+        ClarityEffect e;
+        QWidget      *w       = e.createControlsWidget();
+        auto          sliders = w->findChildren<ParamSlider *>();
+        QCOMPARE(sliders.size(), 3);
+        ParamSlider *radius = sliders.at(2);
+        auto        *toggle = w->findChild<QCheckBox *>("clarityAdvancedToggle");
+        QVERIFY(toggle);
+        QVERIFY(radius->isHidden());
+        toggle->setChecked(true);
+        QVERIFY(!radius->isHidden());
+        toggle->setChecked(false);
+        QVERIFY(radius->isHidden());
     }
 
     // Fire every slider's editingFinished + valueChanged path.
@@ -183,7 +216,7 @@ private slots:
         QSignalSpy spyLive(&e, &PhotoEditorEffect::liveParametersChanged);
 
         auto sliders = w->findChildren<ParamSlider *>();
-        QCOMPARE(sliders.size(), 2);
+        QCOMPARE(sliders.size(), 3);
 
         for (auto *ps : sliders) {
             auto *qs = ps->findChild<QSlider *>();

@@ -1,6 +1,7 @@
 #include "ClarityEffect.h"
 #include "ParamSlider.h"
 #include "color_kernels.h"
+#include <QCheckBox>
 #include <QDebug>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -91,16 +92,13 @@ bool ClarityEffect::initGpuKernels(cl::Context &ctx, cl::Device &dev) {
 
 bool ClarityEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buffer &aux, int w, int h,
                                const QMap<QString, QVariant> &params) {
-    const float amountPct = float(params.value("amount", 0).toDouble());
-    const int   radiusSrc = params.value("radius", 30).toInt();
-    if (amountPct == 0.0f || radiusSrc == 0) return true;
-
-    const float amount = amountPct / 100.0f;
+    const float amountPct  = float(params.value("amount", 0).toDouble());
+    const float texturePct = float(params.value("texture", 0).toDouble());
+    const int   radiusSrc  = params.value("radius", 30).toInt();
+    if (amountPct == 0.0f && texturePct == 0.0f) return true;
 
     // Scale blur radius from source pixels to preview pixels.
-    const double scale  = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
-    int          radius = std::max(1, static_cast<int>(radiusSrc / std::max(scale, 1e-6) + 0.5));
-
+    const double scale   = params.value("_srcPixelsPerPreviewPixel", 1.0).toDouble();
     const size_t f4Bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(cl_float4);
     if (m_blurBufW != w || m_blurBufH != h) {
         m_blurBuf  = cl::Buffer(m_pipelineCtx, CL_MEM_READ_WRITE, f4Bytes);
@@ -110,33 +108,39 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buf
 
     const cl::NDRange global(static_cast<size_t>(w), static_cast<size_t>(h));
 
-    // H blur: buf → aux
-    m_kernelBlurHLinear.setArg(0, buf);
-    m_kernelBlurHLinear.setArg(1, aux);
-    m_kernelBlurHLinear.setArg(2, w);
-    m_kernelBlurHLinear.setArg(3, h);
-    m_kernelBlurHLinear.setArg(4, radius);
-    m_kernelBlurHLinear.setArg(5, 1); // isGaussian
-    queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
+    auto enqueueDetailPass = [&](int sourceRadius, float amount) {
+        if (amount == 0.0f || sourceRadius == 0) return;
+        const int radius = std::max(1, static_cast<int>(sourceRadius / std::max(scale, 1e-6) + 0.5));
 
-    // V blur: aux → m_blurBuf  (buf still holds the unmodified original)
-    m_kernelBlurVLinear.setArg(0, aux);
-    m_kernelBlurVLinear.setArg(1, m_blurBuf);
-    m_kernelBlurVLinear.setArg(2, w);
-    m_kernelBlurVLinear.setArg(3, h);
-    m_kernelBlurVLinear.setArg(4, radius);
-    m_kernelBlurVLinear.setArg(5, 1);
-    queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
+        m_kernelBlurHLinear.setArg(0, buf);
+        m_kernelBlurHLinear.setArg(1, aux);
+        m_kernelBlurHLinear.setArg(2, w);
+        m_kernelBlurHLinear.setArg(3, h);
+        m_kernelBlurHLinear.setArg(4, radius);
+        m_kernelBlurHLinear.setArg(5, 1);
+        queue.enqueueNDRangeKernel(m_kernelBlurHLinear, cl::NullRange, global, cl::NullRange);
 
-    // Each work-item reads and replaces only its own original pixel, so the
-    // combine can write directly to buf without a full-frame copy.
-    m_kernelClarityLinear.setArg(0, buf);
-    m_kernelClarityLinear.setArg(1, m_blurBuf);
-    m_kernelClarityLinear.setArg(2, buf);
-    m_kernelClarityLinear.setArg(3, w);
-    m_kernelClarityLinear.setArg(4, h);
-    m_kernelClarityLinear.setArg(5, amount);
-    queue.enqueueNDRangeKernel(m_kernelClarityLinear, cl::NullRange, global, cl::NullRange);
+        m_kernelBlurVLinear.setArg(0, aux);
+        m_kernelBlurVLinear.setArg(1, m_blurBuf);
+        m_kernelBlurVLinear.setArg(2, w);
+        m_kernelBlurVLinear.setArg(3, h);
+        m_kernelBlurVLinear.setArg(4, radius);
+        m_kernelBlurVLinear.setArg(5, 1);
+        queue.enqueueNDRangeKernel(m_kernelBlurVLinear, cl::NullRange, global, cl::NullRange);
+
+        m_kernelClarityLinear.setArg(0, buf);
+        m_kernelClarityLinear.setArg(1, m_blurBuf);
+        m_kernelClarityLinear.setArg(2, buf);
+        m_kernelClarityLinear.setArg(3, w);
+        m_kernelClarityLinear.setArg(4, h);
+        m_kernelClarityLinear.setArg(5, amount);
+        queue.enqueueNDRangeKernel(m_kernelClarityLinear, cl::NullRange, global, cl::NullRange);
+    };
+
+    // Texture works at a fine, fixed scale; clarity follows at the user-selected
+    // broader scale. Keeping the passes separate lets both controls be combined.
+    enqueueDetailPass(3, texturePct / 100.0f);
+    enqueueDetailPass(radiusSrc, amountPct / 100.0f);
 
     return true;
 }
@@ -145,7 +149,9 @@ bool ClarityEffect::enqueueGpu(cl::CommandQueue &queue, cl::Buffer &buf, cl::Buf
 // Effect implementation
 // ============================================================================
 
-ClarityEffect::ClarityEffect() : controlsWidget(nullptr), amountParam(nullptr), radiusParam(nullptr) {}
+ClarityEffect::ClarityEffect()
+    : controlsWidget(nullptr), amountParam(nullptr), textureParam(nullptr), radiusParam(nullptr),
+      advancedToggle(nullptr) {}
 
 ClarityEffect::~ClarityEffect() {}
 
@@ -153,7 +159,7 @@ QString ClarityEffect::getName() const {
     return "Clarity";
 }
 QString ClarityEffect::getDescription() const {
-    return "Local midtone contrast enhancement";
+    return "Fine texture and local midtone contrast enhancement";
 }
 QString ClarityEffect::getVersion() const {
     return "1.0.0";
@@ -177,7 +183,13 @@ QWidget *ClarityEffect::createControlsWidget() {
         connect(s, &ParamSlider::valueChanged, this, [this](double) { emit liveParametersChanged(); });
     };
 
-    amountParam = new ParamSlider("Amount", -100.0, 100.0, 0.1, 1);
+    textureParam = new ParamSlider("Texture", -100.0, 100.0, 0.1, 1);
+    textureParam->setToolTip(
+        "Fine-detail contrast.\nPositive values bring out texture; negative values smooth fine detail.");
+    connectSlider(textureParam);
+    layout->addWidget(textureParam);
+
+    amountParam = new ParamSlider("Clarity", -100.0, 100.0, 0.1, 1);
     amountParam->setToolTip("Midtone local-contrast strength.\nPositive values add \"pop\" to midtones; negative "
                             "values soften them for a dreamy look.");
     connectSlider(amountParam);
@@ -188,6 +200,13 @@ QWidget *ClarityEffect::createControlsWidget() {
     radiusParam->setToolTip("Radius (source pixels) of the blur used to define \"local\".\nLarger values affect "
                             "broader tonal regions; smaller values feel closer to sharpening.");
     connectSlider(radiusParam);
+    radiusParam->setVisible(false);
+
+    advancedToggle = new QCheckBox("Advanced");
+    advancedToggle->setObjectName("clarityAdvancedToggle");
+    advancedToggle->setToolTip("Show the Clarity Radius control.");
+    connect(advancedToggle, &QCheckBox::toggled, radiusParam, &QWidget::setVisible);
+    layout->addWidget(advancedToggle);
     layout->addWidget(radiusParam);
 
     layout->addStretch();
@@ -196,13 +215,15 @@ QWidget *ClarityEffect::createControlsWidget() {
 
 QMap<QString, QVariant> ClarityEffect::getParameters() const {
     QMap<QString, QVariant> params;
-    params["amount"] = amountParam ? amountParam->value() : 0.0;
-    params["radius"] = static_cast<int>(radiusParam ? radiusParam->value() : 30.0);
+    params["amount"]  = amountParam ? amountParam->value() : 0.0;
+    params["texture"] = textureParam ? textureParam->value() : 0.0;
+    params["radius"]  = static_cast<int>(radiusParam ? radiusParam->value() : 30.0);
     return params;
 }
 
 void ClarityEffect::applyParameters(const QMap<QString, QVariant> &parameters) {
     if (amountParam && parameters.contains("amount")) amountParam->setValue(parameters.value("amount").toDouble());
+    if (textureParam && parameters.contains("texture")) textureParam->setValue(parameters.value("texture").toDouble());
     if (radiusParam && parameters.contains("radius")) radiusParam->setValue(parameters.value("radius").toDouble());
     emit parametersChanged();
 }
