@@ -171,14 +171,32 @@ bool readYaml(const QString &path, Settings *out, QString *error) {
 }
 
 void applyToManager(const Settings &s, EffectManager &mgr) {
-    const auto &entries = mgr.entries();
+    const auto &initialEntries = mgr.entries();
 
     // Two parallel hashes: prefer matching by stable id, fall back to
     // display name for older sidecars saved before the id migration.
     QHash<QString, int> indexById;
     QHash<QString, int> indexByName;
-    indexById.reserve(entries.size());
-    indexByName.reserve(entries.size());
+    indexById.reserve(initialEntries.size());
+    indexByName.reserve(initialEntries.size());
+    for (int i = 0; i < initialEntries.size(); ++i) {
+        if (!initialEntries[i].effect) continue;
+        indexById.insert(initialEntries[i].effect->getId(), i);
+        indexByName.insert(initialEntries[i].effect->getName(), i);
+    }
+
+    QVector<QPair<QString, bool>> configuration;
+    configuration.reserve(s.effects.size());
+    for (const auto &want : s.effects) {
+        int i = want.id.isEmpty() ? -1 : indexById.value(want.id, -1);
+        if (i < 0 && !want.name.isEmpty()) i = indexByName.value(want.name, -1);
+        if (i >= 0) configuration.append({initialEntries[i].effect->getId(), want.enabled});
+    }
+    mgr.configureEffects(configuration);
+
+    const auto &entries = mgr.entries();
+    indexById.clear();
+    indexByName.clear();
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].effect) continue;
         indexById.insert(entries[i].effect->getId(), i);
@@ -201,8 +219,7 @@ void applyToManager(const Settings &s, EffectManager &mgr) {
         }
         if (i < 0) continue;
         PhotoEditorEffect *effect = entries[i].effect;
-        mgr.setEnabled(i, want.enabled);
-        QSignalBlocker block(effect);
+        QSignalBlocker     block(effect);
         effect->applyParameters(want.parameters);
     }
 }

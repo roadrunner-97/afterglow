@@ -1,4 +1,5 @@
 #include "PhotoEditorApp.h"
+#include "EffectOrganizerDialog.h"
 #include "UiServices.h"
 #include "HistorySerializer.h"
 #include "CachePurger.h"
@@ -423,13 +424,13 @@ void PhotoEditorApp::setupUI() {
     QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);
 
-    QWidget     *effectsContainer = new QWidget();
-    QVBoxLayout *effectsLayout    = new QVBoxLayout(effectsContainer);
-    effectsLayout->setContentsMargins(0, 0, 0, 0);
-    effectsLayout->setSpacing(4);
+    QWidget *effectsContainer = new QWidget();
+    m_effectsLayout           = new QVBoxLayout(effectsContainer);
+    m_effectsLayout->setContentsMargins(0, 0, 0, 0);
+    m_effectsLayout->setSpacing(4);
 
-    setupEffectPanels(effectsLayout);
-    effectsLayout->addStretch();
+    setupEffectPanels(m_effectsLayout);
+    m_effectsLayout->addStretch();
 
     effectsScroll->setWidget(effectsContainer);
     rightLayout->addWidget(effectsScroll, 1);
@@ -519,26 +520,23 @@ void PhotoEditorApp::setupMenuBar() {
     pasteSettingsAct->setShortcut(QKeySequence::Paste);
     connect(pasteSettingsAct, &QAction::triggered, this, &PhotoEditorApp::pasteDevelopSettings);
 
-    // View → Effects — enable/disable individual effects
-    QMenu *viewMenu    = menuBar()->addMenu("View");
-    QMenu *effectsMenu = viewMenu->addMenu("Effects");
-
-    const auto &entries = m_effects->entries();
-    m_effectMenuActions.clear();
-    for (int i = 0; i < entries.size(); ++i) {
-        QAction *act = effectsMenu->addAction(entries[i].effect->getName());
-        act->setObjectName(QString("actionEffect%1").arg(i));
-        act->setCheckable(true);
-        act->setChecked(entries[i].enabled);
-        m_effectMenuActions.append(act);
-        connect(act, &QAction::toggled, this, [this, i](bool on) {
-            m_effects->setEnabled(i, on);
-            triggerReprocess();
-            writeSidecar();
-            m_history->recordFromCurrent(currentSnapshot());
-            refreshEditedState();
-        });
-    }
+    QMenu   *viewMenu           = menuBar()->addMenu("View");
+    QAction *organizeEffectsAct = viewMenu->addAction("Organize Effects…");
+    organizeEffectsAct->setObjectName("actionOrganizeEffects");
+    connect(organizeEffectsAct, &QAction::triggered, this, [this]() {
+        if (!m_effectOrganizer) {
+            m_effectOrganizer = new EffectOrganizerDialog(m_effects, this);
+            connect(m_effectOrganizer, &EffectOrganizerDialog::organizationChanged, this, [this]() {
+                triggerReprocess();
+                writeSidecar();
+                m_history->recordFromCurrent(currentSnapshot());
+                refreshEditedState();
+            });
+        }
+        m_effectOrganizer->show();
+        m_effectOrganizer->raise();
+        m_effectOrganizer->activateWindow();
+    });
 
     // Debug menu — import/export YAML presets.  Hidden behind its own menu so
     // it stays out of the way of the everyday File workflow but is also the
@@ -606,6 +604,7 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
         // Container
         QWidget *panel = new QWidget();
         panel->setObjectName(QString("effectPanel%1").arg(i));
+        m_effectPanels.insert(effect, panel);
         QVBoxLayout *panelLayout = new QVBoxLayout(panel);
         panelLayout->setContentsMargins(6, 4, 6, 6);
         panelLayout->setSpacing(4);
@@ -653,10 +652,11 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
             }
         });
 
-        // Show/hide panel when effect is toggled from the View menu
+        // Show/hide the matching panel when the organizer toggles an effect.
         panel->setVisible(entries[i].enabled);
-        connect(m_effects, &EffectManager::effectToggled, panel, [this, panel, i, interactive](int idx, bool on) {
-            if (idx != i) return;
+        connect(m_effects, &EffectManager::effectToggled, panel, [this, panel, effect, interactive](int idx, bool on) {
+            const auto &current = m_effects->entries();
+            if (idx < 0 || idx >= current.size() || current[idx].effect != effect) return;
             panel->setVisible(on);
             if (interactive && !on) m_viewport->clearActiveInteractiveEffect(interactive);
         });
@@ -673,6 +673,17 @@ void PhotoEditorApp::setupEffectPanels(QVBoxLayout *effectsLayout) {
         connect(effect, &PhotoEditorEffect::liveParametersChanged, this, &PhotoEditorApp::onLiveParametersChanged);
 
         effectsLayout->addWidget(panel);
+    }
+    connect(m_effects, &EffectManager::effectsReordered, this, &PhotoEditorApp::reorderEffectPanels);
+}
+
+void PhotoEditorApp::reorderEffectPanels() {
+    if (!m_effectsLayout) return;
+    for (QWidget *panel : m_effectPanels) m_effectsLayout->removeWidget(panel);
+    int position = 0;
+    for (const EffectEntry &entry : m_effects->entries()) {
+        QWidget *panel = m_effectPanels.value(entry.effect, nullptr);
+        if (panel) m_effectsLayout->insertWidget(position++, panel);
     }
 }
 
@@ -1493,10 +1504,6 @@ void PhotoEditorApp::pasteDevelopSettingsTo(const QString &path) {
 
     if (path == m_developedPath && !m_originalImage.isNull()) {
         SettingsImporter::applyToManager(copied, *m_effects);
-        for (int i = 0; i < m_effectMenuActions.size() && i < m_effects->entries().size(); ++i) {
-            QSignalBlocker block(m_effectMenuActions[i]);
-            m_effectMenuActions[i]->setChecked(m_effects->entries()[i].enabled);
-        }
         syncCommittedGeometry();
         syncViewportRotation();
         triggerReprocess();
@@ -1597,10 +1604,6 @@ void PhotoEditorApp::applyHistoryEntry(const UndoHistory::Entry &e, bool applyFr
         if (e.enabled) {
             const bool val = applyFrom ? e.enabled->first : e.enabled->second;
             m_effects->setEnabled(i, val);
-            if (i < m_effectMenuActions.size()) {
-                QSignalBlocker block(m_effectMenuActions[i]);
-                m_effectMenuActions[i]->setChecked(val);
-            }
         }
 
         if (!e.params.isEmpty()) {

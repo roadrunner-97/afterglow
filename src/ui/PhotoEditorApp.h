@@ -32,6 +32,7 @@ class QActionGroup;
 class LoupeView;
 class QThreadPool;
 class UiServices;
+class EffectOrganizerDialog;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -86,6 +87,7 @@ private:
     void                                      setupMenuBar();
     void                                      setupGpuSelector(QVBoxLayout *rightLayout);
     void                                      setupEffectPanels(QVBoxLayout *rightLayout);
+    void                                      reorderEffectPanels();
     QVector<SettingsImporter::EffectSettings> currentSnapshot() const;
     QString                                   historySidecarPathFor(const QString &imagePath) const;
     void                                      flushHistorySidecar();
@@ -125,12 +127,14 @@ private:
     void                       copyDevelopSettingsFrom(const QString &path);
     void                       pasteDevelopSettingsTo(const QString &path);
 
-    MetadataTray      *m_metadataTray = nullptr;
-    HistoryTray       *m_historyTray  = nullptr;
-    UndoHistory       *m_history      = nullptr;
-    QAction           *m_undoAct      = nullptr;
-    QAction           *m_redoAct      = nullptr;
-    QVector<QAction *> m_effectMenuActions;
+    MetadataTray                         *m_metadataTray    = nullptr;
+    HistoryTray                          *m_historyTray     = nullptr;
+    UndoHistory                          *m_history         = nullptr;
+    QAction                              *m_undoAct         = nullptr;
+    QAction                              *m_redoAct         = nullptr;
+    EffectOrganizerDialog                *m_effectOrganizer = nullptr;
+    QVBoxLayout                          *m_effectsLayout   = nullptr;
+    QHash<PhotoEditorEffect *, QWidget *> m_effectPanels;
 
     EffectManager              *m_effects;
     ImageProcessor             *m_processor;

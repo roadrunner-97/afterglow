@@ -23,6 +23,17 @@ public:
     }
 };
 
+class NamedEffect : public MockEffect {
+public:
+    explicit NamedEffect(QString name) : m_name(std::move(name)) {}
+    QString getName() const override {
+        return m_name;
+    }
+
+private:
+    QString m_name;
+};
+
 // MockEffect that also implements ICropSource — exercises the
 // addEffect() interface-pointer caching and cropSource() lookups.
 class MockCropEffect : public PhotoEditorEffect, public ICropSource {
@@ -142,6 +153,36 @@ private slots:
         QCOMPARE(mgr.entries().size(), 2);
         QCOMPARE(mgr.entries()[0].effect, aRaw);
         QCOMPARE(mgr.entries()[1].effect, bRaw);
+    }
+
+    void configureEffects_reordersAndSetsEnabledState() {
+        EffectManager mgr;
+        mgr.addEffect(std::make_unique<NamedEffect>("One"));
+        mgr.addEffect(std::make_unique<NamedEffect>("Two"));
+        mgr.addEffect(std::make_unique<NamedEffect>("Three"));
+        QSignalSpy reordered(&mgr, &EffectManager::effectsReordered);
+
+        mgr.configureEffects({{"three", true}, {"one", false}, {"two", true}});
+
+        QCOMPARE(mgr.entries()[0].effect->getName(), QString("Three"));
+        QCOMPARE(mgr.entries()[1].effect->getName(), QString("One"));
+        QCOMPARE(mgr.entries()[2].effect->getName(), QString("Two"));
+        QVERIFY(mgr.entries()[0].enabled);
+        QVERIFY(!mgr.entries()[1].enabled);
+        QCOMPARE(reordered.count(), 1);
+    }
+
+    void configureEffects_ignoresUnknownAndAppendsUnmentioned() {
+        EffectManager mgr;
+        mgr.addEffect(std::make_unique<NamedEffect>("One"));
+        mgr.addEffect(std::make_unique<NamedEffect>("Two"), false);
+
+        mgr.configureEffects({{"missing", true}, {"one", false}});
+
+        QCOMPARE(mgr.entries()[0].effect->getName(), QString("One"));
+        QCOMPARE(mgr.entries()[1].effect->getName(), QString("Two"));
+        QVERIFY(!mgr.entries()[0].enabled);
+        QVERIFY(!mgr.entries()[1].enabled);
     }
 
     // ── cropSource caching ────────────────────────────────────────────────────

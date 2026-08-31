@@ -4,6 +4,7 @@
 #include "PhotoEditorEffect.h"
 #include <QObject>
 #include <QVector>
+#include <QPair>
 #include <memory>
 #include <vector>
 
@@ -46,9 +47,14 @@ public:
     ICropSource *cropSource() const;
     ICropSource *activeCropSource() const;
     void         setEnabled(int index, bool enabled);
+    // Reorders effects to match the supplied stable ids and applies their
+    // enabled state. Unknown ids are ignored; unmentioned effects retain
+    // their relative order and enabled state at the end of the list.
+    void configureEffects(const QVector<QPair<QString, bool>> &effects);
 
 signals:
     void effectToggled(int index, bool enabled);
+    void effectsReordered();
 
 private:
     std::vector<std::unique_ptr<PhotoEditorEffect>> m_owners;

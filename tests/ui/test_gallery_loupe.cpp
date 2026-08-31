@@ -9,11 +9,32 @@
 #include <QPushButton>
 
 #include "EffectManager.h"
+#include "EffectOrganizerDialog.h"
 #include "GridView.h"
 #include "LoupeView.h"
 #include "PhotoEditorApp.h"
 #include "ImageProcessor.h"
 #include "UiServices.h"
+
+class OrganizerTestEffect final : public PhotoEditorEffect {
+public:
+    explicit OrganizerTestEffect(QString name) : m_name(std::move(name)) {}
+    QString getName() const override {
+        return m_name;
+    }
+    QString getDescription() const override {
+        return {};
+    }
+    QString getVersion() const override {
+        return "1.0";
+    }
+    bool initialize() override {
+        return true;
+    }
+
+private:
+    QString m_name;
+};
 
 class FakeUiServices final : public UiServices {
 public:
@@ -77,6 +98,33 @@ private slots:
         QVERIFY(app.findChild<ViewportWidget *>("developViewport"));
         QVERIFY(app.findChild<QWidget *>("processingIndicator"));
         QVERIFY(app.findChild<QWidget *>("gpuDeviceSelector"));
+        QVERIFY(app.findChild<QAction *>("actionOrganizeEffects"));
+    }
+
+    void organizerMovesEffectsBetweenListsAndReordersPipeline() {
+        EffectManager effects;
+        effects.addEffect(std::make_unique<OrganizerTestEffect>("First"));
+        effects.addEffect(std::make_unique<OrganizerTestEffect>("Second"), false);
+        effects.addEffect(std::make_unique<OrganizerTestEffect>("Third"));
+        PhotoEditorApp app(&effects);
+
+        app.findChild<QAction *>("actionOrganizeEffects")->trigger();
+        auto *dialog    = app.findChild<EffectOrganizerDialog *>("effectOrganizerDialog");
+        auto *available = dialog ? dialog->findChild<QListWidget *>("availableEffectsList") : nullptr;
+        auto *enabled   = dialog ? dialog->findChild<QListWidget *>("enabledEffectsList") : nullptr;
+        QVERIFY(dialog);
+        QVERIFY(available);
+        QVERIFY(enabled);
+        QCOMPARE(available->count(), 1);
+        QCOMPARE(enabled->count(), 2);
+
+        enabled->insertItem(0, available->takeItem(0));
+        QTRY_COMPARE(effects.entries()[0].effect->getName(), QString("Second"));
+        QVERIFY(effects.entries()[0].enabled);
+
+        enabled->insertItem(0, enabled->takeItem(2));
+        QTRY_COMPARE(effects.entries()[0].effect->getName(), QString("Third"));
+        QCOMPARE(effects.entries()[1].effect->getName(), QString("Second"));
     }
 
     void injectedOpenImageRunsDevelopWorkflowWithoutNativeDialogs() {
