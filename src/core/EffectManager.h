@@ -5,6 +5,9 @@
 #include <QObject>
 #include <QVector>
 #include <QPair>
+#include <QMap>
+#include <QHash>
+#include <QVariant>
 #include <memory>
 #include <vector>
 
@@ -51,6 +54,9 @@ public:
     // enabled state. Unknown ids are ignored; unmentioned effects retain
     // their relative order and enabled state at the end of the list.
     void configureEffects(const QVector<QPair<QString, bool>> &effects);
+    void setProcessingParameterOverride(const QString &effectId, const QMap<QString, QVariant> &parameters);
+    void clearProcessingParameterOverride(const QString &effectId);
+    QMap<QString, QVariant> effectiveParameters(const EffectEntry &entry) const;
 
 signals:
     void effectToggled(int index, bool enabled);
@@ -60,6 +66,7 @@ private:
     std::vector<std::unique_ptr<PhotoEditorEffect>> m_owners;
     QVector<EffectEntry>                            m_entries;
     ICropSource                                    *m_cropSource = nullptr;
+    QHash<QString, QMap<QString, QVariant>>         m_parameterOverrides;
 };
 
 #endif // EFFECTMANAGER_H

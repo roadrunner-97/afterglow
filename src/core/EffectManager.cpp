@@ -38,6 +38,20 @@ const QVector<EffectEntry> &EffectManager::entries() const {
     return m_entries;
 }
 
+void EffectManager::setProcessingParameterOverride(const QString &effectId, const QMap<QString, QVariant> &parameters) {
+    m_parameterOverrides.insert(effectId, parameters);
+}
+
+void EffectManager::clearProcessingParameterOverride(const QString &effectId) {
+    m_parameterOverrides.remove(effectId);
+}
+
+QMap<QString, QVariant> EffectManager::effectiveParameters(const EffectEntry &entry) const {
+    if (!entry.effect) return {};
+    const auto override = m_parameterOverrides.constFind(entry.effect->getId());
+    return override == m_parameterOverrides.constEnd() ? entry.effect->getParameters() : override.value();
+}
+
 void EffectManager::setEnabled(int index, bool enabled) {
     if (index < 0 || index >= m_entries.size()) return;
     m_entries[index].enabled = enabled;

@@ -38,7 +38,7 @@ static QVector<GpuPipelineCall> buildGpuCalls(const EffectManager &effects) {
     for (const EffectEntry &entry : effects.entries()) {
         if (!entry.enabled) continue;
         Q_ASSERT(entry.gpu); // every shipping effect implements IGpuEffect
-        QMap<QString, QVariant> params = entry.effect->getParameters();
+        QMap<QString, QVariant> params = effects.effectiveParameters(entry);
         mergeInto(params, cropInjected);
         calls.append({entry.effect, entry.gpu, params});
     }

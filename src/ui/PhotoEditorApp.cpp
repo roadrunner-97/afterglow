@@ -901,6 +901,8 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
     m_developedPath    = path;
     m_viewport->setImageSize(img.size());
     m_viewport->resetView();
+    leaveLocalExposureContext();
+    m_selectedLocalAdjustmentId.clear();
     m_localAdjustments.clear();
     m_linearGradientTool->clearMask();
 
@@ -1243,6 +1245,15 @@ void PhotoEditorApp::onExportComplete(uint64_t requestId, QImage result, QString
 }
 
 void PhotoEditorApp::onParametersChanged() {
+    if (m_localExposureContext && sender() == exposureEffect()) {
+        if (LocalAdjustment *adjustment = selectedLocalAdjustment())
+            adjustment->exposureEv = exposureEffect()->getParameters().value("exposure").toDouble();
+        triggerReprocess();
+        writeSidecar();
+        m_history->recordFromCurrent(currentSnapshot());
+        refreshEditedState();
+        return;
+    }
     syncCommittedGeometry();
     syncViewportRotation();
     triggerReprocess();
@@ -1252,6 +1263,12 @@ void PhotoEditorApp::onParametersChanged() {
 }
 
 void PhotoEditorApp::onLiveParametersChanged() {
+    if (m_localExposureContext && sender() == exposureEffect()) {
+        if (LocalAdjustment *adjustment = selectedLocalAdjustment())
+            adjustment->exposureEv = exposureEffect()->getParameters().value("exposure").toDouble();
+        triggerLiveReprocess();
+        return;
+    }
     syncViewportRotation();
     triggerLiveReprocess();
 }
@@ -1761,7 +1778,7 @@ QVector<SettingsImporter::EffectSettings> PhotoEditorApp::currentSnapshot() cons
         es.id         = e.effect->getId();
         es.name       = e.effect->getName();
         es.enabled    = e.enabled;
-        es.parameters = e.effect->getParameters();
+        es.parameters = m_effects->effectiveParameters(e);
         snap.append(es);
     }
     snap.append(localAdjustmentSnapshot());
@@ -1802,7 +1819,10 @@ void PhotoEditorApp::commitLinearGradient() {
     LocalAdjustment *adjustment = selectedLocalAdjustment();
     if (!adjustment) {
         m_selectedLocalAdjustmentId = m_localAdjustments.addLinearGradient(*m_linearGradientTool->mask());
+        adjustment                  = selectedLocalAdjustment();
     } else adjustment->mask = *m_linearGradientTool->mask();
+    if (adjustment && exposureEffect())
+        adjustment->exposureEv = exposureEffect()->getParameters().value("exposure").toDouble();
     refreshLocalAdjustmentsUi();
     writeSidecar();
     triggerReprocess();
@@ -1825,6 +1845,13 @@ void PhotoEditorApp::beginLinearGradientCreation() {
     m_linearGradientTool->clearMask();
     m_updatingLocalUi = false;
     refreshLocalAdjustmentsUi();
+    enterLocalExposureContext();
+    if (PhotoEditorEffect *effect = exposureEffect()) {
+        auto parameters        = effect->getParameters();
+        parameters["exposure"] = 0.0;
+        QSignalBlocker blocker(effect);
+        effect->applyParameters(parameters);
+    }
     m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
     m_linearGradientTool->beginCreation();
     m_viewport->setFocus();
@@ -1835,9 +1862,17 @@ void PhotoEditorApp::selectLocalAdjustment(const QString &id) {
     const LocalAdjustment *adjustment = selectedLocalAdjustment();
     m_updatingLocalUi                 = true;
     if (adjustment) {
+        enterLocalExposureContext();
+        if (PhotoEditorEffect *effect = exposureEffect()) {
+            auto parameters        = effect->getParameters();
+            parameters["exposure"] = adjustment->exposureEv;
+            QSignalBlocker blocker(effect);
+            effect->applyParameters(parameters);
+        }
         m_linearGradientTool->setMask(adjustment->mask);
         m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
     } else {
+        leaveLocalExposureContext();
         m_linearGradientTool->clearMask();
     }
     m_updatingLocalUi   = false;
@@ -1848,6 +1883,32 @@ void PhotoEditorApp::selectLocalAdjustment(const QString &id) {
     const QSignalBlocker blocker(m_invertLocalAdjustment);
     m_invertLocalAdjustment->setChecked(selected && adjustment->mask.isInverted());
     m_viewport->update();
+}
+
+PhotoEditorEffect *PhotoEditorApp::exposureEffect() const {
+    for (const EffectEntry &entry : m_effects->entries())
+        if (entry.effect && entry.effect->getId() == QStringLiteral("exposure")) return entry.effect;
+    return nullptr;
+}
+
+void PhotoEditorApp::enterLocalExposureContext() {
+    if (m_localExposureContext) return;
+    PhotoEditorEffect *effect = exposureEffect();
+    if (!effect) return;
+    m_globalExposureParameters = effect->getParameters();
+    m_effects->setProcessingParameterOverride(QStringLiteral("exposure"), m_globalExposureParameters);
+    m_localExposureContext = true;
+}
+
+void PhotoEditorApp::leaveLocalExposureContext() {
+    if (!m_localExposureContext) return;
+    if (PhotoEditorEffect *effect = exposureEffect()) {
+        QSignalBlocker blocker(effect);
+        effect->applyParameters(m_globalExposureParameters);
+    }
+    m_effects->clearProcessingParameterOverride(QStringLiteral("exposure"));
+    m_globalExposureParameters.clear();
+    m_localExposureContext = false;
 }
 
 void PhotoEditorApp::refreshLocalAdjustmentsUi() {

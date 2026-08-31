@@ -155,6 +155,20 @@ private slots:
         QCOMPARE(mgr.entries()[1].effect, bRaw);
     }
 
+    void processingParameterOverridePreservesUiParameters() {
+        EffectManager mgr;
+        mgr.addEffect(std::make_unique<MockEffect>());
+        const EffectEntry            &entry = mgr.entries().first();
+        const QMap<QString, QVariant> empty;
+        QCOMPARE(mgr.effectiveParameters(entry), empty);
+
+        const QMap<QString, QVariant> global{{"amount", 2.0}};
+        mgr.setProcessingParameterOverride("mock", global);
+        QCOMPARE(mgr.effectiveParameters(entry), global);
+        mgr.clearProcessingParameterOverride("mock");
+        QCOMPARE(mgr.effectiveParameters(entry), empty);
+    }
+
     void configureEffects_reordersAndSetsEnabledState() {
         EffectManager mgr;
         mgr.addEffect(std::make_unique<NamedEffect>("One"));
