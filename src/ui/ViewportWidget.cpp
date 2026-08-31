@@ -164,6 +164,10 @@ void ViewportWidget::paintGL() {
     m_vao.release();
     m_shader->release();
 
+    if (m_backgroundOverlay && m_backgroundOverlay != m_active) {
+        QPainter painter(this);
+        m_backgroundOverlay->paintOverlay(painter, currentTransform());
+    }
     if (m_active) {
         QPainter painter(this);
         m_active->paintOverlay(painter, currentTransform());
@@ -218,13 +222,26 @@ void ViewportWidget::resetView() {
 }
 
 void ViewportWidget::setActiveInteractiveEffect(IInteractiveEffect *effect) {
+    m_active            = effect;
+    m_backgroundOverlay = nullptr;
+    update();
+}
+
+void ViewportWidget::setActiveInteractiveEffectWithBackground(IInteractiveEffect *effect) {
+    if (m_active != effect) m_backgroundOverlay = m_active;
     m_active = effect;
     update();
 }
 
 void ViewportWidget::clearActiveInteractiveEffect(IInteractiveEffect *effect) {
-    if (m_active != effect) return;
-    m_active = nullptr;
+    if (m_active == effect) {
+        m_active            = m_backgroundOverlay;
+        m_backgroundOverlay = nullptr;
+    } else if (m_backgroundOverlay == effect) {
+        m_backgroundOverlay = nullptr;
+    } else {
+        return;
+    }
     update();
 }
 

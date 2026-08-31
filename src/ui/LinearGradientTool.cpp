@@ -1,6 +1,7 @@
 #include "LinearGradientTool.h"
 
 #include <QKeyEvent>
+#include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -121,15 +122,19 @@ void LinearGradientTool::paintOverlay(QPainter &painter, const ViewportTransform
     const QColor shadow(0, 0, 0, 190);
     const QColor line(240, 240, 240, 225);
     const QColor accent(84, 190, 210, 255);
-    const QColor affected(84, 190, 210, 38);
+    const QColor transparent(84, 190, 210, 0);
+    const QColor affected(84, 190, 210, 48);
 
-    QPainterPath affectedSide;
-    affectedSide.moveTo(h.end - perpendicular * extent);
-    affectedSide.lineTo(h.end + perpendicular * extent);
-    affectedSide.lineTo(h.end + perpendicular * extent + axis * extent * 2.0);
-    affectedSide.lineTo(h.end - perpendicular * extent + axis * extent * 2.0);
-    affectedSide.closeSubpath();
-    painter.fillPath(affectedSide, affected);
+    QLinearGradient feather(h.start, h.end);
+    feather.setSpread(QGradient::PadSpread);
+    if (m_mask->isInverted()) {
+        feather.setColorAt(0.0, affected);
+        feather.setColorAt(1.0, transparent);
+    } else {
+        feather.setColorAt(0.0, transparent);
+        feather.setColorAt(1.0, affected);
+    }
+    painter.fillRect(QRectF(QPointF(0.0, 0.0), QSizeF(vt.viewportSize)), feather);
 
     auto drawBoundary = [&](QPointF point, Qt::PenStyle style, const QColor &color) {
         painter.setPen(QPen(shadow, 3.0, style));

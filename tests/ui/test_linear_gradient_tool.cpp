@@ -130,6 +130,30 @@ private slots:
         QVERIFY(image.pixelColor(50, 50) != QColor(Qt::black));
     }
 
+    void overlayFeathersAndInvertMirrorsTint() {
+        LinearGradientTool tool;
+        createMask(tool);
+
+        auto render = [&]() {
+            QImage image(100, 100, QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::black);
+            QPainter painter(&image);
+            tool.paintOverlay(painter, transform());
+            painter.end();
+            return image;
+        };
+
+        const QImage normal = render();
+        QVERIFY(normal.pixelColor(90, 25).blue() > normal.pixelColor(10, 25).blue());
+        const int featherBlue = normal.pixelColor(40, 25).blue();
+        QVERIFY(featherBlue > normal.pixelColor(10, 25).blue());
+        QVERIFY(featherBlue < normal.pixelColor(70, 25).blue());
+
+        tool.setInverted(true);
+        const QImage inverted = render();
+        QVERIFY(inverted.pixelColor(10, 25).blue() > inverted.pixelColor(90, 25).blue());
+    }
+
     void followsViewportRotation() {
         LinearGradientTool tool;
         createMask(tool);
