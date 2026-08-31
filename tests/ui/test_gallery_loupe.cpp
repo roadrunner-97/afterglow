@@ -20,6 +20,7 @@
 #include "LoupeView.h"
 #include "PhotoEditorApp.h"
 #include "ImageProcessor.h"
+#include "MetadataTray.h"
 #include "UiServices.h"
 
 class OrganizerTestEffect final : public PhotoEditorEffect {
@@ -100,6 +101,8 @@ private slots:
         QVERIFY(app.findChild<QAction *>("actionModeDevelop"));
         QVERIFY(app.findChild<QStackedWidget *>("editorModeStack"));
         QVERIFY(app.findChild<GridView *>("galleryGrid"));
+        QVERIFY(app.findChild<QWidget *>("galleryMetadataSidebar"));
+        QVERIFY(app.findChild<MetadataTray *>("galleryMetadataTray"));
         QVERIFY(app.findChild<LoupeView *>("loupeView"));
         QVERIFY(app.findChild<ViewportWidget *>("developViewport"));
         QVERIFY(app.findChild<QWidget *>("processingIndicator"));

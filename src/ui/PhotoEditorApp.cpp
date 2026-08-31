@@ -15,6 +15,7 @@
 #include "ICropSource.h"
 #include "IInteractiveEffect.h"
 #include "RawLoader.h"
+#include "MetadataReader.h"
 #include "SettingsExporter.h"
 #include "SettingsImporter.h"
 #include <QPainter>
@@ -130,10 +131,13 @@ static QString fmtCamera(const ImageMetadata &m) {
 
 static MetadataTray::Info buildMetadataInfo(const QString &path, const QSize &size, const ImageMetadata &meta) {
     MetadataTray::Info info;
-    info.filename   = QFileInfo(path).fileName();
-    info.dimensions = QString("%1 \xc3\x97 %2").arg(size.width()).arg(size.height());
-    info.camera     = fmtCamera(meta);
-    info.lens       = meta.lens.isEmpty() ? QString("\xe2\x80\x94") : meta.lens;
+    const QFileInfo    file(path);
+    info.filename = file.fileName();
+    info.fileType = file.suffix().toUpper();
+    info.fileSize = QLocale::system().formattedDataSize(file.size());
+    if (size.isValid()) info.dimensions = QString("%1 \xc3\x97 %2").arg(size.width()).arg(size.height());
+    info.camera = fmtCamera(meta);
+    info.lens   = meta.lens.isEmpty() ? QString("\xe2\x80\x94") : meta.lens;
 
     QStringList exp;
     if (meta.isoSpeed > 0.0f) exp << fmtIso(meta.isoSpeed);
@@ -141,8 +145,27 @@ static MetadataTray::Info buildMetadataInfo(const QString &path, const QSize &si
     if (meta.aperture > 0.0f) exp << fmtAperture(meta.aperture);
     info.exposure = exp.isEmpty() ? QString("\xe2\x80\x94") : exp.join(" \xc2\xb7 ");
 
-    info.captured = meta.captureTime.isValid() ? QLocale::system().toString(meta.captureTime, QLocale::ShortFormat)
-                                               : QString("\xe2\x80\x94");
+    if (meta.focalLenMm > 0.0f)
+        info.focalLength =
+            QString("%1 mm").arg(QString::number(meta.focalLenMm, 'f', meta.focalLenMm < 100.0f ? 1 : 0));
+    if (std::abs(meta.exposureBiasEv) > 0.005f)
+        info.exposureBias =
+            QString("%1 EV").arg(meta.exposureBiasEv, 0, 'f', 1).prepend(meta.exposureBiasEv > 0 ? "+" : "");
+    info.exposureProgram = meta.exposureProgram;
+    info.meteringMode    = meta.meteringMode;
+    info.flash           = meta.flash;
+    info.whiteBalance    = meta.whiteBalance;
+    if (meta.colorTempK > 0.0f)
+        info.colorTemperature = QString("%1 K").arg(static_cast<int>(std::round(meta.colorTempK)));
+    info.serial = meta.cameraSerial;
+
+    info.captured    = meta.captureTime.isValid() ? QLocale::system().toString(meta.captureTime, QLocale::ShortFormat)
+                                                  : QString("\xe2\x80\x94");
+    info.location    = meta.location;
+    info.creator     = meta.artist;
+    info.copyright   = meta.copyright;
+    info.description = meta.description;
+    info.software    = meta.software;
     return info;
 }
 
@@ -419,6 +442,9 @@ void PhotoEditorApp::setupUI() {
     setCentralWidget(m_stack);
 
     // ── Gallery page ────────────────────────────────────────────────────────
+    auto *gallery = new QSplitter(Qt::Horizontal);
+    gallery->setObjectName("galleryPage");
+    gallery->setHandleWidth(4);
     m_gridView = new GridView();
     m_gridView->setObjectName("galleryGrid");
     connect(m_gridView, &GridView::photoActivated, this, &PhotoEditorApp::onPhotoActivated);
@@ -429,9 +455,23 @@ void PhotoEditorApp::setupUI() {
             [this](const QString &path) { pasteDevelopSettingsTo(path); });
     // Single-click / arrow keys in the grid track m_currentImagePath so
     // the toolbar Develop / Loupe buttons act on the highlighted photo.
-    connect(m_gridView, &GridView::currentPathChanged, this,
-            [this](const QString &path) { m_currentImagePath = path; });
-    m_stack->addWidget(m_gridView);
+    connect(m_gridView, &GridView::currentPathChanged, this, [this](const QString &path) {
+        m_currentImagePath = path;
+        updateGalleryMetadata(path);
+    });
+    gallery->addWidget(m_gridView);
+    auto *galleryMetadataScroll = new QScrollArea();
+    galleryMetadataScroll->setObjectName("galleryMetadataSidebar");
+    galleryMetadataScroll->setWidgetResizable(true);
+    galleryMetadataScroll->setMinimumWidth(fontMetrics().averageCharWidth() * 28);
+    galleryMetadataScroll->setMaximumWidth(fontMetrics().averageCharWidth() * 52);
+    m_galleryMetadataTray = new MetadataTray();
+    m_galleryMetadataTray->setObjectName("galleryMetadataTray");
+    galleryMetadataScroll->setWidget(m_galleryMetadataTray);
+    gallery->addWidget(galleryMetadataScroll);
+    gallery->setStretchFactor(0, 1);
+    gallery->setStretchFactor(1, 0);
+    m_stack->addWidget(gallery);
 
     // ── Loupe page ──────────────────────────────────────────────────────────
     m_loupeView = new LoupeView();
@@ -913,6 +953,7 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
         if (img.isNull()) qWarning() << "RawLoader failed for" << path << "— trying QImage::load";
     }
     if (img.isNull()) img = decodeOriented(path);
+    if (!RawLoader::isRawFile(path)) MetadataReader::read(path, &meta);
 
     if (img.isNull()) {
         qWarning() << "Failed to load image:" << path;
@@ -1634,6 +1675,34 @@ void PhotoEditorApp::onPhotoActivated(const QString &path) {
     loadLoupeImage(path);
 }
 
+void PhotoEditorApp::updateGalleryMetadata(const QString &path) {
+    const uint64_t generation = ++m_galleryMetadataGeneration;
+    if (path.isEmpty()) {
+        m_galleryMetadataTray->clear();
+        return;
+    }
+
+    // Show file-level information immediately; EXIF follows off-thread so
+    // arrowing through a large folder never blocks the gallery.
+    m_galleryMetadataTray->setInfo(buildMetadataInfo(path, {}, {}));
+    auto *watcher = new QFutureWatcher<ImageMetadata>(this);
+    connect(watcher, &QFutureWatcher<ImageMetadata>::finished, this, [this, watcher, path, generation]() {
+        const ImageMetadata metadata = watcher->result();
+        if (generation == m_galleryMetadataGeneration && path == m_gridView->currentPath())
+            m_galleryMetadataTray->setInfo(buildMetadataInfo(path, metadata.pixelSize, metadata));
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run([path]() {
+        ImageMetadata metadata;
+        MetadataReader::read(path, &metadata);
+        if (!metadata.pixelSize.isValid()) {
+            QImageReader reader(path);
+            metadata.pixelSize = reader.size();
+        }
+        return metadata;
+    }));
+}
+
 void PhotoEditorApp::loadLoupeImage(const QString &path) {
     if (path.isEmpty()) return;
     const uint64_t generation = ++m_loupeLoadGeneration;
@@ -1641,7 +1710,7 @@ void PhotoEditorApp::loadLoupeImage(const QString &path) {
     m_loupePath               = path;
     m_gridView->setCurrentPath(path);
     m_loupeView->beginPhoto(m_gridView->thumbnail(path));
-    m_loupeView->setMetadata({});
+    m_loupeView->setMetadata(buildMetadataInfo(path, {}, {}));
     m_loupeView->setCurrentMark(m_gridView->mark(path));
 
     if (m_proofCache) {
@@ -1664,12 +1733,13 @@ void PhotoEditorApp::loadLoupeImage(const QString &path) {
         if (generation == m_loupeLoadGeneration && path == m_loupePath) {
             if (!loaded.cameraJpeg.isNull()) m_loupeView->setCameraJpegImage(loaded.cameraJpeg);
             else qWarning() << "No preview available for" << path;
-            m_loupeView->setMetadata(loaded.metadata);
+            m_loupeView->setMetadata(buildMetadataInfo(path, loaded.cameraJpeg.size(), loaded.metadata));
         }
         watcher->deleteLater();
     });
     watcher->setFuture(QtConcurrent::run([path]() {
         LoupeLoadResult loaded;
+        MetadataReader::read(path, &loaded.metadata);
         if (RawLoader::isRawFile(path)) loaded.cameraJpeg = RawLoader::loadThumbnail(path, &loaded.metadata);
         if (loaded.cameraJpeg.isNull()) loaded.cameraJpeg = decodeOriented(path);
         return loaded;

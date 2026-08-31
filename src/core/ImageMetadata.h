@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QString>
+#include <QSize>
 #include <cstdint>
 #include <vector>
 
@@ -14,7 +15,8 @@ struct ImageMetadata {
     // EXIF orientation tag of the source file (1..8). 1 = no rotation. The
     // loader applies the rotation to the QImage before returning, so the
     // pixel data is always upright; this field records what was applied.
-    int orientation = 1;
+    int   orientation = 1;
+    QSize pixelSize;
 
     // 256-bin luminance histogram of the loaded image.  Bin index is
     // floor(L * 256) clamped to [0, 255], where L is perceptual (sRGB-encoded)
@@ -27,9 +29,21 @@ struct ImageMetadata {
     QString   cameraMake;
     QString   cameraModel;
     QString   lens;
-    float     isoSpeed   = 0.0f;
-    float     shutterSec = 0.0f; // exposure time in seconds (0.004 = 1/250)
-    float     aperture   = 0.0f; // f-number
-    float     focalLenMm = 0.0f;
+    float     isoSpeed       = 0.0f;
+    float     shutterSec     = 0.0f; // exposure time in seconds (0.004 = 1/250)
+    float     aperture       = 0.0f; // f-number
+    float     focalLenMm     = 0.0f;
+    float     exposureBiasEv = 0.0f;
     QDateTime captureTime; // null when the file lacks a timestamp
+
+    QString exposureProgram;
+    QString meteringMode;
+    QString flash;
+    QString whiteBalance;
+    QString cameraSerial;
+    QString artist;
+    QString copyright;
+    QString description;
+    QString software;
+    QString location;
 };

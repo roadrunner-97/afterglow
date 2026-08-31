@@ -1,12 +1,10 @@
 #include "LoupeView.h"
 
 #include <QButtonGroup>
-#include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QLocale>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
@@ -25,54 +23,6 @@ namespace {
 // laptop screen.
 constexpr int SIDEBAR_W = 360;
 
-QString formatShutter(float s) {
-    if (s <= 0.0f) return "—";
-    if (s >= 1.0f) return QString::number(s, 'f', 1) + " s";
-    // Sub-second exposures display as their reciprocal — shooters read
-    // "1/250" far faster than "0.004 s".
-    const int denom = static_cast<int>(std::round(1.0f / s));
-    return QString("1/%1 s").arg(denom);
-}
-
-QString formatAperture(float f) {
-    if (f <= 0.0f) return "—";
-    return QString("f/%1").arg(QString::number(f, 'f', f < 10.0f ? 1 : 0));
-}
-
-QString formatIso(float iso) {
-    if (iso <= 0.0f) return "—";
-    return "ISO " + QString::number(static_cast<int>(std::round(iso)));
-}
-
-QString formatFocal(float mm) {
-    if (mm <= 0.0f) return "—";
-    return QString::number(mm, 'f', mm < 100.0f ? 1 : 0) + " mm";
-}
-
-// Most cameras already include the make in the model string ("Canon EOS R5"),
-// so de-duplicate the make prefix to avoid "Canon Canon EOS R5".
-QString formatCamera(const ImageMetadata &m) {
-    if (m.cameraMake.isEmpty() && m.cameraModel.isEmpty()) return "—";
-    if (!m.cameraMake.isEmpty() && m.cameraModel.startsWith(m.cameraMake, Qt::CaseInsensitive)) return m.cameraModel;
-    if (m.cameraMake.isEmpty()) return m.cameraModel;
-    if (m.cameraModel.isEmpty()) return m.cameraMake;
-    return m.cameraMake + " " + m.cameraModel;
-}
-
-QString formatLens(const QString &s) {
-    return s.isEmpty() ? QString("—") : s;
-}
-
-QString formatDateTime(const QDateTime &dt) {
-    if (!dt.isValid()) return "—";
-    return QLocale::system().toString(dt, QLocale::ShortFormat);
-}
-
-QString formatTempK(float k) {
-    if (k <= 0.0f) return "—";
-    return QString::number(static_cast<int>(std::round(k))) + " K";
-}
-
 } // namespace
 
 LoupeView::LoupeView(QWidget *parent) : QWidget(parent) {
@@ -90,10 +40,9 @@ LoupeView::LoupeView(QWidget *parent) : QWidget(parent) {
 void LoupeView::buildSidebar() {
     m_sidebar = new QWidget(this);
     m_sidebar->setObjectName("loupeSidebar");
-    m_sidebar->setAutoFillBackground(true);
-    m_sidebar->setBackgroundRole(QPalette::Window);
-    m_sidebar->setStyleSheet("QLabel[role=\"key\"]     { letter-spacing: 1px; }"
-                             "QLabel[role=\"section\"] { letter-spacing: 1px; padding-top: 4px; }");
+    m_sidebar->setStyleSheet("QLabel { font-size: 14px; }"
+                             "QLabel[role=\"key\"]     { font-size: 13px; letter-spacing: 1px; }"
+                             "QLabel[role=\"section\"] { font-size: 13px; letter-spacing: 1px; padding-top: 4px; }");
 
     auto *outer = new QVBoxLayout(m_sidebar);
     outer->setContentsMargins(14, 14, 14, 14);
@@ -176,48 +125,12 @@ void LoupeView::buildSidebar() {
     sep->setFrameShape(QFrame::HLine);
     outer->addWidget(sep);
 
-    // ── Metadata table (scrollable) ───────────────────────────────────────
-    auto *metaHeader = new QLabel("Metadata", m_sidebar);
-    metaHeader->setProperty("role", "section");
-    outer->addWidget(metaHeader);
-
+    // ── Metadata (shared with Gallery and Develop) ────────────────────────
     auto *scroll = new QScrollArea(m_sidebar);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setBackgroundRole(QPalette::Window);
-    scroll->viewport()->setAutoFillBackground(true);
-    scroll->viewport()->setBackgroundRole(QPalette::Window);
-    auto *table = new QWidget(scroll);
-    table->setAutoFillBackground(true);
-    table->setBackgroundRole(QPalette::Window);
-    auto *form = new QFormLayout(table);
-    form->setContentsMargins(0, 0, 0, 0);
-    form->setHorizontalSpacing(12);
-    form->setVerticalSpacing(6);
-    // Right-align keys so the value column reads as a clean left-aligned
-    // list — same pattern as Lightroom's metadata panel.  The eye scans the
-    // values, the keys recede; without this they fight for attention.
-    form->setLabelAlignment(Qt::AlignRight | Qt::AlignTop);
-    form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
-
-    auto addRow = [&](const QString &key, QLabel *&valSlot) {
-        auto *k = new QLabel(key, table);
-        k->setProperty("role", "key");
-        k->setForegroundRole(QPalette::PlaceholderText);
-        valSlot = new QLabel("—", table);
-        valSlot->setWordWrap(true);
-        form->addRow(k, valSlot);
-    };
-    addRow("Camera", m_valCamera);
-    addRow("Lens", m_valLens);
-    addRow("ISO", m_valIso);
-    addRow("Shutter", m_valShutter);
-    addRow("Aperture", m_valAperture);
-    addRow("Focal", m_valFocal);
-    addRow("Captured", m_valDate);
-    addRow("Color Temp", m_valTempK);
-
-    scroll->setWidget(table);
+    m_metadataTray = new MetadataTray(scroll);
+    scroll->setWidget(m_metadataTray);
     outer->addWidget(scroll, 1);
 
     m_sidebar->raise();
@@ -285,15 +198,8 @@ void LoupeView::updateDisplayedImage() {
     update();
 }
 
-void LoupeView::setMetadata(const ImageMetadata &meta) {
-    m_valCamera->setText(formatCamera(meta));
-    m_valLens->setText(formatLens(meta.lens));
-    m_valIso->setText(formatIso(meta.isoSpeed));
-    m_valShutter->setText(formatShutter(meta.shutterSec));
-    m_valAperture->setText(formatAperture(meta.aperture));
-    m_valFocal->setText(formatFocal(meta.focalLenMm));
-    m_valDate->setText(formatDateTime(meta.captureTime));
-    m_valTempK->setText(formatTempK(meta.colorTempK));
+void LoupeView::setMetadata(const MetadataTray::Info &info) {
+    m_metadataTray->setInfo(info);
 }
 
 void LoupeView::setCurrentMark(GridView::Mark m) {

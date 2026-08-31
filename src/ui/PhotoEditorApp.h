@@ -135,6 +135,7 @@ private:
     void    scheduleThumbnails(const QStringList &paths, const QString &folder);
     void    loadFullImage(const QString &path);
     void    loadLoupeImage(const QString &path);
+    void    updateGalleryMetadata(const QString &path);
     QString catalogPath(const QString &folder) const;
     void    readCatalog(const QString &folder);
     void    writeCatalog() const;
@@ -152,13 +153,14 @@ private:
     void                       copyDevelopSettingsFrom(const QString &path);
     void                       pasteDevelopSettingsTo(const QString &path);
 
-    MetadataTray                         *m_metadataTray  = nullptr;
-    HistoryTray                          *m_historyTray   = nullptr;
-    UndoHistory                          *m_history       = nullptr;
-    QAction                              *m_undoAct       = nullptr;
-    QAction                              *m_redoAct       = nullptr;
-    PreferencesDialog                    *m_preferences   = nullptr;
-    QVBoxLayout                          *m_effectsLayout = nullptr;
+    MetadataTray                         *m_metadataTray        = nullptr;
+    MetadataTray                         *m_galleryMetadataTray = nullptr;
+    HistoryTray                          *m_historyTray         = nullptr;
+    UndoHistory                          *m_history             = nullptr;
+    QAction                              *m_undoAct             = nullptr;
+    QAction                              *m_redoAct             = nullptr;
+    PreferencesDialog                    *m_preferences         = nullptr;
+    QVBoxLayout                          *m_effectsLayout       = nullptr;
     QHash<PhotoEditorEffect *, QWidget *> m_effectPanels;
 
     EffectManager              *m_effects;
@@ -202,8 +204,9 @@ private:
     QStringList                            m_currentPaths;  // photos shown in the gallery, in display order
     QString                                m_developedPath; // path currently loaded in m_originalImage
     QString                                m_loupePath;     // path currently represented by LoupeView
-    uint64_t                               m_loupeLoadGeneration = 0;
-    std::shared_ptr<std::atomic<uint64_t>> m_thumbnailGeneration = std::make_shared<std::atomic<uint64_t>>(0);
+    uint64_t                               m_loupeLoadGeneration       = 0;
+    uint64_t                               m_galleryMetadataGeneration = 0;
+    std::shared_ptr<std::atomic<uint64_t>> m_thumbnailGeneration       = std::make_shared<std::atomic<uint64_t>>(0);
 
     ProofCache *m_proofCache = nullptr;
     Proofer    *m_proofer    = nullptr;

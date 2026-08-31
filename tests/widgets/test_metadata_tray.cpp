@@ -22,7 +22,8 @@ static QStringList valueTexts(MetadataTray *t) {
     for (int i = 0; i < fl->rowCount(); ++i) {
         auto *item = fl->itemAt(i, QFormLayout::FieldRole);
         if (!item) continue;
-        if (auto *lbl = qobject_cast<QLabel *>(item->widget())) out << lbl->text();
+        if (auto *lbl = qobject_cast<QLabel *>(item->widget()); lbl && !lbl->property("metadataSection").toBool())
+            out << lbl->text();
     }
     return out;
 }
@@ -34,7 +35,7 @@ private slots:
     void constructsWithDashPlaceholders() {
         MetadataTray      tray;
         const QStringList vals = valueTexts(&tray);
-        QCOMPARE(vals.size(), 6);
+        QCOMPARE(vals.size(), 21);
         const QString dash = QString::fromUtf8("\xe2\x80\x94");
         for (const auto &v : vals) QCOMPARE(v, dash);
     }
@@ -42,22 +43,40 @@ private slots:
     void setInfoPopulatesAllFields() {
         MetadataTray       tray;
         MetadataTray::Info info;
-        info.filename   = "DSC_0042.jpg";
-        info.dimensions = "6000 x 4000";
-        info.camera     = "Sony A7IV";
-        info.lens       = "24-70mm f/2.8";
-        info.exposure   = "ISO 400 1/250 s f/4.0";
-        info.captured   = "2024-03-15 14:32";
+        info.filename         = "DSC_0042.jpg";
+        info.fileType         = "JPEG";
+        info.fileSize         = "12.4 MB";
+        info.dimensions       = "6000 x 4000";
+        info.camera           = "Sony A7IV";
+        info.lens             = "24-70mm f/2.8";
+        info.serial           = "12345";
+        info.exposure         = "ISO 400 1/250 s f/4.0";
+        info.focalLength      = "50 mm";
+        info.exposureBias     = "+0.7 EV";
+        info.exposureProgram  = "Aperture priority";
+        info.meteringMode     = "Pattern";
+        info.flash            = "Flash did not fire";
+        info.whiteBalance     = "Auto white balance";
+        info.colorTemperature = "5200 K";
+        info.captured         = "2024-03-15 14:32";
+        info.location         = "51.50740, -0.12780";
+        info.creator          = "Photographer";
+        info.copyright        = "Copyright 2024";
+        info.description      = "A photograph";
+        info.software         = "Afterglow";
         tray.setInfo(info);
 
         const QStringList vals = valueTexts(&tray);
-        QCOMPARE(vals.size(), 6);
+        QCOMPARE(vals.size(), 21);
         QCOMPARE(vals[0], info.filename);
-        QCOMPARE(vals[1], info.dimensions);
-        QCOMPARE(vals[2], info.camera);
-        QCOMPARE(vals[3], info.lens);
-        QCOMPARE(vals[4], info.exposure);
-        QCOMPARE(vals[5], info.captured);
+        QCOMPARE(vals[1], info.fileType);
+        QCOMPARE(vals[2], info.fileSize);
+        QCOMPARE(vals[3], info.dimensions);
+        QCOMPARE(vals[4], info.camera);
+        QCOMPARE(vals[5], info.lens);
+        QCOMPARE(vals[6], info.serial);
+        QCOMPARE(vals[7], info.exposure);
+        QCOMPARE(vals[20], info.software);
     }
 
     void clearResetsToDashes() {

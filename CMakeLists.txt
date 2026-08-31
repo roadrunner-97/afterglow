@@ -61,6 +61,7 @@ find_package(OpenCL REQUIRED)
 # LibRaw for RAW file support — required.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBRAW REQUIRED libraw)
+pkg_check_modules(LIBEXIF libexif)
 
 # ============================================================================
 # Widgets Library
@@ -105,6 +106,8 @@ add_library(photoeditor_core STATIC
     src/core/GpuDeviceRegistry.h
     src/core/GpuPipeline.cpp
     src/core/GpuPipeline.h
+    src/core/MetadataReader.cpp
+    src/core/MetadataReader.h
     src/core/IGpuEffect.h
     src/core/IInteractiveEffect.h
     src/core/ICropSource.h
@@ -150,6 +153,11 @@ target_compile_definitions(photoeditor_core PUBLIC HAVE_OPENCL)
 
 target_link_libraries(photoeditor_core PRIVATE ${LIBRAW_LIBRARIES})
 target_include_directories(photoeditor_core PRIVATE ${LIBRAW_INCLUDE_DIRS})
+if(LIBEXIF_FOUND)
+    target_compile_definitions(photoeditor_core PRIVATE HAVE_LIBEXIF)
+    target_link_libraries(photoeditor_core PRIVATE ${LIBEXIF_LIBRARIES})
+    target_include_directories(photoeditor_core PRIVATE ${LIBEXIF_INCLUDE_DIRS})
+endif()
 
 target_include_directories(photoeditor_core
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/core>

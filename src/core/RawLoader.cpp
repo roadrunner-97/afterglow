@@ -21,6 +21,7 @@ static void fillExifFields(LibRaw &raw, ImageMetadata &meta) {
 
     meta.cameraMake  = QString::fromLatin1(idata.make).trimmed();
     meta.cameraModel = QString::fromLatin1(idata.model).trimmed();
+    meta.pixelSize   = QSize(static_cast<int>(raw.imgdata.sizes.width), static_cast<int>(raw.imgdata.sizes.height));
 
     // libraw_lensinfo.Lens is the resolved human-readable lens string;
     // fall back to LensMake + makernotes Lens when it's blank.
@@ -28,10 +29,25 @@ static void fillExifFields(LibRaw &raw, ImageMetadata &meta) {
     if (lensName.isEmpty()) lensName = QString::fromLatin1(lens.makernotes.Lens).trimmed();
     meta.lens = lensName;
 
-    meta.isoSpeed   = other.iso_speed;
-    meta.shutterSec = other.shutter;
-    meta.aperture   = other.aperture;
-    meta.focalLenMm = other.focal_len;
+    meta.isoSpeed    = other.iso_speed;
+    meta.shutterSec  = other.shutter;
+    meta.aperture    = other.aperture;
+    meta.focalLenMm  = other.focal_len;
+    meta.artist      = QString::fromLatin1(other.artist).trimmed();
+    meta.description = QString::fromLatin1(other.desc).trimmed();
+
+    const auto &gps = other.parsed_gps;
+    if (gps.gpsparsed) {
+        const auto decimal = [](const float value[3]) {
+            return static_cast<double>(value[0]) + static_cast<double>(value[1]) / 60.0 +
+                   static_cast<double>(value[2]) / 3600.0;
+        };
+        double latitude  = decimal(gps.latitude);
+        double longitude = decimal(gps.longitude);
+        if (gps.latref == 'S') latitude = -latitude;
+        if (gps.longref == 'W') longitude = -longitude;
+        meta.location = QString::number(latitude, 'f', 5) + QStringLiteral(", ") + QString::number(longitude, 'f', 5);
+    }
 
     if (other.timestamp > 0) meta.captureTime = QDateTime::fromSecsSinceEpoch(other.timestamp);
 }

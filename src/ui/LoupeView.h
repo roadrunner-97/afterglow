@@ -6,6 +6,7 @@
 #include <QPointF>
 #include "GridView.h"
 #include "ImageMetadata.h"
+#include "MetadataTray.h"
 
 class QLabel;
 class QPushButton;
@@ -35,7 +36,7 @@ public:
 
     // Push EXIF / camera fields into the sidebar table.  Pass an empty
     // ImageMetadata to clear all rows back to "—".
-    void setMetadata(const ImageMetadata &meta);
+    void setMetadata(const MetadataTray::Info &info);
 
     // Reflect the currently-stored mark in the sidebar buttons.  None
     // leaves all three buttons unchecked.
@@ -113,22 +114,15 @@ private:
     // Sidebar widgets — all live as direct children of LoupeView and are
     // positioned manually in resizeEvent().  Holding pointers here lets
     // setMetadata() swap text without rebuilding the layout.
-    QWidget     *m_sidebar        = nullptr;
-    QPushButton *m_btnAccept      = nullptr;
-    QPushButton *m_btnRefine      = nullptr;
-    QPushButton *m_btnDecline     = nullptr;
-    QPushButton *m_btnCameraJpeg  = nullptr;
-    QPushButton *m_btnOriginalRaw = nullptr;
-    QPushButton *m_btnEditedRaw   = nullptr;
-    QLabel      *m_proofingLabel  = nullptr; // "Proofing…" overlay
-    QLabel      *m_valCamera      = nullptr;
-    QLabel      *m_valLens        = nullptr;
-    QLabel      *m_valIso         = nullptr;
-    QLabel      *m_valShutter     = nullptr;
-    QLabel      *m_valAperture    = nullptr;
-    QLabel      *m_valFocal       = nullptr;
-    QLabel      *m_valDate        = nullptr;
-    QLabel      *m_valTempK       = nullptr;
+    QWidget      *m_sidebar        = nullptr;
+    QPushButton  *m_btnAccept      = nullptr;
+    QPushButton  *m_btnRefine      = nullptr;
+    QPushButton  *m_btnDecline     = nullptr;
+    QPushButton  *m_btnCameraJpeg  = nullptr;
+    QPushButton  *m_btnOriginalRaw = nullptr;
+    QPushButton  *m_btnEditedRaw   = nullptr;
+    QLabel       *m_proofingLabel  = nullptr; // "Proofing…" overlay
+    MetadataTray *m_metadataTray   = nullptr;
 
     GridView::Mark m_currentMark = GridView::Mark::None;
 };
