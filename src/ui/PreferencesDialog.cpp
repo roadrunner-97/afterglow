@@ -27,7 +27,11 @@ PreferencesDialog::PreferencesDialog(EffectManager *effects, QWidget *parent)
     resize(720, 480);
 
     m_pages->setObjectName("preferencesPages");
-    m_pages->setMaximumWidth(160);
+    m_pages->setFixedWidth(140);
+    m_pages->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_pages->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_pages->setSpacing(2);
+    m_pages->setStyleSheet("QListWidget { padding: 6px; } QListWidget::item { padding: 6px 8px; }");
     m_pages->addItems({"Effects", "Processing"});
 
     auto *effectsPage = new EffectOrganizerWidget(effects, this);

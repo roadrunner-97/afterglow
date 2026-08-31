@@ -140,7 +140,11 @@ private slots:
 
         auto *dialog = app.findChild<PreferencesDialog *>("preferencesDialog");
         QVERIFY(dialog);
-        QVERIFY(dialog->findChild<QListWidget *>("preferencesPages"));
+        auto *pages = dialog->findChild<QListWidget *>("preferencesPages");
+        QVERIFY(pages);
+        QCOMPARE(pages->width(), 140);
+        QCOMPARE(pages->horizontalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
+        QCOMPARE(pages->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
         QVERIFY(dialog->findChild<QWidget *>("gpuDeviceSelector"));
     }
 

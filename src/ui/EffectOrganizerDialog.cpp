@@ -28,7 +28,9 @@ EffectOrganizerWidget::EffectOrganizerWidget(EffectManager *effects, QWidget *pa
     setObjectName("effectOrganizerPage");
 
     auto *layout = new QVBoxLayout(this);
-    auto *hint   = new QLabel("Drag effects between the lists. Drag within Enabled Effects to set processing order.");
+    layout->setContentsMargins(12, 6, 6, 6);
+    layout->setSpacing(10);
+    auto *hint = new QLabel("Drag effects between the lists. Drag within Enabled Effects to set processing order.");
     hint->setWordWrap(true);
     layout->addWidget(hint);
 
