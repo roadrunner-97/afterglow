@@ -174,6 +174,8 @@ add_library(photoeditor_ui STATIC
     src/ui/GridView.h
     src/ui/LoupeView.cpp
     src/ui/LoupeView.h
+    src/ui/LinearGradientTool.cpp
+    src/ui/LinearGradientTool.h
     src/ui/Stylesheets.cpp
     src/ui/Stylesheets.h
     src/ui/ViewportWidget.cpp

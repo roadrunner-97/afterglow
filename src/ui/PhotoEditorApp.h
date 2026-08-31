@@ -32,6 +32,7 @@ class LoupeView;
 class QThreadPool;
 class UiServices;
 class PreferencesDialog;
+class LinearGradientTool;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -150,16 +151,17 @@ private:
     QString                     m_latestDevelopPreviewPath;
     QString                     m_lastDir;
 
-    QStackedWidget *m_stack           = nullptr;
-    GridView       *m_gridView        = nullptr;
-    LoupeView      *m_loupeView       = nullptr;
-    ViewportWidget *m_viewport        = nullptr;
-    QActionGroup   *m_modeGroup       = nullptr;
-    QLabel         *m_processingLabel = nullptr;
-    QTimer         *m_resizeDebounce  = nullptr;
-    QTimer         *m_panThrottle     = nullptr; // trailing edge of pan throttle
-    QThreadPool    *m_thumbnailPool   = nullptr;
-    QElapsedTimer   m_lastPanDispatch; // invalid until first dispatch
+    QStackedWidget     *m_stack              = nullptr;
+    GridView           *m_gridView           = nullptr;
+    LoupeView          *m_loupeView          = nullptr;
+    ViewportWidget     *m_viewport           = nullptr;
+    LinearGradientTool *m_linearGradientTool = nullptr;
+    QActionGroup       *m_modeGroup          = nullptr;
+    QLabel             *m_processingLabel    = nullptr;
+    QTimer             *m_resizeDebounce     = nullptr;
+    QTimer             *m_panThrottle        = nullptr; // trailing edge of pan throttle
+    QThreadPool        *m_thumbnailPool      = nullptr;
+    QElapsedTimer       m_lastPanDispatch; // invalid until first dispatch
 
     QString                                m_currentFolder;
     QStringList                            m_currentPaths;  // photos shown in the gallery, in display order

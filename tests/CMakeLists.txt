@@ -8,6 +8,16 @@ set_target_properties(test_linear_gradient_mask PROPERTIES
 )
 add_test(NAME LinearGradientMask COMMAND test_linear_gradient_mask)
 
+add_executable(test_linear_gradient_tool ui/test_linear_gradient_tool.cpp)
+target_link_libraries(test_linear_gradient_tool PRIVATE photoeditor_ui photoeditor_core Qt6::Test Qt6::Widgets Qt6::Gui)
+target_include_directories(test_linear_gradient_tool PRIVATE ${CMAKE_SOURCE_DIR}/src/ui)
+set_target_properties(test_linear_gradient_tool PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME LinearGradientTool COMMAND test_linear_gradient_tool)
+set_tests_properties(LinearGradientTool PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(test_cache_purger core/test_cache_purger.cpp)
 target_link_libraries(test_cache_purger PRIVATE photoeditor_core Qt6::Test Qt6::Core)
 set_target_properties(test_cache_purger PROPERTIES

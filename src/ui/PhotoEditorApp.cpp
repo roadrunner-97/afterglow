@@ -7,6 +7,7 @@
 #include "ExportPath.h"
 #include "ExportResize.h"
 #include "LoupeView.h"
+#include "LinearGradientTool.h"
 #include "GpuDeviceRegistry.h"
 #include "Histogram.h"
 #include <QtConcurrent/QtConcurrent>
@@ -22,6 +23,8 @@
 #include <QHBoxLayout>
 #include <QSplitter>
 #include <QPushButton>
+#include <QCheckBox>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QActionGroup>
@@ -435,6 +438,56 @@ void PhotoEditorApp::setupUI() {
     QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(8, 8, 8, 8);
     rightLayout->setSpacing(6);
+
+    QWidget *localPanel = new QWidget();
+    localPanel->setObjectName("localAdjustmentsPanel");
+    QVBoxLayout *localLayout = new QVBoxLayout(localPanel);
+    localLayout->setContentsMargins(6, 4, 6, 6);
+    auto *localTitle = new QLabel("<b>Local Adjustments (Prototype)</b>");
+    localLayout->addWidget(localTitle);
+    auto *localHint = new QLabel("Overlay only — does not alter the image or export yet.");
+    localHint->setWordWrap(true);
+    localLayout->addWidget(localHint);
+    auto *localButtons = new QHBoxLayout();
+    auto *addGradient  = new QPushButton("Linear Gradient");
+    addGradient->setObjectName("addLinearGradientButton");
+    auto *invertGradient = new QPushButton("Invert");
+    invertGradient->setObjectName("invertLinearGradientButton");
+    invertGradient->setCheckable(true);
+    auto *deleteGradient = new QPushButton("Delete");
+    deleteGradient->setObjectName("deleteLinearGradientButton");
+    invertGradient->setEnabled(false);
+    deleteGradient->setEnabled(false);
+    localButtons->addWidget(addGradient);
+    localButtons->addWidget(invertGradient);
+    localButtons->addWidget(deleteGradient);
+    localLayout->addLayout(localButtons);
+    auto *showOverlay = new QCheckBox("Show overlay");
+    showOverlay->setObjectName("showLinearGradientOverlayCheck");
+    showOverlay->setChecked(true);
+    localLayout->addWidget(showOverlay);
+    rightLayout->addWidget(localPanel);
+
+    m_linearGradientTool = new LinearGradientTool(this);
+    connect(addGradient, &QPushButton::clicked, this, [this]() {
+        m_viewport->setActiveInteractiveEffect(m_linearGradientTool);
+        m_linearGradientTool->beginCreation();
+        m_viewport->setFocus();
+    });
+    connect(invertGradient, &QPushButton::toggled, m_linearGradientTool, &LinearGradientTool::setInverted);
+    connect(deleteGradient, &QPushButton::clicked, m_linearGradientTool, &LinearGradientTool::clearMask);
+    connect(showOverlay, &QCheckBox::toggled, m_linearGradientTool, &LinearGradientTool::setOverlayVisible);
+    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, m_viewport,
+            QOverload<>::of(&ViewportWidget::update));
+    connect(m_linearGradientTool, &LinearGradientTool::maskChanged, this, [this, invertGradient, deleteGradient]() {
+        const bool hasMask = m_linearGradientTool->hasMask();
+        invertGradient->setEnabled(hasMask);
+        deleteGradient->setEnabled(hasMask);
+        const QSignalBlocker blocker(invertGradient);
+        invertGradient->setChecked(hasMask && m_linearGradientTool->mask()->isInverted());
+    });
+    connect(m_linearGradientTool, &LinearGradientTool::creationModeChanged, addGradient,
+            [addGradient](bool creating) { addGradient->setText(creating ? "Drag on image…" : "Linear Gradient"); });
 
     QScrollArea *effectsScroll = new QScrollArea();
     effectsScroll->setWidgetResizable(true);

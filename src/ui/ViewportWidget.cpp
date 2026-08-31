@@ -235,7 +235,7 @@ void ViewportWidget::setImageRotation(float angleDeg, QPointF pivotNorm) {
 }
 
 ViewportTransform ViewportWidget::currentTransform() const {
-    return ViewportTransform{m_imageSize, size(), m_center, m_zoom};
+    return ViewportTransform{m_imageSize, size(), m_center, m_zoom, m_imgAngleDeg, m_imgPivotNorm};
 }
 
 ViewportRequest ViewportWidget::viewportRequest() const {
@@ -245,6 +245,11 @@ ViewportRequest ViewportWidget::viewportRequest() const {
 // ── Pan / zoom ───────────────────────────────────────────────────────────────
 
 void ViewportWidget::keyPressEvent(QKeyEvent *event) {
+    if (m_active && m_active->keyPress(event)) {
+        update();
+        event->accept();
+        return;
+    }
     if (m_imageSize.isEmpty()) {
         event->ignore();
         return;

@@ -481,6 +481,16 @@ private slots:
         QCOMPARE(p.y(), 70.0);
     }
 
+    void viewportTransform_rotatedMapping_roundTrips() {
+        ViewportTransform vt{{200, 100}, {200, 100}, {0.5, 0.5}, 1.0f, 90.0f, {0.5, 0.5}};
+        const QPointF     screen = vt.rotatedSourceToScreen({150.0, 50.0});
+        QVERIFY(std::abs(screen.x() - 100.0) < 1e-9);
+        QVERIFY(std::abs(screen.y() - 0.0) < 1e-9);
+        const QPointF source = vt.screenToRotatedSource(screen);
+        QVERIFY(std::abs(source.x() - 150.0) < 1e-9);
+        QVERIFY(std::abs(source.y() - 50.0) < 1e-9);
+    }
+
     // ── Mouse outside the crop rect — not claimed ────────────────────────────
 
     void mousePress_outsideCrop_notClaimed() {
