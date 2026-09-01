@@ -1,5 +1,7 @@
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
+#include <QFontComboBox>
 #include <QSignalSpy>
 #include <QStackedWidget>
 #include <QListWidget>
@@ -9,6 +11,7 @@
 #include <QWheelEvent>
 #include <QPushButton>
 #include <QSettings>
+#include <QSpinBox>
 
 #include "EffectManager.h"
 #include "EffectOrganizerDialog.h"
@@ -167,6 +170,38 @@ private slots:
         QCOMPARE(pages->horizontalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
         QCOMPARE(pages->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
         QVERIFY(dialog->findChild<QWidget *>("gpuDeviceSelector"));
+    }
+
+    void preferencesAppearancePrototypeProvidesSafeReset() {
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.findChild<QAction *>("actionPreferences")->trigger();
+
+        auto *dialog = app.findChild<PreferencesDialog *>("preferencesDialog");
+        QVERIFY(dialog);
+        auto *pages = dialog->findChild<QListWidget *>("preferencesPages");
+        QVERIFY(pages);
+        QCOMPARE(pages->count(), 3);
+        QCOMPARE(pages->item(2)->text(), QString("Appearance"));
+
+        auto *theme = dialog->findChild<QComboBox *>("themeSelector");
+        auto *font  = dialog->findChild<QFontComboBox *>("interfaceFontSelector");
+        auto *size  = dialog->findChild<QSpinBox *>("interfaceFontSizeSelector");
+        auto *reset = dialog->findChild<QPushButton *>("resetAppearanceButton");
+        QVERIFY(theme);
+        QVERIFY(font);
+        QVERIFY(size);
+        QVERIFY(reset);
+        QCOMPARE(theme->count(), 3);
+        QCOMPARE(size->minimum(), 8);
+        QCOMPARE(size->maximum(), 24);
+
+        theme->setCurrentIndex(2);
+        size->setValue(24);
+        reset->click();
+        QCOMPARE(theme->currentIndex(), 0);
+        QCOMPARE(font->currentFont().family(), QApplication::font().family());
+        QCOMPARE(size->value(), QApplication::font().pointSize() > 0 ? QApplication::font().pointSize() : 10);
     }
 
     void injectedOpenImageRunsDevelopWorkflowWithoutNativeDialogs() {

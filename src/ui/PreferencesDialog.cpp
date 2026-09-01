@@ -3,11 +3,16 @@
 #include "EffectManager.h"
 #include "GpuDeviceRegistry.h"
 #include <QComboBox>
+#include <QApplication>
 #include <QDialogButtonBox>
+#include <QFontComboBox>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QLabel>
 #include <QListWidget>
+#include <QPushButton>
 #include <QSettings>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -32,7 +37,7 @@ PreferencesDialog::PreferencesDialog(EffectManager *effects, QWidget *parent)
     m_pages->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_pages->setSpacing(2);
     m_pages->setStyleSheet("QListWidget { padding: 6px; } QListWidget::item { padding: 6px 8px; }");
-    m_pages->addItems({"Effects", "Processing"});
+    m_pages->addItems({"Effects", "Processing", "Appearance"});
 
     auto *effectsPage = new EffectOrganizerWidget(effects, this);
     connect(effectsPage, &EffectOrganizerWidget::organizationChanged, this,
@@ -66,6 +71,106 @@ PreferencesDialog::PreferencesDialog(EffectManager *effects, QWidget *parent)
     processingLayout->addLayout(form);
     processingLayout->addStretch();
     m_stack->addWidget(processingPage);
+
+    auto *appearancePage   = new QWidget(this);
+    auto *appearanceLayout = new QVBoxLayout(appearancePage);
+    auto *appearanceHeading = new QLabel("Appearance");
+    QFont appearanceHeadingFont = appearanceHeading->font();
+    appearanceHeadingFont.setBold(true);
+    appearanceHeading->setFont(appearanceHeadingFont);
+    appearanceLayout->addWidget(appearanceHeading);
+
+    auto *appearanceDescription = new QLabel(
+        "Choose how Afterglow looks and how large its interface text appears.");
+    appearanceDescription->setWordWrap(true);
+    appearanceLayout->addWidget(appearanceDescription);
+
+    auto *appearanceForm = new QFormLayout();
+    auto *themeSelector  = new QComboBox(appearancePage);
+    themeSelector->setObjectName("themeSelector");
+    themeSelector->addItems({"Follow system", "Light", "Dark"});
+    appearanceForm->addRow("Theme", themeSelector);
+
+    auto *fontSelector = new QFontComboBox(appearancePage);
+    fontSelector->setObjectName("interfaceFontSelector");
+    fontSelector->setCurrentFont(QApplication::font());
+    appearanceForm->addRow("Interface font", fontSelector);
+
+    auto *fontSizeSelector = new QSpinBox(appearancePage);
+    fontSizeSelector->setObjectName("interfaceFontSizeSelector");
+    fontSizeSelector->setRange(8, 24);
+    fontSizeSelector->setSuffix(" pt");
+    fontSizeSelector->setValue(QApplication::font().pointSize() > 0 ? QApplication::font().pointSize() : 10);
+    appearanceForm->addRow("Text size", fontSizeSelector);
+    appearanceLayout->addLayout(appearanceForm);
+
+    auto *preview = new QGroupBox("Preview", appearancePage);
+    preview->setObjectName("appearancePreview");
+    auto *previewLayout = new QVBoxLayout(preview);
+    auto *previewTitle  = new QLabel("Exposure", preview);
+    previewTitle->setObjectName("appearancePreviewTitle");
+    QFont previewTitleFont = previewTitle->font();
+    previewTitleFont.setBold(true);
+    previewTitle->setFont(previewTitleFont);
+    auto *previewText = new QLabel("Adjust the brightness of your photograph without changing its colours.", preview);
+    previewText->setWordWrap(true);
+    auto *previewButton = new QPushButton("Sample button", preview);
+    previewButton->setEnabled(false);
+    previewLayout->addWidget(previewTitle);
+    previewLayout->addWidget(previewText);
+    previewLayout->addWidget(previewButton, 0, Qt::AlignLeft);
+    appearanceLayout->addWidget(preview);
+
+    auto *resetAppearance = new QPushButton("Reset appearance defaults", appearancePage);
+    resetAppearance->setObjectName("resetAppearanceButton");
+    resetAppearance->setToolTip("Restore the system theme, default interface font, and default text size.");
+    appearanceLayout->addWidget(resetAppearance, 0, Qt::AlignLeft);
+    appearanceLayout->addStretch();
+    m_stack->addWidget(appearancePage);
+
+    const QPalette systemPreviewPalette = preview->palette();
+    auto updatePreview = [themeSelector, fontSelector, fontSizeSelector, preview, previewTitle, previewText,
+                          previewButton, systemPreviewPalette]() {
+        QFont previewFont(fontSelector->currentFont());
+        previewFont.setPointSize(fontSizeSelector->value());
+        preview->setFont(previewFont);
+        previewTitle->setFont(QFont(previewFont.family(), previewFont.pointSize(), QFont::Bold));
+        previewText->setFont(previewFont);
+        previewButton->setFont(previewFont);
+
+        QPalette palette = systemPreviewPalette;
+        if (themeSelector->currentIndex() == 1) {
+            palette.setColor(QPalette::Window, QColor("#F4F1EA"));
+            palette.setColor(QPalette::WindowText, QColor("#2C2018"));
+            palette.setColor(QPalette::Button, QColor("#E6E0D4"));
+            palette.setColor(QPalette::ButtonText, QColor("#2C2018"));
+        } else if (themeSelector->currentIndex() == 2) {
+            palette.setColor(QPalette::Window, QColor("#25272B"));
+            palette.setColor(QPalette::WindowText, QColor("#ECEDEF"));
+            palette.setColor(QPalette::Button, QColor("#35383E"));
+            palette.setColor(QPalette::ButtonText, QColor("#ECEDEF"));
+        }
+        preview->setAutoFillBackground(true);
+        preview->setPalette(palette);
+        previewTitle->setPalette(palette);
+        previewText->setPalette(palette);
+        previewButton->setPalette(palette);
+    };
+    connect(themeSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [updatePreview](int) { updatePreview(); });
+    connect(fontSelector, &QFontComboBox::currentFontChanged, this,
+            [updatePreview](const QFont &) { updatePreview(); });
+    connect(fontSizeSelector, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [updatePreview](int) { updatePreview(); });
+    connect(resetAppearance, &QPushButton::clicked, this,
+            [themeSelector, fontSelector, fontSizeSelector, updatePreview]() {
+                themeSelector->setCurrentIndex(0);
+                fontSelector->setCurrentFont(QApplication::font());
+                fontSizeSelector->setValue(QApplication::font().pointSize() > 0 ? QApplication::font().pointSize()
+                                                                                 : 10);
+                updatePreview();
+            });
+    updatePreview();
 
     auto *content = new QHBoxLayout();
     content->addWidget(m_pages);
