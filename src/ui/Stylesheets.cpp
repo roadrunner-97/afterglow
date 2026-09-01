@@ -1,63 +1,59 @@
 #include "Stylesheets.h"
-#include "Theme.h"
 
 namespace Stylesheets {
 
 QString toolbar() {
-    return QString("QToolBar { background: %1; border-bottom: 1px solid %2; spacing: 6px; padding: 2px 6px; }"
-                   "QToolButton { color: %3; background: transparent; border: 1px solid %2;"
+    return QString("QToolBar { background: palette(window); border-bottom: 1px solid palette(mid); spacing: 6px; "
+                   "padding: 2px 6px; }"
+                   "QToolButton { color: palette(window-text); background: transparent; border: 1px solid palette(mid);"
                    "  border-radius: 3px; padding: 3px 10px; }"
-                   "QToolButton:checked { color: %4; background: %5; border-color: %5; }"
-                   "QToolButton:hover { background: %6; }")
-        .arg(Theme::BG_MAIN, Theme::BORDER, Theme::TEXT_PRIMARY, Theme::CHECKED_TEXT, Theme::CHECKED_BG,
-             Theme::COLLAPSE_HOVER);
+                   "QToolButton:checked { color: palette(highlighted-text); background: palette(highlight); "
+                   "border-color: palette(highlight); }"
+                   "QToolButton:hover { background: palette(button); }");
 }
 
 QString processingLabel() {
-    return QString("color: %1; font-style: italic; padding: 0 6px;").arg(Theme::TEXT_SECONDARY);
+    return "color: palette(mid); font-style: italic; padding: 0 6px;";
 }
 
 QString menuBar() {
-    return QString("QMenuBar { background: %1; color: %2; border-bottom: 1px solid %3; }"
-                   "QMenuBar::item { padding: 4px 8px; }"
-                   "QMenuBar::item:selected { background: %4; border-radius: 3px; }"
-                   "QMenu { background: %5; color: %2; border: 1px solid %3; }"
-                   "QMenu::item { padding: 4px 20px; }"
-                   "QMenu::item:selected { background: %6; color: %7; }"
-                   "QMenu::separator { height: 1px; background: %3; margin: 2px 0; }")
-        .arg(Theme::BG_MAIN, Theme::TEXT_PRIMARY, Theme::BORDER, Theme::COLLAPSE_HOVER, Theme::BG_EFFECT_PANEL,
-             Theme::CHECKED_BG, Theme::CHECKED_TEXT);
+    return QString(
+        "QMenuBar { background: palette(window); color: palette(window-text); border-bottom: 1px solid palette(mid); }"
+        "QMenuBar::item { padding: 4px 8px; }"
+        "QMenuBar::item:selected { background: palette(button); border-radius: 3px; }"
+        "QMenu { background: palette(window); color: palette(window-text); border: 1px solid palette(mid); }"
+        "QMenu::item { padding: 4px 20px; }"
+        "QMenu::item:selected { background: palette(highlight); color: palette(highlighted-text); }"
+        "QMenu::separator { height: 1px; background: palette(mid); margin: 2px 0; }");
 }
 
 QString gpuSelectorLabel() {
-    return QString("color: %1; font-size: 10px; text-transform: uppercase;").arg(Theme::TEXT_SECONDARY);
+    return "color: palette(mid); text-transform: uppercase;";
 }
 
 QString gpuSelector() {
-    return QString("QComboBox { color: %1; background-color: %2;"
-                   "  border: 1px solid %3; border-radius: 3px; padding: 4px; }"
+    return QString("QComboBox { color: palette(text); background-color: palette(base);"
+                   "  border: 1px solid palette(mid); border-radius: 3px; padding: 4px; }"
                    "QComboBox::drop-down { border: none; }"
-                   "QComboBox QAbstractItemView { color: %1; background-color: %2; }")
-        .arg(Theme::TEXT_PRIMARY, Theme::BG_EFFECT_PANEL, Theme::BORDER);
+                   "QComboBox QAbstractItemView { color: palette(text); background-color: palette(base); }");
 }
 
 QString effectPanel() {
-    return QString("QWidget { background-color: %1; border-radius: 4px; }").arg(Theme::BG_EFFECT_PANEL);
+    return "QWidget { background-color: palette(base); border-radius: 4px; }";
 }
 
 QString effectTitle() {
-    return QString("color: %1; background: transparent;").arg(Theme::TEXT_PRIMARY);
+    return "color: palette(text); background: transparent;";
 }
 
 QString collapseButton() {
-    return QString("QPushButton { background: %1; color: %2; border: none;"
+    return QString("QPushButton { background: palette(button); color: palette(button-text); border: none;"
                    "  border-radius: 3px; padding: 1px 5px; font-weight: bold; }"
-                   "QPushButton:hover { background: %3; }")
-        .arg(Theme::COLLAPSE_BG, Theme::TEXT_PRIMARY, Theme::COLLAPSE_HOVER);
+                   "QPushButton:hover { background: palette(mid); }");
 }
 
 QString panelSeparator() {
-    return QString("color: %1;").arg(Theme::BORDER_PANEL);
+    return "color: palette(mid);";
 }
 
 } // namespace Stylesheets

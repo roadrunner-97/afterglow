@@ -172,7 +172,9 @@ private slots:
         QVERIFY(dialog->findChild<QWidget *>("gpuDeviceSelector"));
     }
 
-    void preferencesAppearancePrototypeProvidesSafeReset() {
+    void preferencesAppearanceAppliesAndProvidesSafeReset() {
+        QSettings settings("Afterglow", "Afterglow");
+        settings.remove("appearance");
         EffectManager  effects;
         PhotoEditorApp app(&effects);
         app.findChild<QAction *>("actionPreferences")->trigger();
@@ -198,10 +200,16 @@ private slots:
 
         theme->setCurrentIndex(2);
         size->setValue(24);
+        QCOMPARE(settings.value("appearance/theme").toString(), QString("dark"));
+        QCOMPARE(settings.value("appearance/fontSize").toInt(), 24);
+        QCOMPARE(QApplication::palette().color(QPalette::Window), QColor("#25272B"));
         reset->click();
         QCOMPARE(theme->currentIndex(), 0);
         QCOMPARE(font->currentFont().family(), QApplication::font().family());
         QCOMPARE(size->value(), QApplication::font().pointSize() > 0 ? QApplication::font().pointSize() : 10);
+        QVERIFY(!settings.contains("appearance/theme"));
+        QVERIFY(!settings.contains("appearance/fontFamily"));
+        QVERIFY(!settings.contains("appearance/fontSize"));
     }
 
     void injectedOpenImageRunsDevelopWorkflowWithoutNativeDialogs() {

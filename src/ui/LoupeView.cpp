@@ -90,9 +90,8 @@ LoupeView::LoupeView(QWidget *parent) : QWidget(parent) {
 void LoupeView::buildSidebar() {
     m_sidebar = new QWidget(this);
     m_sidebar->setObjectName("loupeSidebar");
-    m_sidebar->setStyleSheet("QLabel { font-size: 14px; }"
-                             "QLabel[role=\"key\"]     { font-size: 13px; letter-spacing: 1px; }"
-                             "QLabel[role=\"section\"] { font-size: 13px; letter-spacing: 1px; padding-top: 4px; }");
+    m_sidebar->setStyleSheet("QLabel[role=\"key\"]     { letter-spacing: 1px; }"
+                             "QLabel[role=\"section\"] { letter-spacing: 1px; padding-top: 4px; }");
 
     auto *outer = new QVBoxLayout(m_sidebar);
     outer->setContentsMargins(14, 14, 14, 14);

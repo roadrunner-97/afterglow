@@ -162,6 +162,8 @@ set_target_properties(photoeditor_core PROPERTIES AUTOMOC ON)
 # ============================================================================
 
 add_library(photoeditor_ui STATIC
+    src/ui/Appearance.cpp
+    src/ui/Appearance.h
     src/ui/EffectOrganizerDialog.cpp
     src/ui/EffectOrganizerDialog.h
     src/ui/PhotoEditorApp.cpp

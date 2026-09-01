@@ -335,7 +335,6 @@ QWidget *DenoiseEffect::createControlsWidget() {
     layout->setSpacing(8);
 
     QLabel *algoLabel = new QLabel("Algorithm:");
-    algoLabel->setStyleSheet("color: #2C2018;");
     layout->addWidget(algoLabel);
 
     m_algorithmCombo = new QComboBox();
@@ -344,10 +343,6 @@ QWidget *DenoiseEffect::createControlsWidget() {
     m_algorithmCombo->setToolTip(
         "Gaussian blend: blurs the image and mixes with the original — cheap but cannot tell noise from detail.\n"
         "Bilateral: edge-aware; smooths flat regions while preserving tonal edges. Slower.");
-    m_algorithmCombo->setStyleSheet("QComboBox { color: #2C2018; background-color: #F4F1EA;"
-                                    "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
-                                    "QComboBox::drop-down { border: none; }"
-                                    "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
     layout->addWidget(m_algorithmCombo);
     connect(m_algorithmCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         m_algorithm = index;

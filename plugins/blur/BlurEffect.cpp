@@ -102,7 +102,6 @@ QWidget *BlurEffect::createControlsWidget() {
 
     // Blur type
     QLabel *typeLabel = new QLabel("Blur type:");
-    typeLabel->setStyleSheet("color: #2C2018;");
     layout->addWidget(typeLabel);
 
     blurTypeCombo = new QComboBox();
@@ -110,10 +109,6 @@ QWidget *BlurEffect::createControlsWidget() {
     blurTypeCombo->addItem("Box");
     blurTypeCombo->setToolTip("Gaussian: bell-curve weights for a soft, natural-looking blur.\nBox: uniform weights, "
                               "slightly harder-edged but faster at large radii.");
-    blurTypeCombo->setStyleSheet("QComboBox { color: #2C2018; background-color: #F4F1EA;"
-                                 "            border: 1px solid #CCC5B5; border-radius: 3px; padding: 3px; }"
-                                 "QComboBox::drop-down { border: none; }"
-                                 "QComboBox QAbstractItemView { color: #2C2018; background-color: #F4F1EA; }");
     layout->addWidget(blurTypeCombo);
 
     connect(blurTypeCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {

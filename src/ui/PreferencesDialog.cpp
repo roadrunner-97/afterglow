@@ -1,4 +1,5 @@
 #include "PreferencesDialog.h"
+#include "Appearance.h"
 #include "EffectOrganizerDialog.h"
 #include "EffectManager.h"
 #include "GpuDeviceRegistry.h"
@@ -12,6 +13,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -72,35 +74,39 @@ PreferencesDialog::PreferencesDialog(EffectManager *effects, QWidget *parent)
     processingLayout->addStretch();
     m_stack->addWidget(processingPage);
 
-    auto *appearancePage   = new QWidget(this);
-    auto *appearanceLayout = new QVBoxLayout(appearancePage);
-    auto *appearanceHeading = new QLabel("Appearance");
+    auto *appearancePage        = new QWidget(this);
+    auto *appearanceLayout      = new QVBoxLayout(appearancePage);
+    auto *appearanceHeading     = new QLabel("Appearance");
     QFont appearanceHeadingFont = appearanceHeading->font();
     appearanceHeadingFont.setBold(true);
     appearanceHeading->setFont(appearanceHeadingFont);
     appearanceLayout->addWidget(appearanceHeading);
 
-    auto *appearanceDescription = new QLabel(
-        "Choose how Afterglow looks and how large its interface text appears.");
+    auto *appearanceDescription = new QLabel("Choose how Afterglow looks and how large its interface text appears.");
     appearanceDescription->setWordWrap(true);
     appearanceLayout->addWidget(appearanceDescription);
 
     auto *appearanceForm = new QFormLayout();
     auto *themeSelector  = new QComboBox(appearancePage);
     themeSelector->setObjectName("themeSelector");
-    themeSelector->addItems({"Follow system", "Light", "Dark"});
+    int savedThemeIndex = 0;
+    for (const auto &theme : Appearance::themes()) {
+        themeSelector->addItem(theme.name, theme.id);
+        if (theme.id == Appearance::savedThemeId()) savedThemeIndex = themeSelector->count() - 1;
+    }
+    themeSelector->setCurrentIndex(savedThemeIndex);
     appearanceForm->addRow("Theme", themeSelector);
 
     auto *fontSelector = new QFontComboBox(appearancePage);
     fontSelector->setObjectName("interfaceFontSelector");
-    fontSelector->setCurrentFont(QApplication::font());
+    fontSelector->setCurrentFont(QFont(Appearance::savedFontFamily()));
     appearanceForm->addRow("Interface font", fontSelector);
 
     auto *fontSizeSelector = new QSpinBox(appearancePage);
     fontSizeSelector->setObjectName("interfaceFontSizeSelector");
     fontSizeSelector->setRange(8, 24);
     fontSizeSelector->setSuffix(" pt");
-    fontSizeSelector->setValue(QApplication::font().pointSize() > 0 ? QApplication::font().pointSize() : 10);
+    fontSizeSelector->setValue(Appearance::savedFontSize());
     appearanceForm->addRow("Text size", fontSizeSelector);
     appearanceLayout->addLayout(appearanceForm);
 
@@ -128,49 +134,25 @@ PreferencesDialog::PreferencesDialog(EffectManager *effects, QWidget *parent)
     appearanceLayout->addStretch();
     m_stack->addWidget(appearancePage);
 
-    const QPalette systemPreviewPalette = preview->palette();
-    auto updatePreview = [themeSelector, fontSelector, fontSizeSelector, preview, previewTitle, previewText,
-                          previewButton, systemPreviewPalette]() {
-        QFont previewFont(fontSelector->currentFont());
-        previewFont.setPointSize(fontSizeSelector->value());
-        preview->setFont(previewFont);
-        previewTitle->setFont(QFont(previewFont.family(), previewFont.pointSize(), QFont::Bold));
-        previewText->setFont(previewFont);
-        previewButton->setFont(previewFont);
-
-        QPalette palette = systemPreviewPalette;
-        if (themeSelector->currentIndex() == 1) {
-            palette.setColor(QPalette::Window, QColor("#F4F1EA"));
-            palette.setColor(QPalette::WindowText, QColor("#2C2018"));
-            palette.setColor(QPalette::Button, QColor("#E6E0D4"));
-            palette.setColor(QPalette::ButtonText, QColor("#2C2018"));
-        } else if (themeSelector->currentIndex() == 2) {
-            palette.setColor(QPalette::Window, QColor("#25272B"));
-            palette.setColor(QPalette::WindowText, QColor("#ECEDEF"));
-            palette.setColor(QPalette::Button, QColor("#35383E"));
-            palette.setColor(QPalette::ButtonText, QColor("#ECEDEF"));
-        }
-        preview->setAutoFillBackground(true);
-        preview->setPalette(palette);
-        previewTitle->setPalette(palette);
-        previewText->setPalette(palette);
-        previewButton->setPalette(palette);
+    auto applyAppearance = [themeSelector, fontSelector, fontSizeSelector]() {
+        Appearance::saveAndApply(themeSelector->currentData().toString(), fontSelector->currentFont().family(),
+                                 fontSizeSelector->value());
     };
     connect(themeSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [updatePreview](int) { updatePreview(); });
+            [applyAppearance](int) { applyAppearance(); });
     connect(fontSelector, &QFontComboBox::currentFontChanged, this,
-            [updatePreview](const QFont &) { updatePreview(); });
+            [applyAppearance](const QFont &) { applyAppearance(); });
     connect(fontSizeSelector, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            [updatePreview](int) { updatePreview(); });
-    connect(resetAppearance, &QPushButton::clicked, this,
-            [themeSelector, fontSelector, fontSizeSelector, updatePreview]() {
-                themeSelector->setCurrentIndex(0);
-                fontSelector->setCurrentFont(QApplication::font());
-                fontSizeSelector->setValue(QApplication::font().pointSize() > 0 ? QApplication::font().pointSize()
-                                                                                 : 10);
-                updatePreview();
-            });
-    updatePreview();
+            [applyAppearance](int) { applyAppearance(); });
+    connect(resetAppearance, &QPushButton::clicked, this, [themeSelector, fontSelector, fontSizeSelector]() {
+        Appearance::reset();
+        const QSignalBlocker themeBlocker(themeSelector);
+        const QSignalBlocker fontBlocker(fontSelector);
+        const QSignalBlocker sizeBlocker(fontSizeSelector);
+        themeSelector->setCurrentIndex(0);
+        fontSelector->setCurrentFont(QApplication::font());
+        fontSizeSelector->setValue(QApplication::font().pointSize() > 0 ? QApplication::font().pointSize() : 10);
+    });
 
     auto *content = new QHBoxLayout();
     content->addWidget(m_pages);

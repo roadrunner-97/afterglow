@@ -2,6 +2,7 @@
 #include <QFileInfo>
 #include <memory>
 #include "ui/PhotoEditorApp.h"
+#include "ui/Appearance.h"
 #include "core/EffectManager.h"
 #include "core/GpuDeviceRegistry.h"
 #include "HotPixelEffect.h"
@@ -45,6 +46,7 @@ static std::unique_ptr<EffectManager> makeEffects() {
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
+    Appearance::initialize();
 
     GpuDeviceRegistry::instance().enumerate();
 
