@@ -86,6 +86,15 @@ private slots:
         MetadataTray tray;
         QVERIFY(findLabel(&tray, "Metadata") != nullptr);
     }
+
+    void keysUseSecondaryTextAndTrayUsesWindowBackground() {
+        MetadataTray tray;
+        auto        *key = findLabel(&tray, "Camera");
+        QVERIFY(key);
+        QCOMPARE(key->foregroundRole(), QPalette::PlaceholderText);
+        QCOMPARE(tray.backgroundRole(), QPalette::Window);
+        QVERIFY(tray.autoFillBackground());
+    }
 };
 
 QTEST_MAIN(TestMetadataTray)

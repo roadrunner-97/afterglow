@@ -7,6 +7,8 @@
 #include <QVBoxLayout>
 
 MetadataTray::MetadataTray(QWidget *parent) : QWidget(parent) {
+    setAutoFillBackground(true);
+    setBackgroundRole(QPalette::Window);
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
@@ -34,7 +36,7 @@ MetadataTray::MetadataTray(QWidget *parent) : QWidget(parent) {
         QFont kf = k->font();
         kf.setPointSizeF(kf.pointSizeF() * 0.9);
         k->setFont(kf);
-        k->setForegroundRole(QPalette::Mid);
+        k->setForegroundRole(QPalette::PlaceholderText);
         valSlot = new QLabel("\xe2\x80\x94"); // em-dash placeholder
         valSlot->setWordWrap(true);
         fl->addRow(k, valSlot);

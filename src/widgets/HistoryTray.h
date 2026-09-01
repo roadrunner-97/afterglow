@@ -27,11 +27,13 @@ signals:
     void rowActivated(int index); // user clicked row; index 0 = "Original"
 
 private:
+    void changeEvent(QEvent *event) override;
     void toggleCollapsed();
 
     QListWidget *m_list        = nullptr;
     QToolButton *m_collapseBtn = nullptr;
     bool         m_collapsed   = false;
+    int          m_cursor      = 0;
 };
 
 #endif // HISTORYTRAY_H

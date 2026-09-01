@@ -203,6 +203,11 @@ private slots:
         QCOMPARE(settings.value("appearance/theme").toString(), QString("dark"));
         QCOMPARE(settings.value("appearance/fontSize").toInt(), 24);
         QCOMPARE(QApplication::palette().color(QPalette::Window), QColor("#25272B"));
+        QCOMPARE(QApplication::palette().color(QPalette::Text), QColor("#ECEDEF"));
+        QCOMPARE(QApplication::palette().color(QPalette::PlaceholderText), QColor("#A9ACB2"));
+        QVERIFY(QApplication::palette().color(QPalette::Window) != QApplication::palette().color(QPalette::WindowText));
+        QVERIFY(QApplication::palette().color(QPalette::Base) != QApplication::palette().color(QPalette::Text));
+        QVERIFY(QApplication::palette().color(QPalette::Button) != QApplication::palette().color(QPalette::ButtonText));
         reset->click();
         QCOMPARE(theme->currentIndex(), 0);
         QCOMPARE(font->currentFont().family(), QApplication::font().family());

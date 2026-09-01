@@ -1,4 +1,5 @@
 #include "HistoryTray.h"
+#include <QEvent>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -43,6 +44,7 @@ HistoryTray::HistoryTray(QWidget *parent) : QWidget(parent) {
 }
 
 void HistoryTray::setHistory(const QVector<Row> &rows, int cursor) {
+    m_cursor = cursor;
     m_list->clear();
 
     m_list->addItem("Original");
@@ -64,6 +66,16 @@ void HistoryTray::setHistory(const QVector<Row> &rows, int cursor) {
     if (cursor >= 0 && cursor < total) {
         m_list->setCurrentRow(cursor);
         m_list->scrollToItem(m_list->item(cursor));
+    }
+}
+
+void HistoryTray::changeEvent(QEvent *event) {
+    QWidget::changeEvent(event);
+    if (event->type() != QEvent::PaletteChange || !m_list) return;
+
+    const QColor dimColor = palette().color(QPalette::Disabled, QPalette::Text);
+    for (int i = 0; i < m_list->count(); ++i) {
+        m_list->item(i)->setForeground(i > m_cursor ? QBrush(dimColor) : QBrush());
     }
 }
 

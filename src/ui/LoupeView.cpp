@@ -90,6 +90,8 @@ LoupeView::LoupeView(QWidget *parent) : QWidget(parent) {
 void LoupeView::buildSidebar() {
     m_sidebar = new QWidget(this);
     m_sidebar->setObjectName("loupeSidebar");
+    m_sidebar->setAutoFillBackground(true);
+    m_sidebar->setBackgroundRole(QPalette::Window);
     m_sidebar->setStyleSheet("QLabel[role=\"key\"]     { letter-spacing: 1px; }"
                              "QLabel[role=\"section\"] { letter-spacing: 1px; padding-top: 4px; }");
 
@@ -182,8 +184,13 @@ void LoupeView::buildSidebar() {
     auto *scroll = new QScrollArea(m_sidebar);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setBackgroundRole(QPalette::Window);
+    scroll->viewport()->setAutoFillBackground(true);
+    scroll->viewport()->setBackgroundRole(QPalette::Window);
     auto *table = new QWidget(scroll);
-    auto *form  = new QFormLayout(table);
+    table->setAutoFillBackground(true);
+    table->setBackgroundRole(QPalette::Window);
+    auto *form = new QFormLayout(table);
     form->setContentsMargins(0, 0, 0, 0);
     form->setHorizontalSpacing(12);
     form->setVerticalSpacing(6);
@@ -196,6 +203,7 @@ void LoupeView::buildSidebar() {
     auto addRow = [&](const QString &key, QLabel *&valSlot) {
         auto *k = new QLabel(key, table);
         k->setProperty("role", "key");
+        k->setForegroundRole(QPalette::PlaceholderText);
         valSlot = new QLabel("—", table);
         valSlot->setWordWrap(true);
         form->addRow(k, valSlot);
