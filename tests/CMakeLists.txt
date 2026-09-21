@@ -386,6 +386,27 @@ set_tests_properties(HistoryTray PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
+# MetadataReader tests — exercise JPEG EXIF extraction when libexif is present
+# ---------------------------------------------------------------------------
+if(LIBEXIF_FOUND)
+    add_executable(test_metadata_reader
+        core/test_metadata_reader.cpp
+    )
+    target_link_libraries(test_metadata_reader
+        PRIVATE
+            photoeditor_core
+            Qt6::Test Qt6::Core Qt6::Gui
+            ${LIBEXIF_LIBRARIES}
+    )
+    target_include_directories(test_metadata_reader PRIVATE ${LIBEXIF_INCLUDE_DIRS})
+    set_target_properties(test_metadata_reader PROPERTIES
+        AUTOMOC ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+    )
+    add_test(NAME MetadataReader COMMAND test_metadata_reader)
+endif()
+
+# ---------------------------------------------------------------------------
 # MetadataTray tests — widget tests, need offscreen QApplication
 # ---------------------------------------------------------------------------
 add_executable(test_metadata_tray

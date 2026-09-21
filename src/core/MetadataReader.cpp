@@ -86,8 +86,9 @@ bool MetadataReader::read(const QString &filePath, ImageMetadata *metadata) {
     metadata->artist       = entryText(data, EXIF_IFD_0, EXIF_TAG_ARTIST);
     metadata->copyright    = entryText(data, EXIF_IFD_0, EXIF_TAG_COPYRIGHT);
     metadata->description  = entryText(data, EXIF_IFD_0, EXIF_TAG_IMAGE_DESCRIPTION);
-    metadata->pixelSize    = QSize(integerValue(data, EXIF_IFD_EXIF, EXIF_TAG_PIXEL_X_DIMENSION),
-                                   integerValue(data, EXIF_IFD_EXIF, EXIF_TAG_PIXEL_Y_DIMENSION));
+    const int pixelWidth   = integerValue(data, EXIF_IFD_EXIF, EXIF_TAG_PIXEL_X_DIMENSION);
+    const int pixelHeight  = integerValue(data, EXIF_IFD_EXIF, EXIF_TAG_PIXEL_Y_DIMENSION);
+    metadata->pixelSize    = QSize(pixelWidth, pixelHeight);
     metadata->captureTime  = exifDateTime(entryText(data, EXIF_IFD_EXIF, EXIF_TAG_DATE_TIME_ORIGINAL));
     if (!metadata->captureTime.isValid())
         metadata->captureTime = exifDateTime(entryText(data, EXIF_IFD_0, EXIF_TAG_DATE_TIME));

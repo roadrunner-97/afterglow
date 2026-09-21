@@ -110,6 +110,24 @@ private slots:
         QCOMPARE(list->count(), 4);
         QCOMPARE(list->currentRow(), 2);
     }
+
+    void paletteChangeRefreshesRedoTail() {
+        HistoryTray tray;
+        tray.setHistory(makeRows({"A", "B"}), 1);
+        QListWidget *list = listOf(&tray);
+
+        QPalette palette = tray.palette();
+        const QColor disabledText(12, 34, 56);
+        palette.setColor(QPalette::Disabled, QPalette::Text, disabledText);
+        tray.setPalette(palette);
+
+        QEvent event(QEvent::PaletteChange);
+        QApplication::sendEvent(&tray, &event);
+
+        QVERIFY(list->item(0)->foreground().color() != disabledText);
+        QVERIFY(list->item(1)->foreground().color() != disabledText);
+        QCOMPARE(list->item(2)->foreground().color(), disabledText);
+    }
 };
 
 QTEST_MAIN(TestHistoryTray)
