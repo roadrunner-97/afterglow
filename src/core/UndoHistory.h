@@ -38,6 +38,7 @@ public:
 
     bool canUndo() const;
     bool canRedo() const;
+    bool isAtInitialState() const;
 
     // Returns the entry to apply (caller applies from/to values); moves cursor and updates shadow.
     std::optional<Entry> undo();
@@ -61,6 +62,7 @@ private:
     using Shadow = QHash<QString, SettingsImporter::EffectSettings>;
 
     static Shadow buildShadow(const QVector<SettingsImporter::EffectSettings> &v);
+    static void   applyFrom(Shadow &shadow, const Entry &e);
     void          updateShadowFrom(const Entry &e);
     void          updateShadowTo(const Entry &e);
 

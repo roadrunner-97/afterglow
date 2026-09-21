@@ -81,6 +81,25 @@ bool UndoHistory::canRedo() const {
     return m_cursor < m_entries.size();
 }
 
+bool UndoHistory::isAtInitialState() const {
+    if (m_cursor == 0) return true;
+
+    // Reconstruct the state before the first retained history entry by
+    // walking the applied entries backwards. This also handles a user who
+    // changes a control and then manually returns it to its original value:
+    // the cursor is non-zero, but the resulting state is still unedited.
+    Shadow initial = m_shadow;
+    for (int i = m_cursor - 1; i >= 0; --i) applyFrom(initial, m_entries[i]);
+
+    if (initial.size() != m_shadow.size()) return false;
+    for (auto it = initial.cbegin(); it != initial.cend(); ++it) {
+        const auto current = m_shadow.constFind(it.key());
+        if (current == m_shadow.cend()) return false;
+        if (it.value().enabled != current->enabled || it.value().parameters != current->parameters) return false;
+    }
+    return true;
+}
+
 std::optional<UndoHistory::Entry> UndoHistory::undo() {
     if (!canUndo()) return std::nullopt;
 
@@ -114,8 +133,12 @@ std::optional<UndoHistory::Entry> UndoHistory::redo() {
 }
 
 void UndoHistory::updateShadowFrom(const Entry &e) {
-    auto it = m_shadow.find(e.effectId);
-    if (it == m_shadow.end()) return;
+    applyFrom(m_shadow, e);
+}
+
+void UndoHistory::applyFrom(Shadow &shadow, const Entry &e) {
+    auto it = shadow.find(e.effectId);
+    if (it == shadow.end()) return;
     if (e.enabled) it->enabled = e.enabled->first;
     for (auto pit = e.params.cbegin(); pit != e.params.cend(); ++pit) {
         if (pit.value().from.isValid()) it->parameters.insert(pit.key(), pit.value().from);

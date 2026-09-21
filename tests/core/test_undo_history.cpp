@@ -65,6 +65,22 @@ private slots:
         QCOMPARE(h.entries().size(), 0);
     }
 
+    void returningToInitialStateIsNotEdited() {
+        UndoHistory                               h;
+        QVector<SettingsImporter::EffectSettings> snap;
+        snap << makeEff("brightness", true, {{"value", 0}});
+        h.seed(snap);
+
+        snap[0].parameters["value"] = 10;
+        h.recordFromCurrent(snap);
+        QVERIFY(!h.isAtInitialState());
+
+        snap[0].parameters["value"] = 0;
+        h.recordFromCurrent(snap);
+        QVERIFY(h.cursor() > 0);
+        QVERIFY(h.isAtInitialState());
+    }
+
     void undoReturnsFrimValues() {
         UndoHistory                               h;
         QVector<SettingsImporter::EffectSettings> snap;

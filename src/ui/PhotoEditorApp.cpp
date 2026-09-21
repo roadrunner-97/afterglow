@@ -539,6 +539,7 @@ void PhotoEditorApp::setupUI() {
             syncViewportRotation();
             triggerReprocess();
             writeSidecar();
+            refreshEditedState();
         });
     });
 
@@ -1047,7 +1048,8 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
 void PhotoEditorApp::saveImage() {
     if (m_originalImage.isNull()) return;
 
-    const auto selectedOptions = m_uiServices->chooseExportOptions(this, m_lastDir);
+    const QString exportDefaultDir = m_currentFolder.isEmpty() ? m_lastDir : m_currentFolder;
+    const auto    selectedOptions  = m_uiServices->chooseExportOptions(this, exportDefaultDir);
     if (!selectedOptions) return;
     const ExportOptions::Options opts = *selectedOptions;
     if (opts.destinationDir.isEmpty()) {
@@ -1216,7 +1218,9 @@ void PhotoEditorApp::rebuildEditedPreviews() {
             qWarning() << "History parse failed for" << historyPath << ":" << error;
             continue;
         }
-        if (data.cursor <= 0) continue;
+        UndoHistory history;
+        history.load(std::move(data.entries), data.cursor, std::move(data.shadow));
+        if (history.isAtInitialState()) continue;
 
         m_proofCache->invalidate(path);
         m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
@@ -1537,6 +1541,9 @@ void PhotoEditorApp::openFolder() {
     const QString folder = m_uiServices->chooseDirectory(this, "Open Folder", m_lastDir);
     if (folder.isEmpty()) return;
     m_lastDir = folder;
+    // A folder-open workflow should export beside the photos by default,
+    // rather than reusing a destination from an unrelated previous folder.
+    QSettings("Afterglow", "Afterglow").setValue("export/destinationDir", folder);
     loadFolderIntoGrid(folder);
     setMode(Mode::Gallery);
 }
@@ -1608,7 +1615,11 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
         if (!QFile::exists(historyPath)) continue;
         HistorySerializer::HistoryData data;
         QString                        error;
-        if (HistorySerializer::readYaml(historyPath, &data, &error)) m_gridView->setEdited(path, data.cursor > 0);
+        if (HistorySerializer::readYaml(historyPath, &data, &error)) {
+            UndoHistory history;
+            history.load(std::move(data.entries), data.cursor, std::move(data.shadow));
+            m_gridView->setEdited(path, !history.isAtInitialState());
+        }
     }
 
     if (m_proofCache && m_proofer) {
@@ -1843,7 +1854,7 @@ void PhotoEditorApp::pasteDevelopSettingsTo(const QString &path) {
         if (!HistorySerializer::writeYaml(historyPath, pastedHistory.entries(), pastedHistory.cursor(), copied.effects,
                                           &error))
             qWarning() << "History sidecar write failed for" << historyPath << ":" << error;
-        m_gridView->setEdited(path, pastedHistory.cursor() > 0);
+        m_gridView->setEdited(path, !pastedHistory.isAtInitialState());
         if (m_proofCache) {
             m_proofCache->invalidate(path);
             m_gridView->setProofStatus(path, GridView::ProofStatus::NotProofed);
@@ -2223,7 +2234,7 @@ void PhotoEditorApp::writeSidecar() {
 
 void PhotoEditorApp::refreshEditedState() {
     if (m_currentImagePath.isEmpty() || !m_gridView) return;
-    m_gridView->setEdited(m_currentImagePath, m_history->cursor() > 0);
+    m_gridView->setEdited(m_currentImagePath, !m_history->isAtInitialState());
 }
 
 void PhotoEditorApp::persistLatestDevelopPreview() {
