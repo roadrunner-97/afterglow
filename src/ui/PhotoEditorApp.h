@@ -155,9 +155,10 @@ private:
     void                       pasteDevelopSettingsTo(const QString &path);
     void                       addStackFrames();
     void                       addCurrentFolderRawsToStack();
+    void                       loadStackFramePreview(const QString &path);
     void                       rebuildStack();
     void                       saveStackResult();
-    void                       onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled);
+    void onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled, int cachedFrames);
 
     MetadataTray                         *m_metadataTray        = nullptr;
     MetadataTray                         *m_galleryMetadataTray = nullptr;
@@ -212,6 +213,7 @@ private:
     QString                                m_developedPath; // path currently loaded in m_originalImage
     QString                                m_loupePath;     // path currently represented by LoupeView
     uint64_t                               m_loupeLoadGeneration       = 0;
+    uint64_t                               m_stackPreviewGeneration    = 0;
     uint64_t                               m_galleryMetadataGeneration = 0;
     std::shared_ptr<std::atomic<uint64_t>> m_thumbnailGeneration       = std::make_shared<std::atomic<uint64_t>>(0);
 

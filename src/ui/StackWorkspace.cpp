@@ -72,6 +72,19 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     auto *right       = new QWidget();
     auto *rightLayout = new QVBoxLayout(right);
     rightLayout->setContentsMargins(0, 0, 0, 0);
+    auto *previewChoices = new QHBoxLayout();
+    m_showFrame          = new QPushButton("Selected Frame");
+    m_showFrame->setObjectName("showSelectedStackFrameButton");
+    m_showFrame->setCheckable(true);
+    m_showFrame->setChecked(true);
+    m_showResult = new QPushButton("Stack Result");
+    m_showResult->setObjectName("showStackResultButton");
+    m_showResult->setCheckable(true);
+    m_showResult->setEnabled(false);
+    previewChoices->addWidget(m_showFrame);
+    previewChoices->addWidget(m_showResult);
+    previewChoices->addStretch();
+    rightLayout->addLayout(previewChoices);
     m_preview = new QLabel("Add photos to begin a long-exposure stack.");
     m_preview->setObjectName("stackPreview");
     m_preview->setAlignment(Qt::AlignCenter);
@@ -113,6 +126,14 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     connect(m_frames, &QListWidget::itemChanged, this, [this](QListWidgetItem *) { updateFrameSummary(); });
     connect(m_frames, &QListWidget::itemSelectionChanged, this,
             [this]() { m_setReference->setEnabled(m_frames->selectedItems().size() == 1); });
+    connect(m_frames, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *current) {
+        m_currentFramePath = current ? current->data(PATH_ROLE).toString() : QString();
+        m_framePreview     = {};
+        showSelectedFrame();
+        if (!m_currentFramePath.isEmpty()) emit currentFrameChanged(m_currentFramePath);
+    });
+    connect(m_showFrame, &QPushButton::clicked, this, &StackWorkspace::showSelectedFrame);
+    connect(m_showResult, &QPushButton::clicked, this, &StackWorkspace::showStackResult);
     connect(includeAll, &QPushButton::clicked, this, [this]() {
         for (int i = 0; i < m_frames->count(); ++i) m_frames->item(i)->setCheckState(Qt::Checked);
     });
@@ -136,23 +157,26 @@ int StackWorkspace::addFrames(const QStringList &paths) {
     QSet<QString> existing;
     for (int i = 0; i < m_frames->count(); ++i) existing.insert(m_frames->item(i)->data(PATH_ROLE).toString());
 
-    int                  added = 0;
-    const QSignalBlocker blocker(m_frames);
-    for (const QString &path : paths) {
-        const QString absolute = QFileInfo(path).absoluteFilePath();
-        if (absolute.isEmpty() || existing.contains(absolute)) continue;
-        auto *item = new QListWidgetItem(QFileInfo(absolute).fileName(), m_frames);
-        item->setData(PATH_ROLE, absolute);
-        item->setToolTip(absolute);
-        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-        item->setCheckState(Qt::Checked);
-        existing.insert(absolute);
-        ++added;
+    int added = 0;
+    {
+        const QSignalBlocker blocker(m_frames);
+        for (const QString &path : paths) {
+            const QString absolute = QFileInfo(path).absoluteFilePath();
+            if (absolute.isEmpty() || existing.contains(absolute)) continue;
+            auto *item = new QListWidgetItem(QFileInfo(absolute).fileName(), m_frames);
+            item->setData(PATH_ROLE, absolute);
+            item->setToolTip(absolute);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(Qt::Checked);
+            existing.insert(absolute);
+            ++added;
+        }
     }
     if (m_referencePath.isEmpty() && m_frames->count() > 0)
         m_referencePath = m_frames->item(0)->data(PATH_ROLE).toString();
     updateReferencePresentation();
     updateFrameSummary();
+    if (m_frames->currentRow() < 0 && m_frames->count() > 0) m_frames->setCurrentRow(0);
     return added;
 }
 
@@ -180,10 +204,21 @@ void StackWorkspace::setReferencePath(const QString &path) {
     }
 }
 
+QString StackWorkspace::currentFramePath() const {
+    return m_currentFramePath;
+}
+
+void StackWorkspace::setFramePreview(const QString &path, const QImage &preview) {
+    if (path != m_currentFramePath || preview.isNull()) return;
+    m_framePreview = preview;
+    if (m_previewMode == PreviewMode::Frame) updatePreviewPixmap();
+}
+
 void StackWorkspace::setResult(const QImage &result) {
     m_result = result;
     m_save->setEnabled(!result.isNull());
-    updatePreviewPixmap();
+    m_showResult->setEnabled(!result.isNull());
+    if (!result.isNull()) showStackResult();
 }
 
 QImage StackWorkspace::result() const {
@@ -244,12 +279,34 @@ void StackWorkspace::updateReferencePresentation() {
 }
 
 void StackWorkspace::updatePreviewPixmap() {
-    if (m_result.isNull()) {
+    const QImage image = m_previewMode == PreviewMode::Result ? m_result : m_framePreview;
+    if (image.isNull()) {
         m_preview->setPixmap({});
-        m_preview->setText("Add photos to begin a long-exposure stack.");
+        if (m_previewMode == PreviewMode::Result) m_preview->setText("Rebuild the stack to create a result.");
+        else if (!m_currentFramePath.isEmpty())
+            m_preview->setText(QStringLiteral("Loading %1…").arg(QFileInfo(m_currentFramePath).fileName()));
+        else m_preview->setText("Select a frame to inspect it.");
         return;
     }
     m_preview->setText({});
-    m_preview->setPixmap(QPixmap::fromImage(m_result).scaled(m_preview->size() - QSize(12, 12), Qt::KeepAspectRatio,
-                                                             Qt::SmoothTransformation));
+    m_preview->setPixmap(QPixmap::fromImage(image).scaled(m_preview->size() - QSize(12, 12), Qt::KeepAspectRatio,
+                                                          Qt::SmoothTransformation));
+}
+
+void StackWorkspace::showSelectedFrame() {
+    m_previewMode = PreviewMode::Frame;
+    m_showFrame->setChecked(true);
+    m_showResult->setChecked(false);
+    updatePreviewPixmap();
+}
+
+void StackWorkspace::showStackResult() {
+    if (m_result.isNull()) {
+        showSelectedFrame();
+        return;
+    }
+    m_previewMode = PreviewMode::Result;
+    m_showFrame->setChecked(false);
+    m_showResult->setChecked(true);
+    updatePreviewPixmap();
 }

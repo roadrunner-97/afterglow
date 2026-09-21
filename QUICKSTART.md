@@ -116,6 +116,13 @@ when ready. Rebuilds run as a streaming full-resolution lighten blend, show
 per-frame progress, and can be cancelled. The previous result remains available
 until a rebuild completes successfully. Use **Save Stack…** to export it.
 
+The first rebuild writes each developed frame as a lossless PNG below
+`.afterglow/stack-frames/` beside the shoot. Later rebuilds reuse those disk
+renders when only frame inclusion changes. Changing the golden reference's
+Develop settings or modifying a source photo invalidates the affected cache.
+**Debug → Purge Photo Caches…** removes stack renders along with thumbnails and
+proofs.
+
 All input frames must have matching dimensions. Automatic registration and
 motion/foreground masks are not part of the current stack workflow.
 

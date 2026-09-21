@@ -278,6 +278,22 @@ static QImage decodeThumbnailOriented(const QString &path) {
     return reader.read();
 }
 
+static QImage decodeStackPreview(const QString &path) {
+    QImage preview;
+    if (RawLoader::isRawFile(path)) {
+        preview = RawLoader::loadThumbnail(path);
+    } else {
+        QImageReader reader(path);
+        reader.setAutoTransform(true);
+        const QSize sourceSize = reader.size();
+        if (sourceSize.isValid()) reader.setScaledSize(sourceSize.scaled(2560, 2560, Qt::KeepAspectRatio));
+        preview = reader.read();
+    }
+    if (preview.width() > 2560 || preview.height() > 2560)
+        preview = preview.scaled(2560, 2560, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return preview;
+}
+
 PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
     : QMainWindow(parent), m_effects(effectManager), m_processor(new ImageProcessor(this)),
       m_resizeDebounce(new QTimer(this)) {
@@ -678,6 +694,7 @@ void PhotoEditorApp::setupUI() {
     connect(m_stackWorkspace, &StackWorkspace::addFramesRequested, this, &PhotoEditorApp::addStackFrames);
     connect(m_stackWorkspace, &StackWorkspace::addCurrentFolderRawsRequested, this,
             &PhotoEditorApp::addCurrentFolderRawsToStack);
+    connect(m_stackWorkspace, &StackWorkspace::currentFrameChanged, this, &PhotoEditorApp::loadStackFramePreview);
     connect(m_stackWorkspace, &StackWorkspace::rebuildRequested, this, &PhotoEditorApp::rebuildStack);
     connect(m_stackWorkspace, &StackWorkspace::cancelRequested, m_processor, &ImageProcessor::cancelStackProcessing);
     connect(m_stackWorkspace, &StackWorkspace::saveRequested, this, &PhotoEditorApp::saveStackResult);
@@ -1195,7 +1212,7 @@ void PhotoEditorApp::purgeCaches() {
 
     if (!m_uiServices->confirm(
             this, "Purge Photo Caches",
-            QString("Remove generated thumbnails and rendered proof JPEGs from:\n%1\n\n"
+            QString("Remove generated thumbnails, proof JPEGs, and developed stack frames from:\n%1\n\n"
                     "Source photos, edits, history, marks, and application settings will not be changed.")
                 .arg(folder)))
         return;
@@ -1619,6 +1636,24 @@ void PhotoEditorApp::addCurrentFolderRawsToStack() {
     setMode(Mode::Stack);
 }
 
+void PhotoEditorApp::loadStackFramePreview(const QString &path) {
+    if (path.isEmpty()) return;
+    // The Gallery thumbnail gives immediate visual feedback while the larger
+    // embedded RAW preview is decoded in the background.
+    const QImage galleryPreview = m_gridView->thumbnail(path);
+    if (!galleryPreview.isNull()) m_stackWorkspace->setFramePreview(path, galleryPreview);
+
+    const uint64_t generation = ++m_stackPreviewGeneration;
+    auto          *watcher    = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path, generation]() {
+        const QImage preview = watcher->result();
+        watcher->deleteLater();
+        if (preview.isNull()) return;
+        if (generation == m_stackPreviewGeneration) m_stackWorkspace->setFramePreview(path, preview);
+    });
+    watcher->setFuture(QtConcurrent::run([path]() { return decodeStackPreview(path); }));
+}
+
 void PhotoEditorApp::rebuildStack() {
     if (m_processor->isStackProcessing()) return;
     const QString reference = m_stackWorkspace->referencePath();
@@ -1649,7 +1684,8 @@ void PhotoEditorApp::saveStackResult() {
     else statusBar()->showMessage(QString("Saved long exposure stack to %1").arg(path), 4000);
 }
 
-void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled) {
+void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled,
+                                               int cachedFrames) {
     m_uiState.setProcessing(false);
     m_processingLabel->setText("Processing…");
     m_processingLabel->setVisible(false);
@@ -1664,8 +1700,10 @@ void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QStri
         return;
     }
     m_stackWorkspace->setResult(result);
-    m_stackWorkspace->setStatus(
-        QStringLiteral("Stack complete · %1 × %2 pixels").arg(result.width()).arg(result.height()));
+    m_stackWorkspace->setStatus(QStringLiteral("Stack complete · %1 × %2 pixels · reused %3 cached frame(s)")
+                                    .arg(result.width())
+                                    .arg(result.height())
+                                    .arg(cachedFrames));
 }
 
 // Per-folder JPEG cache for grid thumbnails. The first folder-open decodes

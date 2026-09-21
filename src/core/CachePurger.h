@@ -11,7 +11,7 @@ struct Result {
     QString error;
 };
 
-// Remove only generated JPEG caches below folder. Source photos, YAML
+// Remove only generated image caches below folder. Source photos, YAML
 // sidecars, history, catalog files, and application settings are untouched.
 Result purgePhotoCaches(const QString &folder);
 

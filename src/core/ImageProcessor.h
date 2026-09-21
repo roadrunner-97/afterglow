@@ -18,7 +18,8 @@ template <typename T> class QFutureWatcher;
 struct StackProcessingResult {
     QImage  image;
     QString error;
-    bool    cancelled = false;
+    bool    cancelled    = false;
+    int     cachedFrames = 0;
 };
 
 /**
@@ -62,7 +63,7 @@ signals:
     void exportComplete(uint64_t requestId, QImage result, QString destinationPath);
     void stackProcessingStarted(int totalFrames);
     void stackProcessingProgress(int completedFrames, int totalFrames, QString path);
-    void stackProcessingComplete(QImage result, QString error, bool cancelled);
+    void stackProcessingComplete(QImage result, QString error, bool cancelled, int cachedFrames);
 
 private:
     std::shared_ptr<std::atomic<uint64_t>> generationPtr         = std::make_shared<std::atomic<uint64_t>>(0);

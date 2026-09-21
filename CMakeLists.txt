@@ -131,6 +131,8 @@ add_library(photoeditor_core STATIC
     src/core/SettingsExporter.h
     src/core/SettingsImporter.cpp
     src/core/SettingsImporter.h
+    src/core/StackFrameCache.cpp
+    src/core/StackFrameCache.h
     src/core/ExportOptions.h
     src/core/ExportPath.cpp
     src/core/ExportPath.h

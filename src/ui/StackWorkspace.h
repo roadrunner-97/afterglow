@@ -23,6 +23,8 @@ public:
     QVector<StackFrame> frames() const;
     QString             referencePath() const;
     void                setReferencePath(const QString &path);
+    QString             currentFramePath() const;
+    void                setFramePreview(const QString &path, const QImage &preview);
     void                setResult(const QImage &result);
     QImage              result() const;
     void                setBuilding(bool building, int totalFrames = 0);
@@ -32,6 +34,7 @@ public:
 signals:
     void addFramesRequested();
     void addCurrentFolderRawsRequested();
+    void currentFrameChanged(QString path);
     void editReferenceRequested(QString path);
     void rebuildRequested();
     void cancelRequested();
@@ -44,6 +47,10 @@ private:
     void updateFrameSummary();
     void updateReferencePresentation();
     void updatePreviewPixmap();
+    void showSelectedFrame();
+    void showStackResult();
+
+    enum class PreviewMode { Frame, Result };
 
     QListWidget  *m_frames         = nullptr;
     QLabel       *m_frameSummary   = nullptr;
@@ -56,8 +63,13 @@ private:
     QPushButton  *m_rebuild        = nullptr;
     QPushButton  *m_cancel         = nullptr;
     QPushButton  *m_save           = nullptr;
+    QPushButton  *m_showFrame      = nullptr;
+    QPushButton  *m_showResult     = nullptr;
     QString       m_referencePath;
+    QString       m_currentFramePath;
+    QImage        m_framePreview;
     QImage        m_result;
+    PreviewMode   m_previewMode = PreviewMode::Frame;
 };
 
 #endif // STACKWORKSPACE_H

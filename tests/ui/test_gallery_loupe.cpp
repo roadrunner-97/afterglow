@@ -154,6 +154,16 @@ private slots:
         QCOMPARE(list->count(), 2);
         QCOMPARE(list->item(0)->checkState(), Qt::Checked);
         QVERIFY(reference->text().contains("first.png"));
+
+        auto *workspace = app.findChild<StackWorkspace *>("stackWorkspace");
+        auto *preview   = app.findChild<QLabel *>("stackPreview");
+        QVERIFY(workspace);
+        QVERIFY(preview);
+        QCOMPARE(workspace->currentFramePath(), first);
+        QTRY_VERIFY_WITH_TIMEOUT(!preview->pixmap(Qt::ReturnByValue).isNull(), 5000);
+        list->setFocus();
+        QTest::keyClick(list, Qt::Key_Down);
+        QCOMPARE(workspace->currentFramePath(), second);
     }
 
     void stackRebuildLightensIncludedFramesOnDemand() {
@@ -174,6 +184,9 @@ private slots:
         PhotoEditorApp app(&effects);
         app.setUiServices(&ui);
         app.findChild<QAction *>("actionOpenStack")->trigger();
+        auto *processor = app.findChild<ImageProcessor *>();
+        QVERIFY(processor);
+        QSignalSpy completed(processor, &ImageProcessor::stackProcessingComplete);
         app.findChild<QPushButton *>("rebuildStackButton")->click();
 
         auto *workspace = app.findChild<StackWorkspace *>("stackWorkspace");
@@ -183,6 +196,10 @@ private slots:
         QVERIFY(std::abs(qRed(pixel) - 120) <= 1);
         QVERIFY(std::abs(qGreen(pixel) - 200) <= 1);
         QVERIFY(std::abs(qBlue(pixel) - 60) <= 1);
+
+        app.findChild<QPushButton *>("rebuildStackButton")->click();
+        QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 2, 15000);
+        QCOMPARE(completed.at(1).at(3).toInt(), 2);
     }
 
     void currentGalleryFolderAddsOnlyRawFramesWithoutDuplicates() {

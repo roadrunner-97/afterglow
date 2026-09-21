@@ -4,6 +4,8 @@
 #include "IGpuEffect.h"
 #include "PhotoEditorEffect.h"
 #include "RawLoader.h"
+#include "SettingsExporter.h"
+#include "StackFrameCache.h"
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
 #include <QColorSpace>
@@ -220,18 +222,25 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
 
     if (includedPaths.isEmpty()) {
         emit stackProcessingComplete({}, QStringLiteral("Include at least one frame before rebuilding the stack."),
-                                     false);
+                                     false, 0);
         return;
     }
 
-    StackGeometry            geometry;
-    QVector<GpuPipelineCall> calls        = buildStackGpuCalls(effects, referenceSettings, &geometry);
-    QVector<LocalAdjustment> locals       = referenceSettings.localAdjustments;
-    const int                total        = static_cast<int>(includedPaths.size());
-    auto                     pipeline     = m_pipeline;
-    auto                     generation   = m_stackGeneration;
-    const uint64_t           myGeneration = ++(*generation);
-    QPointer<ImageProcessor> target(this);
+    StackGeometry              geometry;
+    QVector<GpuPipelineCall>   calls        = buildStackGpuCalls(effects, referenceSettings, &geometry);
+    QVector<LocalAdjustment>   locals       = referenceSettings.localAdjustments;
+    const int                  total        = static_cast<int>(includedPaths.size());
+    auto                       pipeline     = m_pipeline;
+    auto                       generation   = m_stackGeneration;
+    const uint64_t             myGeneration = ++(*generation);
+    QPointer<ImageProcessor>   target(this);
+    SettingsImporter::Settings effectiveSettings;
+    effectiveSettings.localAdjustments = locals;
+    for (const GpuPipelineCall &call : calls) {
+        effectiveSettings.effects.append({call.effect->getId(), call.effect->getName(), call.enabled, call.params});
+    }
+    QByteArray settingsSignature = SettingsExporter::toYaml(effectiveSettings).toUtf8();
+    for (const GpuPipelineCall &call : calls) settingsSignature.append(call.effect->getVersion().toUtf8());
 
     emit stackProcessingStarted(total);
     m_stackWatcher = new QFutureWatcher<StackProcessingResult>(this);
@@ -244,43 +253,51 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
                 // A newer request owns the UI; an older worker finishing must
                 // not replace its progress or result.
                 if (generation->load(std::memory_order_relaxed) != myGeneration && !result.cancelled) return;
-                emit stackProcessingComplete(result.image, result.error, result.cancelled);
+                emit stackProcessingComplete(result.image, result.error, result.cancelled, result.cachedFrames);
             });
 
-    watcher->setFuture(QtConcurrent::run([paths = std::move(includedPaths), calls = std::move(calls),
-                                          locals = std::move(locals), geometry, pipeline = std::move(pipeline),
-                                          generation, myGeneration, target, total]() -> StackProcessingResult {
-        QImage accumulator;
-        for (int i = 0; i < paths.size(); ++i) {
-            if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
+    watcher->setFuture(
+        QtConcurrent::run([paths = std::move(includedPaths), calls = std::move(calls), locals = std::move(locals),
+                           geometry, pipeline = std::move(pipeline), generation, myGeneration, target, total,
+                           settingsSignature = std::move(settingsSignature)]() -> StackProcessingResult {
+            QImage accumulator;
+            int    cachedFrames = 0;
+            for (int i = 0; i < paths.size(); ++i) {
+                if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
 
-            const QString path  = paths[i];
-            QImage        frame = decodeStackFrame(path);
-            if (frame.isNull()) return {{}, QStringLiteral("Could not decode %1.").arg(path), false};
-            frame = applyCommittedGeometry(frame, geometry.committed);
+                const QString    path              = paths[i];
+                const QByteArray renderFingerprint = StackFrameCache::fingerprint(path, settingsSignature);
+                QImage           rendered          = StackFrameCache::load(path, renderFingerprint);
+                if (!rendered.isNull()) {
+                    ++cachedFrames;
+                } else {
+                    QImage frame = decodeStackFrame(path);
+                    if (frame.isNull()) return {{}, QStringLiteral("Could not decode %1.").arg(path), false};
+                    frame    = applyCommittedGeometry(frame, geometry.committed);
+                    rendered = pipeline->run(frame, calls, {}, RunMode::Commit, locals).image;
+                    if (rendered.isNull()) return {{}, QStringLiteral("Processing failed for %1.").arg(path), false};
+                    StackFrameCache::store(path, renderFingerprint, rendered);
+                }
 
-            const QImage rendered = pipeline->run(frame, calls, {}, RunMode::Commit, locals).image;
-            if (rendered.isNull()) return {{}, QStringLiteral("Processing failed for %1.").arg(path), false};
+                QString blendError;
+                if (!LongExposureStack::blendLighten(&accumulator, rendered, &blendError))
+                    return {{}, QStringLiteral("Could not add %1: %2").arg(path, blendError), false};
 
-            QString blendError;
-            if (!LongExposureStack::blendLighten(&accumulator, rendered, &blendError))
-                return {{}, QStringLiteral("Could not add %1: %2").arg(path, blendError), false};
-
-            if (target) {
-                QMetaObject::invokeMethod(
-                    target,
-                    [target, completed = i + 1, total, path]() {
-                        if (target) emit target->stackProcessingProgress(completed, total, path);
-                    },
-                    Qt::QueuedConnection);
+                if (target) {
+                    QMetaObject::invokeMethod(
+                        target,
+                        [target, completed = i + 1, total, path]() {
+                            if (target) emit target->stackProcessingProgress(completed, total, path);
+                        },
+                        Qt::QueuedConnection);
+                }
             }
-        }
 
-        const QRectF fullFrame(0.0, 0.0, 1.0, 1.0);
-        if (geometry.applyPending && (geometry.crop != fullFrame || std::abs(geometry.angle) > 0.0001))
-            accumulator = applyGeometry(accumulator, geometry.crop, geometry.angle);
-        return {accumulator, {}, false};
-    }));
+            const QRectF fullFrame(0.0, 0.0, 1.0, 1.0);
+            if (geometry.applyPending && (geometry.crop != fullFrame || std::abs(geometry.angle) > 0.0001))
+                accumulator = applyGeometry(accumulator, geometry.crop, geometry.angle);
+            return {accumulator, {}, false, cachedFrames};
+        }));
 }
 
 void ImageProcessor::cancelStackProcessing() {
