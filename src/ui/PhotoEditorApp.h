@@ -154,6 +154,7 @@ private:
     void                       copyDevelopSettingsFrom(const QString &path);
     void                       pasteDevelopSettingsTo(const QString &path);
     void                       addStackFrames();
+    void                       addCurrentFolderRawsToStack();
     void                       rebuildStack();
     void                       saveStackResult();
     void                       onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled);

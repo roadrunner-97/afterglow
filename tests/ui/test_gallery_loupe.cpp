@@ -1,6 +1,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QFile>
 #include <QFontComboBox>
 #include <QSignalSpy>
 #include <QStackedWidget>
@@ -106,6 +107,7 @@ private slots:
         QVERIFY(app.findChild<QAction *>("actionModeDevelop"));
         QVERIFY(app.findChild<QAction *>("actionModeStack"));
         QVERIFY(app.findChild<QAction *>("actionOpenStack"));
+        QVERIFY(app.findChild<QAction *>("actionAddCurrentFolderRawsToStack"));
         QVERIFY(app.findChild<QStackedWidget *>("editorModeStack"));
         QVERIFY(app.findChild<GridView *>("galleryGrid"));
         QVERIFY(app.findChild<QWidget *>("galleryMetadataSidebar"));
@@ -120,6 +122,7 @@ private slots:
         QVERIFY(app.findChild<QLabel *>("localAdjustmentContextLabel"));
         QVERIFY(app.findChild<QListWidget *>("stackFrameList"));
         QVERIFY(app.findChild<QPushButton *>("setStackReferenceButton"));
+        QVERIFY(app.findChild<QPushButton *>("addCurrentFolderRawsButton"));
         QVERIFY(app.findChild<QPushButton *>("rebuildStackButton"));
         QVERIFY(app.findChild<QPushButton *>("saveStackButton"));
     }
@@ -180,6 +183,44 @@ private slots:
         QVERIFY(std::abs(qRed(pixel) - 120) <= 1);
         QVERIFY(std::abs(qGreen(pixel) - 200) <= 1);
         QVERIFY(std::abs(qBlue(pixel) - 60) <= 1);
+    }
+
+    void currentGalleryFolderAddsOnlyRawFramesWithoutDuplicates() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString firstRaw  = dir.filePath("frame-001.dng");
+        const QString secondRaw = dir.filePath("frame-002.nef");
+        for (const QString &path : {firstRaw, secondRaw}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.write("test raw placeholder") > 0);
+        }
+        QImage jpeg(8, 8, QImage::Format_RGB32);
+        jpeg.fill(Qt::black);
+        QVERIFY(jpeg.save(dir.filePath("frame-003.jpg")));
+        QFile sidecar(dir.filePath("frame-001.yml"));
+        QVERIFY(sidecar.open(QIODevice::WriteOnly));
+        QVERIFY(sidecar.write("effects: []\n") > 0);
+
+        FakeUiServices ui;
+        ui.directoryResult = dir.path();
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.setUiServices(&ui);
+        app.findChild<QAction *>("actionOpenFolder")->trigger();
+        app.findChild<QAction *>("actionAddCurrentFolderRawsToStack")->trigger();
+
+        auto *pages = app.findChild<QStackedWidget *>("editorModeStack");
+        auto *list  = app.findChild<QListWidget *>("stackFrameList");
+        QVERIFY(pages);
+        QVERIFY(list);
+        QCOMPARE(pages->currentIndex(), static_cast<int>(EditorUiState::Mode::Stack));
+        QCOMPARE(list->count(), 2);
+        QCOMPARE(list->item(0)->data(Qt::UserRole).toString(), firstRaw);
+        QCOMPARE(list->item(1)->data(Qt::UserRole).toString(), secondRaw);
+
+        app.findChild<QPushButton *>("addCurrentFolderRawsButton")->click();
+        QCOMPARE(list->count(), 2);
     }
 
     void organizerMovesEffectsBetweenListsAndReordersPipeline() {

@@ -19,7 +19,7 @@ class StackWorkspace : public QWidget {
 public:
     explicit StackWorkspace(QWidget *parent = nullptr);
 
-    void                addFrames(const QStringList &paths);
+    int                 addFrames(const QStringList &paths);
     QVector<StackFrame> frames() const;
     QString             referencePath() const;
     void                setReferencePath(const QString &path);
@@ -31,6 +31,7 @@ public:
 
 signals:
     void addFramesRequested();
+    void addCurrentFolderRawsRequested();
     void editReferenceRequested(QString path);
     void rebuildRequested();
     void cancelRequested();

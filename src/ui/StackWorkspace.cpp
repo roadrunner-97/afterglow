@@ -44,6 +44,10 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     auto *add = new QPushButton("Add Photos…");
     add->setObjectName("addStackFramesButton");
     leftLayout->addWidget(add);
+    auto *addFolderRaws = new QPushButton("Add Current Folder RAWs");
+    addFolderRaws->setObjectName("addCurrentFolderRawsButton");
+    addFolderRaws->setToolTip("Add every RAW photo from the folder currently open in Gallery.");
+    leftLayout->addWidget(addFolderRaws);
     auto *selectionButtons = new QHBoxLayout();
     auto *includeAll       = new QPushButton("Include All");
     auto *excludeSelected  = new QPushButton("Exclude Selected");
@@ -102,6 +106,7 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     root->addWidget(right, 1);
 
     connect(add, &QPushButton::clicked, this, &StackWorkspace::addFramesRequested);
+    connect(addFolderRaws, &QPushButton::clicked, this, &StackWorkspace::addCurrentFolderRawsRequested);
     connect(m_rebuild, &QPushButton::clicked, this, &StackWorkspace::rebuildRequested);
     connect(m_cancel, &QPushButton::clicked, this, &StackWorkspace::cancelRequested);
     connect(m_save, &QPushButton::clicked, this, &StackWorkspace::saveRequested);
@@ -127,10 +132,11 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     m_rebuild->setEnabled(false);
 }
 
-void StackWorkspace::addFrames(const QStringList &paths) {
+int StackWorkspace::addFrames(const QStringList &paths) {
     QSet<QString> existing;
     for (int i = 0; i < m_frames->count(); ++i) existing.insert(m_frames->item(i)->data(PATH_ROLE).toString());
 
+    int                  added = 0;
     const QSignalBlocker blocker(m_frames);
     for (const QString &path : paths) {
         const QString absolute = QFileInfo(path).absoluteFilePath();
@@ -141,11 +147,13 @@ void StackWorkspace::addFrames(const QStringList &paths) {
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(Qt::Checked);
         existing.insert(absolute);
+        ++added;
     }
     if (m_referencePath.isEmpty() && m_frames->count() > 0)
         m_referencePath = m_frames->item(0)->data(PATH_ROLE).toString();
     updateReferencePresentation();
     updateFrameSummary();
+    return added;
 }
 
 QVector<StackFrame> StackWorkspace::frames() const {

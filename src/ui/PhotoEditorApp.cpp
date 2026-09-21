@@ -676,6 +676,8 @@ void PhotoEditorApp::setupUI() {
     // ── Stack page ─────────────────────────────────────────────────────────
     m_stackWorkspace = new StackWorkspace();
     connect(m_stackWorkspace, &StackWorkspace::addFramesRequested, this, &PhotoEditorApp::addStackFrames);
+    connect(m_stackWorkspace, &StackWorkspace::addCurrentFolderRawsRequested, this,
+            &PhotoEditorApp::addCurrentFolderRawsToStack);
     connect(m_stackWorkspace, &StackWorkspace::rebuildRequested, this, &PhotoEditorApp::rebuildStack);
     connect(m_stackWorkspace, &StackWorkspace::cancelRequested, m_processor, &ImageProcessor::cancelStackProcessing);
     connect(m_stackWorkspace, &StackWorkspace::saveRequested, this, &PhotoEditorApp::saveStackResult);
@@ -705,6 +707,10 @@ void PhotoEditorApp::setupMenuBar() {
     QAction *openStackAct = fileMenu->addAction("Add Photos to Long Exposure Stack…");
     openStackAct->setObjectName("actionOpenStack");
     connect(openStackAct, &QAction::triggered, this, &PhotoEditorApp::addStackFrames);
+
+    QAction *folderRawsToStackAct = fileMenu->addAction("Add Current Folder RAWs to Stack");
+    folderRawsToStackAct->setObjectName("actionAddCurrentFolderRawsToStack");
+    connect(folderRawsToStackAct, &QAction::triggered, this, &PhotoEditorApp::addCurrentFolderRawsToStack);
 
     QAction *saveAct = fileMenu->addAction("Save Image…");
     saveAct->setObjectName("actionSaveImage");
@@ -1586,6 +1592,30 @@ void PhotoEditorApp::addStackFrames() {
     if (paths.isEmpty()) return;
     m_lastDir = QFileInfo(paths.first()).absolutePath();
     m_stackWorkspace->addFrames(paths);
+    setMode(Mode::Stack);
+}
+
+void PhotoEditorApp::addCurrentFolderRawsToStack() {
+    if (m_currentFolder.isEmpty()) {
+        m_uiServices->information(this, "Long Exposure Stack", "Open a folder in Gallery first.");
+        return;
+    }
+
+    QStringList rawPaths;
+    for (const QString &path : m_currentPaths)
+        if (RawLoader::isRawFile(path)) rawPaths.append(path);
+
+    if (rawPaths.isEmpty()) {
+        m_uiServices->information(this, "Long Exposure Stack",
+                                  "The current Gallery folder does not contain any RAW photos.");
+        return;
+    }
+
+    const int added = m_stackWorkspace->addFrames(rawPaths);
+    m_stackWorkspace->setStatus(
+        added > 0
+            ? QStringLiteral("Added %1 RAW frame(s) from %2.").arg(added).arg(QFileInfo(m_currentFolder).fileName())
+            : QStringLiteral("All RAW photos from the current folder are already in the stack."));
     setMode(Mode::Stack);
 }
 

@@ -104,6 +104,11 @@ Stack…**, and select the frames from the shoot. Every checked frame contribute
 to the result; select one or more rows and use **Exclude Selected** to reject
 aircraft, camera shake, or other bad frames.
 
+If the shoot is already open in Gallery, choose **Add Current Folder RAWs** in
+the Stack workspace (or the matching File menu action) to add every RAW while
+ignoring JPEGs, sidecars, and other files. Repeating the action does not add
+duplicates.
+
 The starred golden reference supplies the Develop settings for every frame.
 Select a frame and choose **Set Selected as Reference**, then use **Edit
 Reference in Develop** to tune it. Return to Stack and press **Rebuild Stack**
