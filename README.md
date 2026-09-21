@@ -23,7 +23,8 @@ effects.
 - JPEG, PNG, and TIFF export with quality, resize, and conflict controls
 - Background previews and disk caches for responsive folder browsing
 - Streaming star-trail stacks with frame rejection, golden-reference edits,
-  cancellable on-demand rebuilds, and full-resolution export
+  cancellable on-demand rebuilds, float EXR caching, and a 32-bit linear
+  master that can be sent back to Develop
 
 ## Requirements
 
@@ -33,6 +34,7 @@ effects.
   needed to process images
 - OpenGL (libGL)
 - LibRaw (required)
+- OpenEXR (required)
 
 ## Build
 
@@ -44,7 +46,7 @@ cmake --build build
 
 Or download the AppImage from the
 [latest GitHub release](https://github.com/roadrunner-97/afterglow/releases/latest),
-make it executable, and run it. The AppImage bundles Qt, LibRaw, and a POCL CPU
+make it executable, and run it. The AppImage bundles Qt, LibRaw, OpenEXR, and a POCL CPU
 fallback while still using a compatible host GPU runtime when available.
 
 ## Tests

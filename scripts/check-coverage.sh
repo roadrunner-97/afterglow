@@ -49,6 +49,7 @@ GCOVR_OUT=$(gcovr \
   --exclude-unreachable-branches \
   --exclude-lines-by-pattern '^\s*\}\s*$' \
   --merge-mode-functions=merge-use-line-min \
+  --gcov-ignore-parse-errors=negative_hits.warn_once_per_file \
   --gcov-ignore-errors=no_working_dir_found \
   --print-summary 2>&1)
 

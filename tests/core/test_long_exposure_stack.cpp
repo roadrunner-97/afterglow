@@ -69,6 +69,28 @@ private slots:
         const QRgb pixel = reinterpret_cast<const QRgb *>(accumulator.constScanLine(0))[0];
         QCOMPARE(pixel, qRgb(20, 10, 15));
     }
+
+    void exposesExtensibleAggregationRegistry() {
+        QCOMPARE(LongExposureStack::aggregationMethodIds(), QStringList{"per-channel-maximum"});
+        QCOMPARE(LongExposureStack::aggregationMethodDisplayName("per-channel-maximum"),
+                 QString("Per-channel maximum"));
+        QString error;
+        auto strategy = LongExposureStack::createAggregationStrategy({}, &error);
+        QVERIFY2(strategy, qPrintable(error));
+        QCOMPARE(strategy->id(), QString("per-channel-maximum"));
+        QCOMPARE(strategy->displayName(), QString("Per-channel maximum"));
+        QCOMPARE(strategy->cacheVersion(), QString("maximum-float32-v1"));
+        QVERIFY(strategy->supportsAssociativeBlockCache());
+        QCOMPARE(strategy->accumulatorBytes(2, 3), size_t(2 * 3 * sizeof(cl_float4)));
+        QCOMPARE(strategy->preferredBlockSize(), 16);
+        QCOMPARE(LongExposureStack::aggregationMethodDisplayName("future-percentile"),
+                 QString("future-percentile"));
+
+        StackAggregationConfig unknown;
+        unknown.methodId = "future-percentile";
+        QVERIFY(!LongExposureStack::createAggregationStrategy(unknown, &error));
+        QVERIFY(error.contains("future-percentile"));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestLongExposureStack)

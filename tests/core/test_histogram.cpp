@@ -1,5 +1,6 @@
 #include <QTest>
 #include <QImage>
+#include <algorithm>
 #include <cstdint>
 #include <numeric>
 #include "Histogram.h"
@@ -84,6 +85,17 @@ private slots:
         img.fill(QColor(255, 255, 255));
         auto bins = computeLuminanceHistogram(img);
         QCOMPARE(bins[255], uint32_t(16 * 16));
+    }
+
+    void floatLinear_preservesSceneLinearLuminanceAndClampsHighlights() {
+        QImage img(2, 1, QImage::Format_RGBA32FPx4);
+        auto  *pixels = reinterpret_cast<float *>(img.scanLine(0));
+        const float values[] = {0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 2.0f, 2.0f, 1.0f};
+        std::copy(std::begin(values), std::end(values), pixels);
+        const auto bins = computeLuminanceHistogram(img);
+        QCOMPARE(bins[0], uint32_t(1));
+        QCOMPARE(bins[255], uint32_t(1));
+        QCOMPARE(std::accumulate(bins.begin(), bins.end(), uint32_t(0)), uint32_t(2));
     }
 
     // Unsupported format: ARGB32_Premultiplied should still produce a valid

@@ -13,6 +13,7 @@ Required:
 - OpenCL — ICD loader **and** the C++ headers (`cl2.hpp` / `opencl.hpp`)
 - OpenGL (libGL)
 - LibRaw and its `pkg-config` metadata
+- OpenEXR
 
 Optional:
 
@@ -25,7 +26,7 @@ Optional:
 sudo pacman -S base-devel cmake ninja \
                qt6-base qt6-tools \
                opencl-headers opencl-clhpp ocl-icd \
-               libraw              \
+               libraw openexr      \
                python-gcovr ccache
 ```
 
@@ -42,7 +43,7 @@ sudo apt install build-essential cmake ninja-build \
                  qt6-base-dev qt6-tools-dev \
                  libopengl-dev \
                  ocl-icd-opencl-dev opencl-clhpp-headers \
-                 libraw-dev \
+                 libraw-dev libopenexr-dev \
                  gcovr ccache
 ```
 
@@ -65,7 +66,7 @@ cmake -B build -G Ninja
 cmake --build build
 ```
 
-The configure step fails fast if Qt, OpenCL, OpenGL, or LibRaw is missing. The
+The configure step fails fast if Qt, OpenCL, OpenGL, LibRaw, or OpenEXR is missing. The
 output binary is `build/bin/afterglow`.
 
 ### Options

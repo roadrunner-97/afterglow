@@ -18,6 +18,7 @@
 #include <unordered_set>
 
 class IGpuEffect;
+class IStackAggregationStrategy;
 
 struct GpuPipelineCall {
     PhotoEditorEffect      *effect;
@@ -40,6 +41,14 @@ struct ViewportRequest {
 struct GpuPipelineResult {
     QImage image;
     QPoint offset;
+};
+
+struct GpuStackAccumulator {
+    cl::Buffer buffer;
+    int        width    = 0;
+    int        height   = 0;
+    int        revision = -1;
+    bool       seeded   = false;
 };
 
 // Run mode selects how the pipeline handles the full-res post-effect cache.
@@ -82,6 +91,12 @@ public:
     // letterbox padding is the viewport widget's responsibility.
     GpuPipelineResult run(const QImage &image, const QVector<GpuPipelineCall> &calls, const ViewportRequest &viewport,
                           RunMode mode = RunMode::Commit, const QVector<LocalAdjustment> &localAdjustments = {});
+
+    bool processAndAccumulate(const QImage &image, const QVector<GpuPipelineCall> &calls,
+                              const QVector<LocalAdjustment> &localAdjustments, IStackAggregationStrategy &strategy,
+                              GpuStackAccumulator *accumulator, QString *error = nullptr);
+    QImage readStackAccumulator(const GpuStackAccumulator &accumulator, IStackAggregationStrategy &strategy,
+                                QString *error = nullptr);
 
 private:
     // All must be called with m_mutex held.
@@ -131,6 +146,7 @@ private:
     int    m_stride        = 0;
     size_t m_bufBytes      = 0;
     bool   m_is16bit       = false;
+    bool   m_isFloat       = false;
     bool   m_inputIsLinear = false; // true if source is scene-linear (RAW via LibRaw gamm=1)
 
     // Full-res cache state.  m_processedBytes tracks the current allocation so

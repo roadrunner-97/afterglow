@@ -49,7 +49,9 @@ public:
     // reference's settings, then combines the rendered frames with a lighten
     // blend. Frames are decoded and released one at a time.
     void processStackAsync(const QVector<StackFrame> &frames, const EffectManager &effects,
-                           const SettingsImporter::Settings &referenceSettings);
+                           const SettingsImporter::Settings &referenceSettings,
+                           const StackAggregationConfig &aggregation, const QString &projectFolder,
+                           const QString &masterPath);
     void cancelStackProcessing();
     bool isStackProcessing() const;
 

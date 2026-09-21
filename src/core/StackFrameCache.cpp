@@ -1,4 +1,5 @@
 #include "StackFrameCache.h"
+#include "LinearImageIO.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -17,6 +18,16 @@ QString cacheBaseName(const QString &sourcePath) {
 
 QString cacheDirectory(const QString &sourcePath) {
     return QFileInfo(sourcePath).absoluteDir().filePath(QStringLiteral(".afterglow/stack-frames"));
+}
+
+QString safeStrategyId(QString id) {
+    for (QChar &c : id)
+        if (!c.isLetterOrNumber() && c != QLatin1Char('-') && c != QLatin1Char('_')) c = QLatin1Char('_');
+    return id;
+}
+
+QString blockDirectory(const QString &projectFolder, const QString &strategyId) {
+    return QDir(projectFolder).filePath(QStringLiteral(".afterglow/stack-cache/") + safeStrategyId(strategyId));
 }
 
 } // namespace
@@ -68,6 +79,54 @@ bool store(const QString &sourcePath, const QByteArray &renderFingerprint, const
     if (!fingerprintFile.open(QIODevice::WriteOnly)) return false; // GCOVR_EXCL_LINE
     const QByteArray encodedFingerprint = renderFingerprint.toHex();
     if (fingerprintFile.write(encodedFingerprint) != encodedFingerprint.size()) return false; // GCOVR_EXCL_LINE
+    return fingerprintFile.commit();
+}
+
+QByteArray blockFingerprint(const QVector<StackFrame> &frames, const QByteArray &settingsSignature,
+                            const QByteArray &strategySignature) {
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData("afterglow-stack-block-v1");
+    hash.addData(settingsSignature);
+    hash.addData(strategySignature);
+    for (const StackFrame &frame : frames) {
+        const QFileInfo source(frame.path);
+        hash.addData(frame.decision == StackFrameDecision::Include ? "include" : "exclude");
+        hash.addData(source.absoluteFilePath().toUtf8());
+        hash.addData(QByteArray::number(source.size()));
+        hash.addData(QByteArray::number(source.lastModified().toMSecsSinceEpoch()));
+    }
+    return hash.result();
+}
+
+QString blockRenderPath(const QString &projectFolder, const QString &strategyId, int blockIndex) {
+    return QDir(blockDirectory(projectFolder, strategyId))
+        .filePath(QStringLiteral("block-%1.exr").arg(blockIndex, 5, 10, QLatin1Char('0')));
+}
+
+static QString blockFingerprintPath(const QString &projectFolder, const QString &strategyId, int blockIndex) {
+    return QDir(blockDirectory(projectFolder, strategyId))
+        .filePath(QStringLiteral("block-%1.sha256").arg(blockIndex, 5, 10, QLatin1Char('0')));
+}
+
+QImage loadBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
+                 const QByteArray &expectedFingerprint) {
+    QFile storedFingerprint(blockFingerprintPath(projectFolder, strategyId, blockIndex));
+    if (!storedFingerprint.open(QIODevice::ReadOnly)) return {};
+    if (storedFingerprint.readAll().trimmed() != expectedFingerprint.toHex()) return {};
+    return LinearImageIO::readExr(blockRenderPath(projectFolder, strategyId, blockIndex));
+}
+
+bool storeBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
+                const QByteArray &renderFingerprint, const QImage &render) {
+    const QString directory = blockDirectory(projectFolder, strategyId);
+    if (!QDir().mkpath(directory)) return false;
+    const QString fingerprint = blockFingerprintPath(projectFolder, strategyId, blockIndex);
+    QFile::remove(fingerprint);
+    if (!LinearImageIO::writeExr(blockRenderPath(projectFolder, strategyId, blockIndex), render)) return false;
+    QSaveFile fingerprintFile(fingerprint);
+    if (!fingerprintFile.open(QIODevice::WriteOnly)) return false;
+    const QByteArray encoded = renderFingerprint.toHex();
+    if (fingerprintFile.write(encoded) != encoded.size()) return false;
     return fingerprintFile.commit();
 }
 

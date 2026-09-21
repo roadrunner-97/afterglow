@@ -16,6 +16,16 @@ set_target_properties(test_stack_frame_cache PROPERTIES
 )
 add_test(NAME StackFrameCache COMMAND test_stack_frame_cache)
 
+add_executable(test_linear_image_io core/test_linear_image_io.cpp)
+target_link_libraries(test_linear_image_io PRIVATE photoeditor_core Qt6::Test Qt6::Core Qt6::Gui)
+set_target_properties(test_linear_image_io PROPERTIES AUTOMOC ON RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests)
+add_test(NAME LinearImageIO COMMAND test_linear_image_io)
+
+add_executable(test_stack_project_store core/test_stack_project_store.cpp)
+target_link_libraries(test_stack_project_store PRIVATE photoeditor_core Qt6::Test Qt6::Core Qt6::Gui)
+set_target_properties(test_stack_project_store PROPERTIES AUTOMOC ON RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests)
+add_test(NAME StackProjectStore COMMAND test_stack_project_store)
+
 add_executable(test_linear_gradient_mask core/test_linear_gradient_mask.cpp)
 target_link_libraries(test_linear_gradient_mask PRIVATE photoeditor_core Qt6::Test Qt6::Core)
 set_target_properties(test_linear_gradient_mask PROPERTIES

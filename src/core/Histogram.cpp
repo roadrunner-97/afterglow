@@ -73,6 +73,23 @@ void fill16bit(const QImage &img, std::vector<uint32_t> &bins) {
     }
 }
 
+void fillFloat(const QImage &img, std::vector<uint32_t> &bins) {
+    const int w = img.width();
+    const int h = img.height();
+    for (int y = 0; y < h; ++y) {
+        const auto *row = reinterpret_cast<const float *>(img.constScanLine(y));
+        for (int x = 0; x < w; ++x) {
+            const float *p = row + 4 * x;
+            const float lin = kRLum * p[0] + kGLum * p[1] + kBLum * p[2];
+            const float L   = linearToSrgb(lin);
+            int         bin = static_cast<int>(L * 256.0f);
+            if (bin < 0) bin = 0;
+            else if (bin > 255) bin = 255;
+            ++bins[static_cast<std::size_t>(bin)];
+        }
+    }
+}
+
 } // namespace
 
 std::vector<uint32_t> computeLuminanceHistogram(const QImage &image) {
@@ -80,7 +97,9 @@ std::vector<uint32_t> computeLuminanceHistogram(const QImage &image) {
 
     std::vector<uint32_t> bins(256, 0);
 
-    if (image.format() == QImage::Format_RGBX64) {
+    if (image.format() == QImage::Format_RGBA32FPx4 || image.format() == QImage::Format_RGBX32FPx4) {
+        fillFloat(image, bins);
+    } else if (image.format() == QImage::Format_RGBX64) {
         fill16bit(image, bins);
     } else if (image.format() == QImage::Format_RGB32) {
         fill8bit(image, bins);

@@ -52,6 +52,7 @@ Result purgePhotoCaches(const QString &folder) {
     if (!removeTree(root.filePath(".afterglow-thumbs"), &result.filesRemoved, &result.error)) return result;
     if (!removeTree(root.filePath(".afterglow/proofs"), &result.filesRemoved, &result.error)) return result;
     if (!removeTree(root.filePath(".afterglow/stack-frames"), &result.filesRemoved, &result.error)) return result;
+    if (!removeTree(root.filePath(".afterglow/stack-cache"), &result.filesRemoved, &result.error)) return result;
 
     // Remove the generated parent only when it contains nothing else.
     root.rmdir(QStringLiteral(".afterglow"));

@@ -4,6 +4,9 @@
 #include <QByteArray>
 #include <QImage>
 #include <QString>
+#include <QVector>
+
+#include "LongExposureStack.h"
 
 namespace StackFrameCache {
 
@@ -19,6 +22,14 @@ QString fingerprintPath(const QString &sourcePath);
 // fingerprint exactly matches `expectedFingerprint`.
 QImage load(const QString &sourcePath, const QByteArray &expectedFingerprint);
 bool   store(const QString &sourcePath, const QByteArray &renderFingerprint, const QImage &render);
+
+QByteArray blockFingerprint(const QVector<StackFrame> &frames, const QByteArray &settingsSignature,
+                            const QByteArray &strategySignature);
+QString blockRenderPath(const QString &projectFolder, const QString &strategyId, int blockIndex);
+QImage loadBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
+                 const QByteArray &expectedFingerprint);
+bool storeBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
+                const QByteArray &renderFingerprint, const QImage &render);
 
 } // namespace StackFrameCache
 

@@ -1,6 +1,7 @@
 #include "StackWorkspace.h"
 
 #include <QFileInfo>
+#include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -67,6 +68,13 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     m_referenceLabel->setObjectName("stackReferenceLabel");
     m_referenceLabel->setWordWrap(true);
     leftLayout->addWidget(m_referenceLabel);
+    auto *methodLabel = new QLabel("Aggregation method");
+    leftLayout->addWidget(methodLabel);
+    m_method = new QComboBox();
+    m_method->setObjectName("stackAggregationMethod");
+    for (const QString &methodId : LongExposureStack::aggregationMethodIds())
+        m_method->addItem(LongExposureStack::aggregationMethodDisplayName(methodId), methodId);
+    leftLayout->addWidget(m_method);
     root->addWidget(left);
 
     auto *right       = new QWidget();
@@ -109,12 +117,16 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     m_cancel->setObjectName("cancelStackButton");
     m_save = new QPushButton("Save Stack…");
     m_save->setObjectName("saveStackButton");
+    m_sendToDevelop = new QPushButton("Send to Develop");
+    m_sendToDevelop->setObjectName("sendStackToDevelopButton");
     m_cancel->setEnabled(false);
     m_save->setEnabled(false);
+    m_sendToDevelop->setEnabled(false);
     actions->addWidget(m_rebuild);
     actions->addWidget(m_cancel);
     actions->addStretch();
     actions->addWidget(m_save);
+    actions->addWidget(m_sendToDevelop);
     rightLayout->addLayout(actions);
     root->addWidget(right, 1);
 
@@ -123,7 +135,14 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     connect(m_rebuild, &QPushButton::clicked, this, &StackWorkspace::rebuildRequested);
     connect(m_cancel, &QPushButton::clicked, this, &StackWorkspace::cancelRequested);
     connect(m_save, &QPushButton::clicked, this, &StackWorkspace::saveRequested);
-    connect(m_frames, &QListWidget::itemChanged, this, [this](QListWidgetItem *) { updateFrameSummary(); });
+    connect(m_sendToDevelop, &QPushButton::clicked, this, &StackWorkspace::sendToDevelopRequested);
+    connect(m_method, &QComboBox::currentIndexChanged, this, [this]() {
+        if (!m_restoring) emit projectChanged();
+    });
+    connect(m_frames, &QListWidget::itemChanged, this, [this](QListWidgetItem *) {
+        updateFrameSummary();
+        if (!m_restoring) emit projectChanged();
+    });
     connect(m_frames, &QListWidget::itemSelectionChanged, this,
             [this]() { m_setReference->setEnabled(m_frames->selectedItems().size() == 1); });
     connect(m_frames, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *current) {
@@ -135,10 +154,20 @@ StackWorkspace::StackWorkspace(QWidget *parent) : QWidget(parent) {
     connect(m_showFrame, &QPushButton::clicked, this, &StackWorkspace::showSelectedFrame);
     connect(m_showResult, &QPushButton::clicked, this, &StackWorkspace::showStackResult);
     connect(includeAll, &QPushButton::clicked, this, [this]() {
-        for (int i = 0; i < m_frames->count(); ++i) m_frames->item(i)->setCheckState(Qt::Checked);
+        {
+            const QSignalBlocker blocker(m_frames);
+            for (int i = 0; i < m_frames->count(); ++i) m_frames->item(i)->setCheckState(Qt::Checked);
+        }
+        updateFrameSummary();
+        emit projectChanged();
     });
     connect(excludeSelected, &QPushButton::clicked, this, [this]() {
-        for (QListWidgetItem *item : m_frames->selectedItems()) item->setCheckState(Qt::Unchecked);
+        {
+            const QSignalBlocker blocker(m_frames);
+            for (QListWidgetItem *item : m_frames->selectedItems()) item->setCheckState(Qt::Unchecked);
+        }
+        updateFrameSummary();
+        emit projectChanged();
     });
     connect(m_setReference, &QPushButton::clicked, this, [this]() {
         const auto selected = m_frames->selectedItems();
@@ -177,6 +206,7 @@ int StackWorkspace::addFrames(const QStringList &paths) {
     updateReferencePresentation();
     updateFrameSummary();
     if (m_frames->currentRow() < 0 && m_frames->count() > 0) m_frames->setCurrentRow(0);
+    if (added > 0 && !m_restoring) emit projectChanged();
     return added;
 }
 
@@ -191,6 +221,46 @@ QVector<StackFrame> StackWorkspace::frames() const {
     return result;
 }
 
+StackAggregationConfig StackWorkspace::aggregationConfig() const {
+    StackAggregationConfig config;
+    config.methodId = m_method->currentData().toString();
+    return config;
+}
+
+void StackWorkspace::setProjectState(const QVector<StackFrame> &frames, const QString &referencePath,
+                                     const StackAggregationConfig &aggregation) {
+    m_restoring = true;
+    m_frames->clear();
+    m_referencePath.clear();
+    QStringList paths;
+    paths.reserve(frames.size());
+    for (const StackFrame &frame : frames) paths.append(frame.path);
+    addFrames(paths);
+    {
+        const QSignalBlocker blocker(m_frames);
+        for (int i = 0; i < frames.size() && i < m_frames->count(); ++i)
+            m_frames->item(i)->setCheckState(frames[i].decision == StackFrameDecision::Include ? Qt::Checked
+                                                                                               : Qt::Unchecked);
+    }
+    if (referencePath.isEmpty()) {
+        m_referencePath.clear();
+        updateReferencePresentation();
+    } else {
+        setReferencePath(referencePath);
+        if (m_referencePath != referencePath) {
+            m_referencePath.clear();
+            updateReferencePresentation();
+        }
+    }
+    const int methodIndex = m_method->findData(aggregation.methodId);
+    m_method->setCurrentIndex(methodIndex >= 0 ? methodIndex : 0);
+    m_result = {};
+    m_save->setEnabled(false);
+    m_showResult->setEnabled(false);
+    m_restoring = false;
+    updateFrameSummary();
+}
+
 QString StackWorkspace::referencePath() const {
     return m_referencePath;
 }
@@ -200,6 +270,7 @@ void StackWorkspace::setReferencePath(const QString &path) {
         if (m_frames->item(i)->data(PATH_ROLE).toString() != path) continue;
         m_referencePath = path;
         updateReferencePresentation();
+        if (!m_restoring) emit projectChanged();
         return;
     }
 }
@@ -218,7 +289,12 @@ void StackWorkspace::setResult(const QImage &result) {
     m_result = result;
     m_save->setEnabled(!result.isNull());
     m_showResult->setEnabled(!result.isNull());
+    m_sendToDevelop->setEnabled(!result.isNull());
     if (!result.isNull()) showStackResult();
+}
+
+void StackWorkspace::setMasterAvailable(bool available) {
+    m_sendToDevelop->setEnabled(available);
 }
 
 QImage StackWorkspace::result() const {

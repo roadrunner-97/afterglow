@@ -24,6 +24,9 @@ private slots:
         writeFile(dir.filePath(".afterglow/proofs/a.raw.jpg"));
         writeFile(dir.filePath(".afterglow/stack-frames/a.png"));
         writeFile(dir.filePath(".afterglow/stack-frames/a.sha256"));
+        writeFile(dir.filePath(".afterglow/stack-cache/per-channel-maximum/block.exr"));
+        writeFile(dir.filePath(".afterglow/stacks/working/project.yml"), "project");
+        writeFile(dir.filePath(".afterglow/stacks/working/master.exr"), "master");
         writeFile(dir.filePath("photo.yml"), "settings");
         writeFile(dir.filePath("photo.history.yml"), "history");
         writeFile(dir.filePath(".afterglow-catalog.json"), "catalog");
@@ -33,10 +36,13 @@ private slots:
         const CachePurger::Result result = CachePurger::purgePhotoCaches(dir.path());
 
         QVERIFY(result.success);
-        QCOMPARE(result.filesRemoved, 4);
+        QCOMPARE(result.filesRemoved, 5);
         QVERIFY(!QFileInfo::exists(dir.filePath(".afterglow-thumbs")));
         QVERIFY(!QFileInfo::exists(dir.filePath(".afterglow/proofs")));
         QVERIFY(!QFileInfo::exists(dir.filePath(".afterglow/stack-frames")));
+        QVERIFY(!QFileInfo::exists(dir.filePath(".afterglow/stack-cache")));
+        QVERIFY(QFileInfo::exists(dir.filePath(".afterglow/stacks/working/project.yml")));
+        QVERIFY(QFileInfo::exists(dir.filePath(".afterglow/stacks/working/master.exr")));
         QVERIFY(QFileInfo::exists(dir.filePath("photo.yml")));
         QVERIFY(QFileInfo::exists(dir.filePath("photo.history.yml")));
         QVERIFY(QFileInfo::exists(dir.filePath(".afterglow-catalog.json")));

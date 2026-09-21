@@ -7,6 +7,7 @@
 #include <QWidget>
 
 class QLabel;
+class QComboBox;
 class QListWidget;
 class QListWidgetItem;
 class QProgressBar;
@@ -21,6 +22,9 @@ public:
 
     int                 addFrames(const QStringList &paths);
     QVector<StackFrame> frames() const;
+    StackAggregationConfig aggregationConfig() const;
+    void setProjectState(const QVector<StackFrame> &frames, const QString &referencePath,
+                         const StackAggregationConfig &aggregation);
     QString             referencePath() const;
     void                setReferencePath(const QString &path);
     QString             currentFramePath() const;
@@ -30,6 +34,7 @@ public:
     void                setBuilding(bool building, int totalFrames = 0);
     void                setProgress(int completedFrames, int totalFrames, const QString &path);
     void                setStatus(const QString &message);
+    void                setMasterAvailable(bool available);
 
 signals:
     void addFramesRequested();
@@ -39,6 +44,8 @@ signals:
     void rebuildRequested();
     void cancelRequested();
     void saveRequested();
+    void sendToDevelopRequested();
+    void projectChanged();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -65,11 +72,14 @@ private:
     QPushButton  *m_save           = nullptr;
     QPushButton  *m_showFrame      = nullptr;
     QPushButton  *m_showResult     = nullptr;
+    QPushButton  *m_sendToDevelop = nullptr;
+    QComboBox    *m_method         = nullptr;
     QString       m_referencePath;
     QString       m_currentFramePath;
     QImage        m_framePreview;
     QImage        m_result;
     PreviewMode   m_previewMode = PreviewMode::Frame;
+    bool          m_restoring   = false;
 };
 
 #endif // STACKWORKSPACE_H

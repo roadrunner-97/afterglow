@@ -19,6 +19,8 @@
 #include "SettingsExporter.h"
 #include "SettingsImporter.h"
 #include "StackWorkspace.h"
+#include "StackProjectStore.h"
+#include "LinearImageIO.h"
 #include <QPainter>
 #include <QTransform>
 #include <QVBoxLayout>
@@ -279,6 +281,11 @@ static QImage decodeThumbnailOriented(const QString &path) {
 }
 
 static QImage decodeStackPreview(const QString &path) {
+    if (LinearImageIO::isExrPath(path)) {
+        const QImage linear = LinearImageIO::readExr(path);
+        if (linear.isNull()) return {};
+        return linear.convertToFormat(QImage::Format_RGB32);
+    }
     QImage preview;
     if (RawLoader::isRawFile(path)) {
         preview = RawLoader::loadThumbnail(path);
@@ -698,6 +705,8 @@ void PhotoEditorApp::setupUI() {
     connect(m_stackWorkspace, &StackWorkspace::rebuildRequested, this, &PhotoEditorApp::rebuildStack);
     connect(m_stackWorkspace, &StackWorkspace::cancelRequested, m_processor, &ImageProcessor::cancelStackProcessing);
     connect(m_stackWorkspace, &StackWorkspace::saveRequested, this, &PhotoEditorApp::saveStackResult);
+    connect(m_stackWorkspace, &StackWorkspace::sendToDevelopRequested, this, &PhotoEditorApp::sendStackToDevelop);
+    connect(m_stackWorkspace, &StackWorkspace::projectChanged, this, &PhotoEditorApp::persistStackProject);
     connect(m_stackWorkspace, &StackWorkspace::editReferenceRequested, this, [this](const QString &path) {
         if (path.isEmpty()) return;
         loadFullImage(path);
@@ -989,7 +998,7 @@ void PhotoEditorApp::updateDefaultEffectOrganization() {
 void PhotoEditorApp::openImage() {
     QString fileName = m_uiServices->openFile(this, "Open Image", m_lastDir,
                                               "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
-                                              "*.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
+                                              "*.exr *.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
                                               "All Files (*)");
 
     if (fileName.isEmpty()) return;
@@ -1002,12 +1011,16 @@ void PhotoEditorApp::loadFullImage(const QString &path) {
 
     QImage        img;
     ImageMetadata meta;
-    if (RawLoader::isRawFile(path)) {
+    if (LinearImageIO::isExrPath(path)) {
+        QString error;
+        img = LinearImageIO::readExr(path, &error);
+        if (img.isNull()) qWarning() << error;
+    } else if (RawLoader::isRawFile(path)) {
         img = RawLoader::load(path, &meta);
         if (img.isNull()) qWarning() << "RawLoader failed for" << path << "— trying QImage::load";
     }
     if (img.isNull()) img = decodeOriented(path);
-    if (!RawLoader::isRawFile(path)) MetadataReader::read(path, &meta);
+    if (!RawLoader::isRawFile(path) && !LinearImageIO::isExrPath(path)) MetadataReader::read(path, &meta);
 
     if (img.isNull()) {
         qWarning() << "Failed to load image:" << path;
@@ -1604,7 +1617,7 @@ void PhotoEditorApp::openFolder() {
 void PhotoEditorApp::addStackFrames() {
     const QStringList paths = m_uiServices->openFiles(
         this, "Add Photos to Long Exposure Stack", m_lastDir,
-        "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
+        "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.exr *.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
         "All Files (*)");
     if (paths.isEmpty()) return;
     m_lastDir = QFileInfo(paths.first()).absolutePath();
@@ -1666,7 +1679,15 @@ void PhotoEditorApp::rebuildStack() {
     // but settingsForPath reads its live controls directly. Other references
     // come from their sidecar, falling back to constructor defaults.
     const SettingsImporter::Settings settings = settingsForPath(reference);
-    m_processor->processStackAsync(m_stackWorkspace->frames(), *m_effects, settings);
+    const QString projectFolder = stackProjectFolder();
+    if (projectFolder.isEmpty()) {
+        m_uiServices->warning(this, "Long Exposure Stack", "The stack does not have a project folder.");
+        return;
+    }
+    persistStackProject();
+    m_stackMasterPath = StackProjectStore::masterPath(projectFolder);
+    m_processor->processStackAsync(m_stackWorkspace->frames(), *m_effects, settings,
+                                   m_stackWorkspace->aggregationConfig(), projectFolder, m_stackMasterPath);
 }
 
 void PhotoEditorApp::saveStackResult() {
@@ -1682,6 +1703,60 @@ void PhotoEditorApp::saveStackResult() {
     if (!result.save(path))
         m_uiServices->warning(this, "Save Failed", QString("Could not save the stack to:\n%1").arg(path));
     else statusBar()->showMessage(QString("Saved long exposure stack to %1").arg(path), 4000);
+}
+
+QString PhotoEditorApp::stackProjectFolder() const {
+    if (!m_currentFolder.isEmpty()) return m_currentFolder;
+    const QString reference = m_stackWorkspace ? m_stackWorkspace->referencePath() : QString();
+    if (!reference.isEmpty()) return QFileInfo(reference).absolutePath();
+    const QVector<StackFrame> frames = m_stackWorkspace ? m_stackWorkspace->frames() : QVector<StackFrame>{};
+    return frames.isEmpty() ? QString() : QFileInfo(frames.first().path).absolutePath();
+}
+
+void PhotoEditorApp::persistStackProject() {
+    const QString folder = stackProjectFolder();
+    if (folder.isEmpty() || !m_stackWorkspace || m_stackWorkspace->frames().isEmpty()) return;
+    StackProject project;
+    project.frames        = m_stackWorkspace->frames();
+    project.referencePath = m_stackWorkspace->referencePath();
+    project.aggregation   = m_stackWorkspace->aggregationConfig();
+    QString error;
+    if (!StackProjectStore::save(folder, project, &error)) qWarning() << error;
+}
+
+void PhotoEditorApp::restoreStackProject(const QString &folder) {
+    StackProject project;
+    QString      error;
+    if (!StackProjectStore::load(folder, &project, &error)) {
+        if (!error.isEmpty()) qWarning() << error;
+        return;
+    }
+    QVector<StackFrame> existing;
+    int                 missing = 0;
+    for (const StackFrame &frame : project.frames) {
+        if (QFileInfo::exists(frame.path)) existing.append(frame);
+        else ++missing;
+    }
+    if (!QFileInfo::exists(project.referencePath)) project.referencePath.clear();
+    m_stackWorkspace->setProjectState(existing, project.referencePath, project.aggregation);
+    m_stackMasterPath = StackProjectStore::masterPath(folder);
+    m_stackWorkspace->setMasterAvailable(QFileInfo::exists(m_stackMasterPath));
+    if (missing > 0)
+        m_stackWorkspace->setStatus(QStringLiteral("Restored the stack project; skipped %1 missing frame(s).")
+                                        .arg(missing));
+    else if (!existing.isEmpty())
+        m_stackWorkspace->setStatus(QStringLiteral("Restored %1 stack frame(s) from this folder.").arg(existing.size()));
+}
+
+void PhotoEditorApp::sendStackToDevelop() {
+    const QString path = m_stackMasterPath.isEmpty() ? StackProjectStore::masterPath(stackProjectFolder())
+                                                      : m_stackMasterPath;
+    if (!QFileInfo::exists(path)) {
+        m_uiServices->warning(this, "Long Exposure Stack", "Rebuild the stack before sending it to Develop.");
+        return;
+    }
+    loadFullImage(path);
+    setMode(Mode::Develop);
 }
 
 void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled,
@@ -1700,6 +1775,12 @@ void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QStri
         return;
     }
     m_stackWorkspace->setResult(result);
+    // A newly-built master starts a fresh neutral Develop pass. The project
+    // manifest and master are persistent; these are only the previous pass's
+    // settings/history sidecars.
+    QFile::remove(sidecarPathFor(m_stackMasterPath));
+    QFile::remove(historySidecarPathFor(m_stackMasterPath));
+    m_stackWorkspace->setMasterAvailable(QFileInfo::exists(m_stackMasterPath));
     m_stackWorkspace->setStatus(QStringLiteral("Stack complete · %1 × %2 pixels · reused %3 cached frame(s)")
                                     .arg(result.width())
                                     .arg(result.height())
@@ -1741,6 +1822,7 @@ static const QStringList &imageExtensions() {
 }
 
 void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
+    if (m_processor->isStackProcessing()) m_processor->cancelStackProcessing();
     QStringList  allPaths;
     QDirIterator it(folder, QDir::Files | QDir::Readable, QDirIterator::NoIteratorFlags);
     while (it.hasNext()) {
@@ -1767,6 +1849,10 @@ void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
     m_currentPaths  = paths;
     m_gridView->setPhotos(paths);
     readCatalog(folder);
+    m_stackWorkspace->setProjectState({}, {}, {});
+    m_stackMasterPath = StackProjectStore::masterPath(folder);
+    m_stackWorkspace->setMasterAvailable(false);
+    restoreStackProject(folder);
 
     for (const QString &path : paths) {
         const QString historyPath = historySidecarPathFor(path);

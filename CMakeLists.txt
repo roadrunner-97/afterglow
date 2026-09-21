@@ -57,6 +57,7 @@ endif()
 find_package(Qt6 COMPONENTS Core Gui Widgets Concurrent OpenGLWidgets REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(OpenCL REQUIRED)
+find_package(OpenEXR REQUIRED)
 
 # LibRaw for RAW file support — required.
 find_package(PkgConfig REQUIRED)
@@ -120,6 +121,8 @@ add_library(photoeditor_core STATIC
     src/core/LocalAdjustment.h
     src/core/LongExposureStack.cpp
     src/core/LongExposureStack.h
+    src/core/LinearImageIO.cpp
+    src/core/LinearImageIO.h
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h
@@ -133,6 +136,8 @@ add_library(photoeditor_core STATIC
     src/core/SettingsImporter.h
     src/core/StackFrameCache.cpp
     src/core/StackFrameCache.h
+    src/core/StackProjectStore.cpp
+    src/core/StackProjectStore.h
     src/core/ExportOptions.h
     src/core/ExportPath.cpp
     src/core/ExportPath.h
@@ -151,6 +156,7 @@ target_link_libraries(photoeditor_core
         Qt6::Widgets
         Qt6::Concurrent
         OpenCL::OpenCL
+        OpenEXR::OpenEXR
 )
 
 target_compile_definitions(photoeditor_core PUBLIC HAVE_OPENCL)
@@ -322,6 +328,10 @@ if(COVERAGE)
             # Tolerate gcov reporting the same function at two line numbers
             # (happens after split-line catch blocks); pick the earliest.
             --merge-mode-functions=merge-use-line-min
+            # GCC can emit negative branch counters for OpenCL enumeration
+            # even after a clean coverage build (GCC PR 68080). Ignore only
+            # that known parser defect while keeping all other parse errors fatal.
+            --gcov-ignore-parse-errors=negative_hits.warn_once_per_file
             --html-details ${CMAKE_BINARY_DIR}/coverage/index.html
             --xml ${CMAKE_BINARY_DIR}/coverage/coverage.xml
             --print-summary

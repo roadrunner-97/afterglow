@@ -50,6 +50,38 @@ private slots:
         source.close();
         QVERIFY(original != StackFrameCache::fingerprint(sourcePath, "settings-a"));
     }
+
+    void storesFloatBlockCompositesAndTracksDecisions() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString first = dir.filePath("first.raw");
+        const QString second = dir.filePath("second.raw");
+        for (const QString &path : {first, second}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.write("raw") == 3);
+        }
+        QVector<StackFrame> frames{{first, StackFrameDecision::Include},
+                                   {second, StackFrameDecision::Exclude}};
+        const QByteArray key = StackFrameCache::blockFingerprint(frames, "settings", "maximum-v1");
+        QImage image(1, 1, QImage::Format_RGBA32FPx4);
+        auto  *pixel = reinterpret_cast<float *>(image.scanLine(0));
+        pixel[0] = 1.5f;
+        pixel[1] = 0.4f;
+        pixel[2] = 0.2f;
+        pixel[3] = 1.0f;
+        QVERIFY(StackFrameCache::storeBlock(dir.path(), "per-channel-maximum", 0, key, image));
+        QVERIFY(QFileInfo::exists(StackFrameCache::blockRenderPath(dir.path(), "per-channel-maximum", 0)));
+        const QImage loaded =
+            StackFrameCache::loadBlock(dir.path(), "per-channel-maximum", 0, key);
+        QVERIFY(!loaded.isNull());
+        QCOMPARE(reinterpret_cast<const float *>(loaded.constScanLine(0))[0], 1.5f);
+        QVERIFY(StackFrameCache::loadBlock(dir.path(), "per-channel-maximum", 0, "wrong").isNull());
+
+        frames[1].decision = StackFrameDecision::Include;
+        QVERIFY(key != StackFrameCache::blockFingerprint(frames, "settings", "maximum-v1"));
+        QVERIFY(key != StackFrameCache::blockFingerprint(frames, "different", "maximum-v1"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestStackFrameCache)

@@ -23,6 +23,9 @@
 #include "ImageProcessor.h"
 #include "MetadataTray.h"
 #include "StackWorkspace.h"
+#include "StackProjectStore.h"
+#include "StackFrameCache.h"
+#include "LinearImageIO.h"
 #include "UiServices.h"
 
 class OrganizerTestEffect final : public PhotoEditorEffect {
@@ -125,6 +128,8 @@ private slots:
         QVERIFY(app.findChild<QPushButton *>("addCurrentFolderRawsButton"));
         QVERIFY(app.findChild<QPushButton *>("rebuildStackButton"));
         QVERIFY(app.findChild<QPushButton *>("saveStackButton"));
+        QVERIFY(app.findChild<QComboBox *>("stackAggregationMethod"));
+        QVERIFY(app.findChild<QPushButton *>("sendStackToDevelopButton"));
     }
 
     void multiImagePickerPopulatesStackAndChoosesFirstReference() {
@@ -192,6 +197,14 @@ private slots:
         auto *workspace = app.findChild<StackWorkspace *>("stackWorkspace");
         QVERIFY(workspace);
         QTRY_VERIFY_WITH_TIMEOUT(!workspace->result().isNull(), 15000);
+        const QString masterPath = StackProjectStore::masterPath(dir.path());
+        QVERIFY(QFileInfo::exists(masterPath));
+        const QImage linearMaster = LinearImageIO::readExr(masterPath);
+        QVERIFY(!linearMaster.isNull());
+        QCOMPARE(linearMaster.format(), QImage::Format_RGBA32FPx4);
+        QCOMPARE(linearMaster.text("color_space"), QString("linear"));
+        QVERIFY(QFileInfo::exists(
+            StackFrameCache::blockRenderPath(dir.path(), "per-channel-maximum", 0)));
         const QRgb pixel = reinterpret_cast<const QRgb *>(workspace->result().constScanLine(0))[0];
         QVERIFY(std::abs(qRed(pixel) - 120) <= 1);
         QVERIFY(std::abs(qGreen(pixel) - 200) <= 1);
@@ -238,6 +251,50 @@ private slots:
 
         app.findChild<QPushButton *>("addCurrentFolderRawsButton")->click();
         QCOMPARE(list->count(), 2);
+        QVERIFY(QFileInfo::exists(StackProjectStore::manifestPath(dir.path())));
+    }
+
+    void restoresPersistedStackAndCanSendFloatMasterToDevelop() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString first = dir.filePath("first.png");
+        const QString second = dir.filePath("second.png");
+        QImage display(4, 3, QImage::Format_RGB32);
+        display.fill(Qt::black);
+        QVERIFY(display.save(first));
+        QVERIFY(display.save(second));
+
+        StackProject project;
+        project.frames = {{first, StackFrameDecision::Include}, {second, StackFrameDecision::Exclude}};
+        project.referencePath = first;
+        QVERIFY(StackProjectStore::save(dir.path(), project));
+        QImage master(4, 3, QImage::Format_RGBA32FPx4);
+        master.fill(QColor::fromRgbF(0.25, 0.5, 0.75, 1.0));
+        master.setText("color_space", "linear");
+        QVERIFY(LinearImageIO::writeExr(StackProjectStore::masterPath(dir.path()), master));
+
+        FakeUiServices ui;
+        ui.directoryResult = dir.path();
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.setUiServices(&ui);
+        app.findChild<QAction *>("actionOpenFolder")->trigger();
+
+        auto *list = app.findChild<QListWidget *>("stackFrameList");
+        auto *send = app.findChild<QPushButton *>("sendStackToDevelopButton");
+        auto *method = app.findChild<QComboBox *>("stackAggregationMethod");
+        QVERIFY(list);
+        QVERIFY(send);
+        QVERIFY(method);
+        QCOMPARE(list->count(), 2);
+        QCOMPARE(list->item(1)->checkState(), Qt::Unchecked);
+        QCOMPARE(method->currentData().toString(), QString("per-channel-maximum"));
+        QVERIFY(send->isEnabled());
+
+        send->click();
+        auto *pages = app.findChild<QStackedWidget *>("editorModeStack");
+        QCOMPARE(pages->currentIndex(), static_cast<int>(EditorUiState::Mode::Develop));
+        QVERIFY(QFileInfo::exists(dir.filePath(".afterglow/stacks/working/master.yml")));
     }
 
     void organizerMovesEffectsBetweenListsAndReordersPipeline() {

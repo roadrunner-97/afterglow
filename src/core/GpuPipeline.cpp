@@ -2,6 +2,7 @@
 #include "IGpuEffect.h"
 #include "GpuDeviceRegistry.h"
 #include "GpuDeviceRegistryOCL.h"
+#include "LongExposureStack.h"
 #include "color_kernels.h"
 #include <QDebug>
 #include <algorithm>
@@ -424,7 +425,8 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
         m_processedLocalAdjustments.clear();
 
         cl::Kernel *dsKernel = nullptr;
-        if (m_is16bit) dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
+        if (m_isFloat) dsKernel = &m_downsampleKernelFloat4;
+        else if (m_is16bit) dsKernel = m_inputIsLinear ? &m_downsampleKernel16Linear : &m_downsampleKernel16Srgb;
         else dsKernel = &m_downsampleKernel8Srgb;
 
         dsKernel->setArg(0, m_srcBuf);
@@ -466,6 +468,125 @@ GpuPipelineResult GpuPipeline::run(const QImage &image, const QVector<GpuPipelin
     catch (const cl::Error &e) {
         qWarning() << "[GpuPipeline] run() failed:" << e.what() << "(err" << e.err() << ")";
         m_available = false;
+        return {};
+    }
+    // GCOVR_EXCL_STOP
+}
+
+bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPipelineCall> &calls,
+                                       const QVector<LocalAdjustment> &localAdjustments,
+                                       IStackAggregationStrategy &strategy, GpuStackAccumulator *accumulator,
+                                       QString *error) {
+    if (!accumulator || image.isNull()) {
+        if (error) *error = QStringLiteral("The stack frame or accumulator is empty.");
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const int rev = GpuDeviceRegistry::instance().revision();
+    if (!m_available || m_revision != rev) {
+        m_available    = false;
+        m_lastImageKey = 0;
+        m_initializedEffects.clear();
+        m_processedValid = false;
+        m_processedBytes = 0;
+        // GCOVR_EXCL_START — selected-device disappearance during this call
+        if (!initContext()) {
+            if (error) *error = QStringLiteral("No OpenCL device is available for stacking.");
+            return false;
+        }
+        // GCOVR_EXCL_STOP
+        m_revision = rev;
+    }
+
+    try {
+        for (const auto &call : calls) {
+            if (m_initializedEffects.find(call.gpu) != m_initializedEffects.end()) continue;
+            if (!call.gpu->initGpuKernels(m_context, m_device)) {
+                if (error) *error = QStringLiteral("Could not initialize %1.").arg(call.effect->getName());
+                return false;
+            }
+            m_initializedEffects.insert(call.gpu);
+        }
+        if (!strategy.initialize(m_context, m_device, error)) return false;
+
+        uploadImageLocked(image);
+        if (!m_available || !decodeFullResLocked()) return false;
+        for (const auto &call : calls) {
+            if (!call.enabled) continue;
+            QMap<QString, QVariant> params = call.params;
+            params.insert("_srcPixelsPerPreviewPixel", 1.0);
+            params.insert("_cropX0", 0.0);
+            params.insert("_cropY0", 0.0);
+            params.insert("_srcW", m_width);
+            params.insert("_srcH", m_height);
+            if (!call.gpu->enqueueGpu(m_queue, m_processedBuf, m_fullAuxBuf, m_width, m_height, params)) {
+                if (error) *error = QStringLiteral("Could not apply %1.").arg(call.effect->getName());
+                return false;
+            }
+        }
+        enqueueLocalAdjustmentsLocked(m_processedBuf, m_fullAuxBuf, m_width, m_height, 0.0f, 0.0f,
+                                      static_cast<float>(m_width), static_cast<float>(m_height), calls,
+                                      localAdjustments);
+
+        if (accumulator->revision != m_revision) *accumulator = {};
+        if (!accumulator->seeded) {
+            accumulator->width    = m_width;
+            accumulator->height   = m_height;
+            accumulator->revision = m_revision;
+            const size_t bytes = strategy.accumulatorBytes(m_width, m_height);
+            accumulator->buffer = cl::Buffer(m_context, CL_MEM_READ_WRITE, bytes);
+        } else if (accumulator->width != m_width || accumulator->height != m_height) {
+            if (error)
+                *error = QStringLiteral("Frame dimensions %1 × %2 do not match the stack's %3 × %4.")
+                             .arg(m_width)
+                             .arg(m_height)
+                             .arg(accumulator->width)
+                             .arg(accumulator->height);
+            return false;
+        }
+        if (!strategy.enqueue(m_queue, accumulator->buffer, m_processedBuf, m_width, m_height, accumulator->seeded,
+                              error))
+            return false;
+        accumulator->seeded = true;
+        return true;
+    }
+    // GCOVR_EXCL_START — OpenCL runtime failure paths
+    catch (const cl::Error &e) {
+        if (error)
+            *error = QStringLiteral("GPU stack processing failed: %1 (%2)")
+                         .arg(QString::fromLatin1(e.what()))
+                         .arg(e.err());
+        m_available = false;
+        return false;
+    }
+    // GCOVR_EXCL_STOP
+}
+
+QImage GpuPipeline::readStackAccumulator(const GpuStackAccumulator &accumulator,
+                                         IStackAggregationStrategy &strategy, QString *error) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!accumulator.seeded || accumulator.revision != m_revision) {
+        if (error) *error = QStringLiteral("The stack accumulator is empty or belongs to an old GPU context.");
+        return {};
+    }
+    try {
+        QImage result(accumulator.width, accumulator.height, QImage::Format_RGBA32FPx4);
+        const size_t bytes = static_cast<size_t>(accumulator.width) * static_cast<size_t>(accumulator.height) *
+                             sizeof(cl_float4);
+        cl::Buffer linearResult(m_context, CL_MEM_READ_WRITE, bytes);
+        if (!strategy.resolve(m_queue, accumulator.buffer, linearResult, accumulator.width, accumulator.height,
+                              error))
+            return {};
+        m_queue.enqueueReadBuffer(linearResult, CL_TRUE, 0, bytes, result.bits());
+        result.setText(QStringLiteral("color_space"), QStringLiteral("linear"));
+        return result;
+    }
+    // GCOVR_EXCL_START — OpenCL readback runtime failure
+    catch (const cl::Error &e) {
+        if (error)
+            *error = QStringLiteral("Could not read the stack accumulator: %1 (%2)")
+                         .arg(QString::fromLatin1(e.what()))
+                         .arg(e.err());
         return {};
     }
     // GCOVR_EXCL_STOP
@@ -565,6 +686,11 @@ bool GpuPipeline::decodeFullResLocked() {
         m_processedValid = false;
     }
 
+    if (m_isFloat) {
+        m_queue.enqueueCopyBuffer(m_srcBuf, m_processedBuf, 0, 0, bytes);
+        return true;
+    }
+
     cl::Kernel *k = nullptr;
     if (m_is16bit) k = m_inputIsLinear ? &m_decodeKernel16Linear : &m_decodeKernel16Srgb;
     else k = &m_decodeKernel8Srgb;
@@ -659,15 +785,18 @@ bool GpuPipeline::initDownsampleKernels() {
 
 void GpuPipeline::uploadImageLocked(const QImage &image) {
     const bool is16bit = (image.format() == QImage::Format_RGBX64);
-    const int  bpp     = is16bit ? 8 : 4;
+    const bool isFloat = (image.format() == QImage::Format_RGBA32FPx4 ||
+                          image.format() == QImage::Format_RGBX32FPx4);
+    const int  bpp     = isFloat ? 16 : (is16bit ? 8 : 4);
 
-    QImage src = is16bit ? image : image.convertToFormat(QImage::Format_RGB32);
+    QImage src = (is16bit || isFloat) ? image : image.convertToFormat(QImage::Format_RGB32);
 
     m_width    = src.width();
     m_height   = src.height();
     m_stride   = static_cast<int>(src.bytesPerLine() / bpp);
     m_bufBytes = static_cast<size_t>(src.bytesPerLine()) * static_cast<size_t>(m_height);
     m_is16bit  = is16bit;
+    m_isFloat  = isFloat;
     // RawLoader tags linear 16-bit inputs; any other QImage (JPEG/PNG/convertTo)
     // is sRGB-gamma encoded.  Read tag from the original image, not the converted
     // copy, to survive the convertToFormat round-trip.
