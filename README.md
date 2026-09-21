@@ -14,7 +14,7 @@ effects.
 
 ## Highlights
 
-- Gallery, Loupe, and Develop views for browsing, reviewing, and editing
+- Gallery, Loupe, Develop, and long-exposure Stack workflows
 - RAW decoding through LibRaw with a 16-bit processing path
 - One-upload OpenCL pipeline with selectable GPU, CPU, and accelerator devices
 - Non-destructive sidecar edits, persistent undo history, and before/after preview
@@ -22,6 +22,8 @@ effects.
   color work, film grain, and more
 - JPEG, PNG, and TIFF export with quality, resize, and conflict controls
 - Background previews and disk caches for responsive folder browsing
+- Streaming star-trail stacks with frame rejection, golden-reference edits,
+  cancellable on-demand rebuilds, and full-resolution export
 
 ## Requirements
 

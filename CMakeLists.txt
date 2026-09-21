@@ -118,6 +118,8 @@ add_library(photoeditor_core STATIC
     src/core/LinearGradientMask.h
     src/core/LocalAdjustment.cpp
     src/core/LocalAdjustment.h
+    src/core/LongExposureStack.cpp
+    src/core/LongExposureStack.h
     src/core/RawLoader.cpp
     src/core/RawLoader.h
     src/core/PhotoEditorEffect.h
@@ -190,6 +192,8 @@ add_library(photoeditor_ui STATIC
     src/ui/LinearGradientTool.h
     src/ui/Stylesheets.cpp
     src/ui/Stylesheets.h
+    src/ui/StackWorkspace.cpp
+    src/ui/StackWorkspace.h
     src/ui/ViewportWidget.cpp
     src/ui/ViewportWidget.h
 )

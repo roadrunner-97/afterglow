@@ -16,7 +16,7 @@ Pass an image path to open it directly in Develop:
 ```
 
 Afterglow opens in Gallery view. Use the mode buttons in the toolbar to move
-between Gallery, Loupe, and Develop.
+between Gallery, Loupe, Develop, and Stack.
 
 ## Open an image
 
@@ -96,6 +96,23 @@ the kernels and triggers a full reprocess.
 - Choose JPEG, PNG, or TIFF, output quality, a naming suffix, resize mode, and
   what to do when the destination already exists
 - Crop and rotation are baked into the exported full-resolution image
+
+## Long-exposure stacks
+
+Open **Stack** from the toolbar, or choose **File → Add Photos to Long Exposure
+Stack…**, and select the frames from the shoot. Every checked frame contributes
+to the result; select one or more rows and use **Exclude Selected** to reject
+aircraft, camera shake, or other bad frames.
+
+The starred golden reference supplies the Develop settings for every frame.
+Select a frame and choose **Set Selected as Reference**, then use **Edit
+Reference in Develop** to tune it. Return to Stack and press **Rebuild Stack**
+when ready. Rebuilds run as a streaming full-resolution lighten blend, show
+per-frame progress, and can be cancelled. The previous result remains available
+until a rebuild completes successfully. Use **Save Stack…** to export it.
+
+All input frames must have matching dimensions. Automatic registration and
+motion/foreground masks are not part of the current stack workflow.
 
 ## Editing shortcuts
 

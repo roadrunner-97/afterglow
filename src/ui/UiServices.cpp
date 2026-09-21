@@ -13,6 +13,11 @@ public:
         return QFileDialog::getOpenFileName(parent, title, initialPath, filter);
     }
 
+    QStringList openFiles(QWidget *parent, const QString &title, const QString &initialPath,
+                          const QString &filter) override {
+        return QFileDialog::getOpenFileNames(parent, title, initialPath, filter);
+    }
+
     QString saveFile(QWidget *parent, const QString &title, const QString &initialPath,
                      const QString &filter) override {
         return QFileDialog::getSaveFileName(parent, title, initialPath, filter);

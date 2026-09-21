@@ -21,6 +21,7 @@
 #include "PhotoEditorApp.h"
 #include "ImageProcessor.h"
 #include "MetadataTray.h"
+#include "StackWorkspace.h"
 #include "UiServices.h"
 
 class OrganizerTestEffect final : public PhotoEditorEffect {
@@ -46,6 +47,7 @@ private:
 class FakeUiServices final : public UiServices {
 public:
     QString                               openFileResult;
+    QStringList                           openFilesResult;
     QString                               saveFileResult;
     QString                               directoryResult;
     std::optional<ExportOptions::Options> exportOptions;
@@ -55,6 +57,9 @@ public:
 
     QString openFile(QWidget *, const QString &, const QString &, const QString &) override {
         return openFileResult;
+    }
+    QStringList openFiles(QWidget *, const QString &, const QString &, const QString &) override {
+        return openFilesResult;
     }
     QString saveFile(QWidget *, const QString &, const QString &, const QString &) override {
         return saveFileResult;
@@ -99,6 +104,8 @@ private slots:
         QVERIFY(app.findChild<QAction *>("actionModeGallery"));
         QVERIFY(app.findChild<QAction *>("actionModeLoupe"));
         QVERIFY(app.findChild<QAction *>("actionModeDevelop"));
+        QVERIFY(app.findChild<QAction *>("actionModeStack"));
+        QVERIFY(app.findChild<QAction *>("actionOpenStack"));
         QVERIFY(app.findChild<QStackedWidget *>("editorModeStack"));
         QVERIFY(app.findChild<GridView *>("galleryGrid"));
         QVERIFY(app.findChild<QWidget *>("galleryMetadataSidebar"));
@@ -111,6 +118,68 @@ private slots:
         QVERIFY(app.findChild<QListWidget *>("localAdjustmentList"));
         QVERIFY(app.findChild<QPushButton *>("editGlobalAdjustmentsButton"));
         QVERIFY(app.findChild<QLabel *>("localAdjustmentContextLabel"));
+        QVERIFY(app.findChild<QListWidget *>("stackFrameList"));
+        QVERIFY(app.findChild<QPushButton *>("setStackReferenceButton"));
+        QVERIFY(app.findChild<QPushButton *>("rebuildStackButton"));
+        QVERIFY(app.findChild<QPushButton *>("saveStackButton"));
+    }
+
+    void multiImagePickerPopulatesStackAndChoosesFirstReference() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString first  = dir.filePath("first.png");
+        const QString second = dir.filePath("second.png");
+        QImage        image(8, 8, QImage::Format_RGB32);
+        image.fill(Qt::black);
+        QVERIFY(image.save(first));
+        QVERIFY(image.save(second));
+
+        FakeUiServices ui;
+        ui.openFilesResult = {first, second};
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.setUiServices(&ui);
+        app.findChild<QAction *>("actionOpenStack")->trigger();
+
+        auto *pages     = app.findChild<QStackedWidget *>("editorModeStack");
+        auto *list      = app.findChild<QListWidget *>("stackFrameList");
+        auto *reference = app.findChild<QLabel *>("stackReferenceLabel");
+        QVERIFY(pages);
+        QVERIFY(list);
+        QVERIFY(reference);
+        QCOMPARE(pages->currentIndex(), static_cast<int>(EditorUiState::Mode::Stack));
+        QCOMPARE(list->count(), 2);
+        QCOMPARE(list->item(0)->checkState(), Qt::Checked);
+        QVERIFY(reference->text().contains("first.png"));
+    }
+
+    void stackRebuildLightensIncludedFramesOnDemand() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString first  = dir.filePath("first.png");
+        const QString second = dir.filePath("second.png");
+        QImage        a(16, 12, QImage::Format_RGB32);
+        QImage        b(16, 12, QImage::Format_RGB32);
+        a.fill(qRgb(120, 10, 60));
+        b.fill(qRgb(20, 200, 30));
+        QVERIFY(a.save(first));
+        QVERIFY(b.save(second));
+
+        FakeUiServices ui;
+        ui.openFilesResult = {first, second};
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.setUiServices(&ui);
+        app.findChild<QAction *>("actionOpenStack")->trigger();
+        app.findChild<QPushButton *>("rebuildStackButton")->click();
+
+        auto *workspace = app.findChild<StackWorkspace *>("stackWorkspace");
+        QVERIFY(workspace);
+        QTRY_VERIFY_WITH_TIMEOUT(!workspace->result().isNull(), 15000);
+        const QRgb pixel = reinterpret_cast<const QRgb *>(workspace->result().constScanLine(0))[0];
+        QVERIFY(std::abs(qRed(pixel) - 120) <= 1);
+        QVERIFY(std::abs(qGreen(pixel) - 200) <= 1);
+        QVERIFY(std::abs(qBlue(pixel) - 60) <= 1);
     }
 
     void organizerMovesEffectsBetweenListsAndReordersPipeline() {

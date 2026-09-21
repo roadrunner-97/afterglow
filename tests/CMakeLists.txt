@@ -1,5 +1,13 @@
 find_package(Qt6 COMPONENTS Test REQUIRED)
 
+add_executable(test_long_exposure_stack core/test_long_exposure_stack.cpp)
+target_link_libraries(test_long_exposure_stack PRIVATE photoeditor_core Qt6::Test Qt6::Core Qt6::Gui)
+set_target_properties(test_long_exposure_stack PROPERTIES
+    AUTOMOC ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests
+)
+add_test(NAME LongExposureStack COMMAND test_long_exposure_stack)
+
 add_executable(test_linear_gradient_mask core/test_linear_gradient_mask.cpp)
 target_link_libraries(test_linear_gradient_mask PRIVATE photoeditor_core Qt6::Test Qt6::Core)
 set_target_properties(test_linear_gradient_mask PROPERTIES

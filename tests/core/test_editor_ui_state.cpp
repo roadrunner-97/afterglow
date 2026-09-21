@@ -15,6 +15,8 @@ private slots:
         QCOMPARE(state.mode(), EditorUiState::Mode::Develop);
         QVERIFY(state.requestMode(EditorUiState::Mode::Gallery, false));
         QCOMPARE(state.mode(), EditorUiState::Mode::Gallery);
+        QVERIFY(state.requestMode(EditorUiState::Mode::Stack, false));
+        QCOMPARE(state.mode(), EditorUiState::Mode::Stack);
     }
 
     void processingStateTracksStartAndCompletion() {

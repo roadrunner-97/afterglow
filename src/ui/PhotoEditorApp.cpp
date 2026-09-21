@@ -18,6 +18,7 @@
 #include "MetadataReader.h"
 #include "SettingsExporter.h"
 #include "SettingsImporter.h"
+#include "StackWorkspace.h"
 #include <QPainter>
 #include <QTransform>
 #include <QVBoxLayout>
@@ -286,6 +287,17 @@ PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
     connect(m_processor, &ImageProcessor::processingComplete, this, &PhotoEditorApp::onProcessingComplete);
     connect(m_processor, &ImageProcessor::processingStarted, this, &PhotoEditorApp::onProcessingStarted);
     connect(m_processor, &ImageProcessor::exportComplete, this, &PhotoEditorApp::onExportComplete);
+    connect(m_processor, &ImageProcessor::stackProcessingStarted, this, [this](int total) {
+        m_uiState.setProcessing(true);
+        m_processingLabel->setText("Stacking…");
+        m_processingLabel->setVisible(true);
+        m_stackWorkspace->setBuilding(true, total);
+    });
+    connect(m_processor, &ImageProcessor::stackProcessingProgress, this,
+            [this](int completed, int total, const QString &path) {
+                m_stackWorkspace->setProgress(completed, total, path);
+            });
+    connect(m_processor, &ImageProcessor::stackProcessingComplete, this, &PhotoEditorApp::onStackProcessingComplete);
 
     m_resizeDebounce->setSingleShot(true);
     m_resizeDebounce->setInterval(150);
@@ -386,7 +398,7 @@ void PhotoEditorApp::initProofer(std::unique_ptr<EffectManager> prooferEffects) 
 void PhotoEditorApp::setupToolBar() {
     QToolBar *toolbar = addToolBar("Preview");
     toolbar->setMovable(false);
-    // Mode switcher: Gallery (grid) / Loupe (preview) / Develop (editor).
+    // Mode switcher: Gallery / Loupe / Develop / long-exposure Stack.
     // Mirrors Lightroom's module picker — user double-clicks a thumbnail to
     // step through to Loupe, then Enter (or another double-click) to Develop.
     m_modeGroup = new QActionGroup(this);
@@ -399,7 +411,7 @@ void PhotoEditorApp::setupToolBar() {
         m_modeGroup->addAction(act);
         toolbar->addAction(act);
         connect(act, &QAction::triggered, this, [this, m]() {
-            if (m == Mode::Gallery) {
+            if (m == Mode::Gallery || m == Mode::Stack) {
                 setMode(m);
             } else if (m == Mode::Loupe) {
                 if (!m_currentImagePath.isEmpty()) loadLoupeImage(m_currentImagePath);
@@ -418,6 +430,7 @@ void PhotoEditorApp::setupToolBar() {
     addModeAction("Gallery", Mode::Gallery)->setChecked(true);
     addModeAction("Loupe", Mode::Loupe);
     addModeAction("Develop", Mode::Develop);
+    addModeAction("Stack", Mode::Stack);
 
     // Spacer + processing indicator label on the right side of the toolbar
     QWidget *spacer = new QWidget();
@@ -433,7 +446,7 @@ void PhotoEditorApp::setupToolBar() {
 void PhotoEditorApp::setupUI() {
     setupMenuBar();
 
-    // The central widget is a stacked widget with three pages:
+    // The central widget is a stacked widget with four pages:
     //   0 = Gallery (grid of thumbnails for browsing/triage)
     //   1 = Loupe   (full-size single-image preview, no GPU pipeline)
     //   2 = Develop (existing viewport + right panel — the editor)
@@ -660,6 +673,19 @@ void PhotoEditorApp::setupUI() {
 
     m_stack->addWidget(develop);
 
+    // ── Stack page ─────────────────────────────────────────────────────────
+    m_stackWorkspace = new StackWorkspace();
+    connect(m_stackWorkspace, &StackWorkspace::addFramesRequested, this, &PhotoEditorApp::addStackFrames);
+    connect(m_stackWorkspace, &StackWorkspace::rebuildRequested, this, &PhotoEditorApp::rebuildStack);
+    connect(m_stackWorkspace, &StackWorkspace::cancelRequested, m_processor, &ImageProcessor::cancelStackProcessing);
+    connect(m_stackWorkspace, &StackWorkspace::saveRequested, this, &PhotoEditorApp::saveStackResult);
+    connect(m_stackWorkspace, &StackWorkspace::editReferenceRequested, this, [this](const QString &path) {
+        if (path.isEmpty()) return;
+        loadFullImage(path);
+        setMode(Mode::Develop);
+    });
+    m_stack->addWidget(m_stackWorkspace);
+
     setMode(Mode::Gallery);
 }
 
@@ -675,6 +701,10 @@ void PhotoEditorApp::setupMenuBar() {
     openFolderAct->setObjectName("actionOpenFolder");
     openFolderAct->setShortcut(QKeySequence("Ctrl+Shift+O"));
     connect(openFolderAct, &QAction::triggered, this, &PhotoEditorApp::openFolder);
+
+    QAction *openStackAct = fileMenu->addAction("Add Photos to Long Exposure Stack…");
+    openStackAct->setObjectName("actionOpenStack");
+    connect(openStackAct, &QAction::triggered, this, &PhotoEditorApp::addStackFrames);
 
     QAction *saveAct = fileMenu->addAction("Save Image…");
     saveAct->setObjectName("actionSaveImage");
@@ -1491,7 +1521,7 @@ void PhotoEditorApp::onProcessingComplete(QImage result, QPoint offset) {
 void PhotoEditorApp::resizeEvent(QResizeEvent *event) {
     QMainWindow::resizeEvent(event);
     // Debounce: avoid firing a full GPU reprocess on every pixel of a window drag.
-    m_resizeDebounce->start();
+    if (m_uiState.mode() == Mode::Develop) m_resizeDebounce->start();
 }
 
 void PhotoEditorApp::closeEvent(QCloseEvent *event) {
@@ -1532,7 +1562,7 @@ void PhotoEditorApp::setMode(Mode m) {
         }
     }
     if (m_proofer) {
-        if (m == Mode::Develop) m_proofer->pause();
+        if (m == Mode::Develop || m == Mode::Stack) m_proofer->pause();
         else m_proofer->resume();
     }
 }
@@ -1546,6 +1576,66 @@ void PhotoEditorApp::openFolder() {
     QSettings("Afterglow", "Afterglow").setValue("export/destinationDir", folder);
     loadFolderIntoGrid(folder);
     setMode(Mode::Gallery);
+}
+
+void PhotoEditorApp::addStackFrames() {
+    const QStringList paths = m_uiServices->openFiles(
+        this, "Add Photos to Long Exposure Stack", m_lastDir,
+        "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.cr2 *.cr3 *.nef *.nrw *.arw *.dng *.raf *.orf *.rw2);;"
+        "All Files (*)");
+    if (paths.isEmpty()) return;
+    m_lastDir = QFileInfo(paths.first()).absolutePath();
+    m_stackWorkspace->addFrames(paths);
+    setMode(Mode::Stack);
+}
+
+void PhotoEditorApp::rebuildStack() {
+    if (m_processor->isStackProcessing()) return;
+    const QString reference = m_stackWorkspace->referencePath();
+    if (reference.isEmpty() || !QFileInfo::exists(reference)) {
+        m_uiServices->warning(this, "Long Exposure Stack", "Choose an existing golden reference photo first.");
+        return;
+    }
+
+    // A reference currently open in Develop may have history not yet flushed,
+    // but settingsForPath reads its live controls directly. Other references
+    // come from their sidecar, falling back to constructor defaults.
+    const SettingsImporter::Settings settings = settingsForPath(reference);
+    m_processor->processStackAsync(m_stackWorkspace->frames(), *m_effects, settings);
+}
+
+void PhotoEditorApp::saveStackResult() {
+    const QImage result = m_stackWorkspace->result();
+    if (result.isNull()) return;
+    const QFileInfo reference(m_stackWorkspace->referencePath());
+    const QString   suggested = reference.absoluteDir().filePath(reference.completeBaseName() + "-stack.png");
+    QString         path      = m_uiServices->saveFile(this, "Save Long Exposure Stack", suggested,
+                                                       "PNG (*.png);;TIFF (*.tif *.tiff);;JPEG (*.jpg *.jpeg)");
+    if (path.isEmpty()) return;
+    if (QFileInfo(path).suffix().isEmpty()) path += ".png";
+    m_lastDir = QFileInfo(path).absolutePath();
+    if (!result.save(path))
+        m_uiServices->warning(this, "Save Failed", QString("Could not save the stack to:\n%1").arg(path));
+    else statusBar()->showMessage(QString("Saved long exposure stack to %1").arg(path), 4000);
+}
+
+void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled) {
+    m_uiState.setProcessing(false);
+    m_processingLabel->setText("Processing…");
+    m_processingLabel->setVisible(false);
+    m_stackWorkspace->setBuilding(false);
+    if (cancelled) {
+        m_stackWorkspace->setStatus("Stack rebuild cancelled. The previous result is unchanged.");
+        return;
+    }
+    if (!error.isEmpty()) {
+        m_stackWorkspace->setStatus(error);
+        m_uiServices->warning(this, "Stack Rebuild Failed", error);
+        return;
+    }
+    m_stackWorkspace->setResult(result);
+    m_stackWorkspace->setStatus(
+        QStringLiteral("Stack complete · %1 × %2 pixels").arg(result.width()).arg(result.height()));
 }
 
 // Per-folder JPEG cache for grid thumbnails. The first folder-open decodes

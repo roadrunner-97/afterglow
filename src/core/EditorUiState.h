@@ -9,7 +9,7 @@
 // UI state deterministic to test without a display or event loop.
 class EditorUiState {
 public:
-    enum class Mode { Gallery = 0, Loupe = 1, Develop = 2 };
+    enum class Mode { Gallery = 0, Loupe = 1, Develop = 2, Stack = 3 };
 
     Mode mode() const;
     bool requestMode(Mode requested, bool hasSelection);

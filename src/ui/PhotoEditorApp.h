@@ -37,6 +37,7 @@ class LinearGradientTool;
 class QListWidget;
 class QPushButton;
 class QCheckBox;
+class StackWorkspace;
 
 class PhotoEditorApp : public QMainWindow {
     Q_OBJECT
@@ -152,6 +153,10 @@ private:
     SettingsImporter::Settings settingsForPath(const QString &path) const;
     void                       copyDevelopSettingsFrom(const QString &path);
     void                       pasteDevelopSettingsTo(const QString &path);
+    void                       addStackFrames();
+    void                       rebuildStack();
+    void                       saveStackResult();
+    void                       onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled);
 
     MetadataTray                         *m_metadataTray        = nullptr;
     MetadataTray                         *m_galleryMetadataTray = nullptr;
@@ -180,6 +185,7 @@ private:
     GridView                               *m_gridView           = nullptr;
     LoupeView                              *m_loupeView          = nullptr;
     ViewportWidget                         *m_viewport           = nullptr;
+    StackWorkspace                         *m_stackWorkspace     = nullptr;
     LinearGradientTool                     *m_linearGradientTool = nullptr;
     LocalAdjustmentStack                    m_localAdjustments;
     QString                                 m_selectedLocalAdjustmentId;

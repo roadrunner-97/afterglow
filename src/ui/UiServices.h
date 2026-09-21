@@ -16,13 +16,15 @@ class UiServices {
 public:
     virtual ~UiServices() = default;
 
-    virtual QString openFile(QWidget *parent, const QString &title, const QString &initialPath,
-                             const QString &filter)                                                    = 0;
-    virtual QString saveFile(QWidget *parent, const QString &title, const QString &initialPath,
-                             const QString &filter)                                                    = 0;
-    virtual QString chooseDirectory(QWidget *parent, const QString &title, const QString &initialPath) = 0;
+    virtual QString     openFile(QWidget *parent, const QString &title, const QString &initialPath,
+                                 const QString &filter)                                                    = 0;
+    virtual QStringList openFiles(QWidget *parent, const QString &title, const QString &initialPath,
+                                  const QString &filter)                                                   = 0;
+    virtual QString     saveFile(QWidget *parent, const QString &title, const QString &initialPath,
+                                 const QString &filter)                                                    = 0;
+    virtual QString     chooseDirectory(QWidget *parent, const QString &title, const QString &initialPath) = 0;
     virtual std::optional<ExportOptions::Options> chooseExportOptions(QWidget       *parent,
-                                                                      const QString &defaultDirectory) = 0;
+                                                                      const QString &defaultDirectory)     = 0;
 
     virtual void information(QWidget *parent, const QString &title, const QString &message) = 0;
     virtual void warning(QWidget *parent, const QString &title, const QString &message)     = 0;

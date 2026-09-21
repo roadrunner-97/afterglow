@@ -5,7 +5,7 @@ EditorUiState::Mode EditorUiState::mode() const {
 }
 
 bool EditorUiState::requestMode(Mode requested, bool hasSelection) {
-    if (requested != Mode::Gallery && !hasSelection) return false;
+    if (requested != Mode::Gallery && requested != Mode::Stack && !hasSelection) return false;
     m_mode = requested;
     return true;
 }
