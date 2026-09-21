@@ -203,8 +203,7 @@ private slots:
         QVERIFY(!linearMaster.isNull());
         QCOMPARE(linearMaster.format(), QImage::Format_RGBA32FPx4);
         QCOMPARE(linearMaster.text("color_space"), QString("linear"));
-        QVERIFY(QFileInfo::exists(
-            StackFrameCache::blockRenderPath(dir.path(), "per-channel-maximum", 0)));
+        QVERIFY(QFileInfo::exists(StackFrameCache::blockRenderPath(dir.path(), "per-channel-maximum", 0)));
         const QRgb pixel = reinterpret_cast<const QRgb *>(workspace->result().constScanLine(0))[0];
         QVERIFY(std::abs(qRed(pixel) - 120) <= 1);
         QVERIFY(std::abs(qGreen(pixel) - 200) <= 1);
@@ -257,15 +256,15 @@ private slots:
     void restoresPersistedStackAndCanSendFloatMasterToDevelop() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        const QString first = dir.filePath("first.png");
+        const QString first  = dir.filePath("first.png");
         const QString second = dir.filePath("second.png");
-        QImage display(4, 3, QImage::Format_RGB32);
+        QImage        display(4, 3, QImage::Format_RGB32);
         display.fill(Qt::black);
         QVERIFY(display.save(first));
         QVERIFY(display.save(second));
 
         StackProject project;
-        project.frames = {{first, StackFrameDecision::Include}, {second, StackFrameDecision::Exclude}};
+        project.frames        = {{first, StackFrameDecision::Include}, {second, StackFrameDecision::Exclude}};
         project.referencePath = first;
         QVERIFY(StackProjectStore::save(dir.path(), project));
         QImage master(4, 3, QImage::Format_RGBA32FPx4);
@@ -280,8 +279,8 @@ private slots:
         app.setUiServices(&ui);
         app.findChild<QAction *>("actionOpenFolder")->trigger();
 
-        auto *list = app.findChild<QListWidget *>("stackFrameList");
-        auto *send = app.findChild<QPushButton *>("sendStackToDevelopButton");
+        auto *list   = app.findChild<QListWidget *>("stackFrameList");
+        auto *send   = app.findChild<QPushButton *>("sendStackToDevelopButton");
         auto *method = app.findChild<QComboBox *>("stackAggregationMethod");
         QVERIFY(list);
         QVERIFY(send);

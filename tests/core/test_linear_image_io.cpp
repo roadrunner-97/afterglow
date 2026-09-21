@@ -24,8 +24,8 @@ private slots:
     void roundTripsFloatRgbWithoutClipping() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QImage image(2, 1, QImage::Format_RGBA32FPx4);
-        auto  *pixels = reinterpret_cast<float *>(image.scanLine(0));
+        QImage      image(2, 1, QImage::Format_RGBA32FPx4);
+        auto       *pixels   = reinterpret_cast<float *>(image.scanLine(0));
         const float values[] = {1.75f, 0.25f, -0.1f, 1.0f, 0.5f, 2.25f, 0.75f, 1.0f};
         std::copy(std::begin(values), std::end(values), pixels);
         image.setText("color_space", "linear");
@@ -67,11 +67,11 @@ private slots:
         {
             Imf::Header header(1, 1);
             header.channels().insert("Y", Imf::Channel(Imf::FLOAT));
-            Imf::OutputFile file(QFile::encodeName(path).constData(), header);
-            float           value = 0.5f;
+            Imf::OutputFile  file(QFile::encodeName(path).constData(), header);
+            float            value = 0.5f;
             Imf::FrameBuffer frameBuffer;
-            frameBuffer.insert("Y", Imf::Slice(Imf::FLOAT, reinterpret_cast<char *>(&value), sizeof(float),
-                                                sizeof(float)));
+            frameBuffer.insert("Y",
+                               Imf::Slice(Imf::FLOAT, reinterpret_cast<char *>(&value), sizeof(float), sizeof(float)));
             file.setFrameBuffer(frameBuffer);
             file.writePixels(1);
         }

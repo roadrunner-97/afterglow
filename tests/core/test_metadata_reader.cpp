@@ -11,12 +11,12 @@
 
 namespace {
 ExifEntry *addEntry(ExifData *data, ExifIfd ifd, ExifTag tag, ExifFormat format, unsigned int components) {
-    ExifEntry *entry = exif_entry_new();
-    entry->tag = tag;
-    entry->format = format;
+    ExifEntry *entry  = exif_entry_new();
+    entry->tag        = tag;
+    entry->format     = format;
     entry->components = components;
-    entry->size = exif_format_get_size(format) * components;
-    entry->data = static_cast<unsigned char *>(std::calloc(entry->size, 1));
+    entry->size       = exif_format_get_size(format) * components;
+    entry->data       = static_cast<unsigned char *>(std::calloc(entry->size, 1));
     exif_content_add_entry(data->ifd[ifd], entry);
     exif_entry_unref(entry);
     return entry;
@@ -24,7 +24,7 @@ ExifEntry *addEntry(ExifData *data, ExifIfd ifd, ExifTag tag, ExifFormat format,
 
 void addText(ExifData *data, ExifIfd ifd, ExifTag tag, const char *value) {
     const unsigned int length = static_cast<unsigned int>(std::strlen(value) + 1U);
-    ExifEntry *entry = addEntry(data, ifd, tag, EXIF_FORMAT_ASCII, length);
+    ExifEntry         *entry  = addEntry(data, ifd, tag, EXIF_FORMAT_ASCII, length);
     std::memcpy(entry->data, value, entry->size);
 }
 
@@ -40,7 +40,7 @@ void addLong(ExifData *data, ExifIfd ifd, ExifTag tag, unsigned int value) {
 
 void addByte(ExifData *data, ExifIfd ifd, ExifTag tag, unsigned char value) {
     ExifEntry *entry = addEntry(data, ifd, tag, EXIF_FORMAT_BYTE, 1);
-    entry->data[0] = value;
+    entry->data[0]   = value;
 }
 
 void addRational(ExifData *data, ExifIfd ifd, ExifTag tag, unsigned int numerator, unsigned int denominator) {
@@ -54,7 +54,7 @@ void addSRational(ExifData *data, ExifIfd ifd, ExifTag tag, int numerator, int d
 }
 
 void addCoordinates(ExifData *data, ExifTag tag, unsigned int degrees, unsigned int minutes, unsigned int seconds) {
-    ExifEntry *entry = addEntry(data, EXIF_IFD_GPS, tag, EXIF_FORMAT_RATIONAL, 3);
+    ExifEntry          *entry = addEntry(data, EXIF_IFD_GPS, tag, EXIF_FORMAT_RATIONAL, 3);
     const ExifByteOrder order = exif_data_get_byte_order(data);
     exif_set_rational(entry->data, order, {degrees, 1});
     exif_set_rational(entry->data + sizeof(ExifRational), order, {minutes, 1});
@@ -63,7 +63,7 @@ void addCoordinates(ExifData *data, ExifTag tag, unsigned int degrees, unsigned 
 
 QString createJpegWithExif(const QTemporaryDir &directory, bool withDateOriginal) {
     const QString path = directory.filePath(withDateOriginal ? "rich.jpg" : "fallback.jpg");
-    QImage image(2, 3, QImage::Format_RGB32);
+    QImage        image(2, 3, QImage::Format_RGB32);
     image.fill(Qt::black);
     if (!image.save(path, "JPG")) return {};
 
@@ -100,7 +100,7 @@ QString createJpegWithExif(const QTemporaryDir &directory, bool withDateOriginal
 
     exif_data_fix(data);
     unsigned char *exifBytes = nullptr;
-    unsigned int exifSize = 0;
+    unsigned int   exifSize  = 0;
     exif_data_save_data(data, &exifBytes, &exifSize);
     exif_data_unref(data);
 
@@ -122,7 +122,9 @@ class TestMetadataReader : public QObject {
     Q_OBJECT
 
 private slots:
-    void rejectsNullDestination() { QVERIFY(!MetadataReader::read("unused.jpg", nullptr)); }
+    void rejectsNullDestination() {
+        QVERIFY(!MetadataReader::read("unused.jpg", nullptr));
+    }
 
     void readsJpegExifFields() {
         QTemporaryDir directory;

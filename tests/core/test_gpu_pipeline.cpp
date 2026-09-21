@@ -82,10 +82,18 @@ class StubAggregationStrategy final : public IStackAggregationStrategy {
 public:
     StubAggregationStrategy(bool initializeResult, bool enqueueResult, bool resolveResult = true)
         : m_initializeResult(initializeResult), m_enqueueResult(enqueueResult), m_resolveResult(resolveResult) {}
-    QString id() const override { return "stub"; }
-    QString displayName() const override { return "Stub"; }
-    QString cacheVersion() const override { return "v1"; }
-    bool supportsAssociativeBlockCache() const override { return false; }
+    QString id() const override {
+        return "stub";
+    }
+    QString displayName() const override {
+        return "Stub";
+    }
+    QString cacheVersion() const override {
+        return "v1";
+    }
+    bool supportsAssociativeBlockCache() const override {
+        return false;
+    }
     size_t accumulatorBytes(int width, int height) const override {
         return static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(cl_float4);
     }
@@ -799,30 +807,29 @@ private slots:
     void aggregatesLinearFloatFramesWithoutClipping() {
         if (!m_hasGpu) QSKIP("No GPU");
         GpuPipeline pipeline;
-        auto makeFloatPixel = [](float r, float g, float b) {
+        auto        makeFloatPixel = [](float r, float g, float b) {
             QImage image(1, 1, QImage::Format_RGBA32FPx4);
             auto  *pixel = reinterpret_cast<float *>(image.scanLine(0));
-            pixel[0] = r;
-            pixel[1] = g;
-            pixel[2] = b;
-            pixel[3] = 1.0f;
+            pixel[0]     = r;
+            pixel[1]     = g;
+            pixel[2]     = b;
+            pixel[3]     = 1.0f;
             image.setText("color_space", "linear");
             return image;
         };
         QString error;
-        auto strategy = LongExposureStack::createAggregationStrategy({}, &error);
+        auto    strategy = LongExposureStack::createAggregationStrategy({}, &error);
         QVERIFY2(strategy, qPrintable(error));
         GpuStackAccumulator accumulator;
         QVERIFY(!pipeline.processAndAccumulate({}, {}, {}, *strategy, &accumulator, &error));
-        QVERIFY(!pipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {}, {}, *strategy, nullptr,
-                                               &error));
+        QVERIFY(!pipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {}, {}, *strategy, nullptr, &error));
         QVERIFY(pipeline.readStackAccumulator(accumulator, *strategy, &error).isNull());
-        QVERIFY2(pipeline.processAndAccumulate(makeFloatPixel(1.75f, 0.2f, 0.8f), {}, {}, *strategy,
-                                               &accumulator, &error),
-                 qPrintable(error));
-        QVERIFY2(pipeline.processAndAccumulate(makeFloatPixel(0.5f, 2.25f, 0.7f), {}, {}, *strategy,
-                                               &accumulator, &error),
-                 qPrintable(error));
+        QVERIFY2(
+            pipeline.processAndAccumulate(makeFloatPixel(1.75f, 0.2f, 0.8f), {}, {}, *strategy, &accumulator, &error),
+            qPrintable(error));
+        QVERIFY2(
+            pipeline.processAndAccumulate(makeFloatPixel(0.5f, 2.25f, 0.7f), {}, {}, *strategy, &accumulator, &error),
+            qPrintable(error));
         const QImage result = pipeline.readStackAccumulator(accumulator, *strategy, &error);
         QVERIFY2(!result.isNull(), qPrintable(error));
         const auto *pixel = reinterpret_cast<const float *>(result.constScanLine(0));
@@ -830,25 +837,24 @@ private slots:
         QVERIFY(std::abs(pixel[1] - 2.25f) < 1e-6f);
         QVERIFY(std::abs(pixel[2] - 0.8f) < 1e-6f);
 
-        QVERIFY(!pipeline.processAndAccumulate(QImage(2, 1, QImage::Format_RGBA32FPx4), {}, {}, *strategy,
-                                               &accumulator, &error));
+        QVERIFY(!pipeline.processAndAccumulate(QImage(2, 1, QImage::Format_RGBA32FPx4), {}, {}, *strategy, &accumulator,
+                                               &error));
         QVERIFY(error.contains("dimensions"));
 
-        GpuPipeline initFailurePipeline;
-        FailInitEffect failInit;
+        GpuPipeline         initFailurePipeline;
+        FailInitEffect      failInit;
         GpuStackAccumulator failureAccumulator;
         QVERIFY(!initFailurePipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {call(&failInit)}, {},
                                                           *strategy, &failureAccumulator, &error));
         QVERIFY(error.contains("initialize"));
 
-        GpuPipeline enqueueFailurePipeline;
+        GpuPipeline       enqueueFailurePipeline;
         FailEnqueueEffect failEnqueue;
-        QVERIFY(!enqueueFailurePipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f),
-                                                             {call(&failEnqueue)}, {}, *strategy,
-                                                             &failureAccumulator, &error));
+        QVERIFY(!enqueueFailurePipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {call(&failEnqueue)}, {},
+                                                             *strategy, &failureAccumulator, &error));
         QVERIFY(error.contains("apply"));
 
-        GpuPipeline strategyFailurePipeline;
+        GpuPipeline             strategyFailurePipeline;
         StubAggregationStrategy failStrategyInit(false, true);
         QVERIFY(!strategyFailurePipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {}, {},
                                                               failStrategyInit, &failureAccumulator, &error));
@@ -858,16 +864,15 @@ private slots:
                                                               failStrategyEnqueue, &failureAccumulator, &error));
         QVERIFY(error.contains("stub enqueue"));
         StubAggregationStrategy failStrategyResolve(true, true, false);
-        GpuStackAccumulator resolveAccumulator;
+        GpuStackAccumulator     resolveAccumulator;
         QVERIFY(strategyFailurePipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {}, {},
                                                              failStrategyResolve, &resolveAccumulator, &error));
-        QVERIFY(strategyFailurePipeline.readStackAccumulator(resolveAccumulator, failStrategyResolve, &error)
-                    .isNull());
+        QVERIFY(strategyFailurePipeline.readStackAccumulator(resolveAccumulator, failStrategyResolve, &error).isNull());
         QVERIFY(error.contains("stub resolve"));
 
-        GpuPipeline effectPipeline;
+        GpuPipeline     effectPipeline;
         GpuPipelineCall disabledBrightness = call(&m_brightness, {{"brightness", 0.0}, {"contrast", 0.0}});
-        disabledBrightness.enabled = false;
+        disabledBrightness.enabled         = false;
         GpuStackAccumulator effectAccumulator;
         QVERIFY(effectPipeline.processAndAccumulate(makeFloatPixel(0.1f, 0.2f, 0.3f), {disabledBrightness}, {},
                                                     *strategy, &effectAccumulator, &error));

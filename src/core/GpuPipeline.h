@@ -92,9 +92,9 @@ public:
     GpuPipelineResult run(const QImage &image, const QVector<GpuPipelineCall> &calls, const ViewportRequest &viewport,
                           RunMode mode = RunMode::Commit, const QVector<LocalAdjustment> &localAdjustments = {});
 
-    bool processAndAccumulate(const QImage &image, const QVector<GpuPipelineCall> &calls,
-                              const QVector<LocalAdjustment> &localAdjustments, IStackAggregationStrategy &strategy,
-                              GpuStackAccumulator *accumulator, QString *error = nullptr);
+    bool   processAndAccumulate(const QImage &image, const QVector<GpuPipelineCall> &calls,
+                                const QVector<LocalAdjustment> &localAdjustments, IStackAggregationStrategy &strategy,
+                                GpuStackAccumulator *accumulator, QString *error = nullptr);
     QImage readStackAccumulator(const GpuStackAccumulator &accumulator, IStackAggregationStrategy &strategy,
                                 QString *error = nullptr);
 

@@ -14,14 +14,14 @@ QJsonObject encodePath(const QString &folder, const QString &path) {
     if (path.isEmpty()) return {};
     const QString absolute = QFileInfo(path).absoluteFilePath();
     const QString relative = QDir(folder).relativeFilePath(absolute);
-    const bool external = QDir::isAbsolutePath(relative) || relative == QStringLiteral("..") ||
-                          relative.startsWith(QStringLiteral("../"));
+    const bool    external = QDir::isAbsolutePath(relative) || relative == QStringLiteral("..") ||
+                             relative.startsWith(QStringLiteral("../"));
     return {{QStringLiteral("path"), external ? absolute : relative}, {QStringLiteral("absolute"), external}};
 }
 
 QString decodePath(const QString &folder, const QJsonValue &value) {
     const QJsonObject encoded = value.toObject();
-    const QString path = encoded.value(QStringLiteral("path")).toString();
+    const QString     path    = encoded.value(QStringLiteral("path")).toString();
     if (path.isEmpty()) return {};
     return QFileInfo(encoded.value(QStringLiteral("absolute")).toBool() ? path : QDir(folder).filePath(path))
         .absoluteFilePath();
@@ -60,14 +60,14 @@ bool save(const QString &folder, const StackProject &project, QString *error) {
     QJsonArray frames;
     for (const StackFrame &frame : project.frames) {
         QJsonObject value = encodePath(folder, frame.path);
-        value.insert(QStringLiteral("decision"),
-                     frame.decision == StackFrameDecision::Include ? QStringLiteral("include")
-                                                                    : QStringLiteral("exclude"));
+        value.insert(QStringLiteral("decision"), frame.decision == StackFrameDecision::Include
+                                                     ? QStringLiteral("include")
+                                                     : QStringLiteral("exclude"));
         frames.append(value);
     }
-    const QJsonObject aggregation{{QStringLiteral("method"), project.aggregation.methodId},
-                                  {QStringLiteral("parameters"),
-                                   QJsonObject::fromVariantMap(project.aggregation.parameters)}};
+    const QJsonObject aggregation{
+        {QStringLiteral("method"), project.aggregation.methodId},
+        {QStringLiteral("parameters"), QJsonObject::fromVariantMap(project.aggregation.parameters)}};
     const QJsonObject root{{QStringLiteral("schema"), 1},
                            {QStringLiteral("frames"), frames},
                            {QStringLiteral("reference"), encodePath(folder, project.referencePath)},
@@ -101,7 +101,7 @@ bool load(const QString &folder, StackProject *project, QString *error) {
         setError(error, QStringLiteral("Could not open the stack project manifest."));
         return false;
     }
-    QJsonParseError parseError;
+    QJsonParseError     parseError;
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (document.isNull() || !document.isObject()) {
         setError(error, QStringLiteral("Could not parse the stack project: %1").arg(parseError.errorString()));
@@ -122,12 +122,12 @@ bool load(const QString &folder, StackProject *project, QString *error) {
                        ? StackFrameDecision::Exclude
                        : StackFrameDecision::Include});
     }
-    loaded.referencePath = decodePath(folder, root.value(QStringLiteral("reference")));
+    loaded.referencePath          = decodePath(folder, root.value(QStringLiteral("reference")));
     const QJsonObject aggregation = root.value(QStringLiteral("aggregation")).toObject();
-    loaded.aggregation.methodId = aggregation.value(QStringLiteral("method")).toString(
-        QStringLiteral("per-channel-maximum"));
+    loaded.aggregation.methodId =
+        aggregation.value(QStringLiteral("method")).toString(QStringLiteral("per-channel-maximum"));
     loaded.aggregation.parameters = aggregation.value(QStringLiteral("parameters")).toObject().toVariantMap();
-    *project = std::move(loaded);
+    *project                      = std::move(loaded);
     return true;
 }
 

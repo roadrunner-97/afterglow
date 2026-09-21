@@ -88,8 +88,8 @@ private slots:
     }
 
     void floatLinear_preservesSceneLinearLuminanceAndClampsHighlights() {
-        QImage img(2, 1, QImage::Format_RGBA32FPx4);
-        auto  *pixels = reinterpret_cast<float *>(img.scanLine(0));
+        QImage      img(2, 1, QImage::Format_RGBA32FPx4);
+        auto       *pixels   = reinterpret_cast<float *>(img.scanLine(0));
         const float values[] = {0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 2.0f, 2.0f, 1.0f};
         std::copy(std::begin(values), std::end(values), pixels);
         const auto bins = computeLuminanceHistogram(img);

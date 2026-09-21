@@ -25,11 +25,11 @@ bool   store(const QString &sourcePath, const QByteArray &renderFingerprint, con
 
 QByteArray blockFingerprint(const QVector<StackFrame> &frames, const QByteArray &settingsSignature,
                             const QByteArray &strategySignature);
-QString blockRenderPath(const QString &projectFolder, const QString &strategyId, int blockIndex);
-QImage loadBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
-                 const QByteArray &expectedFingerprint);
-bool storeBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
-                const QByteArray &renderFingerprint, const QImage &render);
+QString    blockRenderPath(const QString &projectFolder, const QString &strategyId, int blockIndex);
+QImage     loadBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
+                     const QByteArray &expectedFingerprint);
+bool       storeBlock(const QString &projectFolder, const QString &strategyId, int blockIndex,
+                      const QByteArray &renderFingerprint, const QImage &render);
 
 } // namespace StackFrameCache
 

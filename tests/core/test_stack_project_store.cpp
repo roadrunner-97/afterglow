@@ -14,7 +14,7 @@ private slots:
         QTemporaryDir external;
         QVERIFY(folder.isValid());
         QVERIFY(external.isValid());
-        const QString localPath = folder.filePath("one.raw");
+        const QString localPath    = folder.filePath("one.raw");
         const QString externalPath = external.filePath("two.raw");
         for (const QString &path : {localPath, externalPath}) {
             QFile file(path);
@@ -23,7 +23,7 @@ private slots:
         }
 
         StackProject source;
-        source.frames = {{localPath, StackFrameDecision::Include}, {externalPath, StackFrameDecision::Exclude}};
+        source.frames        = {{localPath, StackFrameDecision::Include}, {externalPath, StackFrameDecision::Exclude}};
         source.referencePath = localPath;
         source.aggregation.methodId = "per-channel-maximum";
         source.aggregation.parameters.insert("future", 90);

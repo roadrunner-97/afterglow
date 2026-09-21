@@ -1678,8 +1678,8 @@ void PhotoEditorApp::rebuildStack() {
     // A reference currently open in Develop may have history not yet flushed,
     // but settingsForPath reads its live controls directly. Other references
     // come from their sidecar, falling back to constructor defaults.
-    const SettingsImporter::Settings settings = settingsForPath(reference);
-    const QString projectFolder = stackProjectFolder();
+    const SettingsImporter::Settings settings      = settingsForPath(reference);
+    const QString                    projectFolder = stackProjectFolder();
     if (projectFolder.isEmpty()) {
         m_uiServices->warning(this, "Long Exposure Stack", "The stack does not have a project folder.");
         return;
@@ -1742,15 +1742,16 @@ void PhotoEditorApp::restoreStackProject(const QString &folder) {
     m_stackMasterPath = StackProjectStore::masterPath(folder);
     m_stackWorkspace->setMasterAvailable(QFileInfo::exists(m_stackMasterPath));
     if (missing > 0)
-        m_stackWorkspace->setStatus(QStringLiteral("Restored the stack project; skipped %1 missing frame(s).")
-                                        .arg(missing));
+        m_stackWorkspace->setStatus(
+            QStringLiteral("Restored the stack project; skipped %1 missing frame(s).").arg(missing));
     else if (!existing.isEmpty())
-        m_stackWorkspace->setStatus(QStringLiteral("Restored %1 stack frame(s) from this folder.").arg(existing.size()));
+        m_stackWorkspace->setStatus(
+            QStringLiteral("Restored %1 stack frame(s) from this folder.").arg(existing.size()));
 }
 
 void PhotoEditorApp::sendStackToDevelop() {
-    const QString path = m_stackMasterPath.isEmpty() ? StackProjectStore::masterPath(stackProjectFolder())
-                                                      : m_stackMasterPath;
+    const QString path =
+        m_stackMasterPath.isEmpty() ? StackProjectStore::masterPath(stackProjectFolder()) : m_stackMasterPath;
     if (!QFileInfo::exists(path)) {
         m_uiServices->warning(this, "Long Exposure Stack", "Rebuild the stack before sending it to Develop.");
         return;

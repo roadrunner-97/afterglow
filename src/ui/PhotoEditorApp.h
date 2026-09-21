@@ -216,8 +216,8 @@ private:
     QStringList                            m_currentPaths;  // photos shown in the gallery, in display order
     QString                                m_developedPath; // path currently loaded in m_originalImage
     QString                                m_loupePath;     // path currently represented by LoupeView
-    uint64_t                               m_loupeLoadGeneration       = 0;
-    uint64_t                               m_stackPreviewGeneration    = 0;
+    uint64_t                               m_loupeLoadGeneration    = 0;
+    uint64_t                               m_stackPreviewGeneration = 0;
     QString                                m_stackMasterPath;
     uint64_t                               m_galleryMetadataGeneration = 0;
     std::shared_ptr<std::atomic<uint64_t>> m_thumbnailGeneration       = std::make_shared<std::atomic<uint64_t>>(0);

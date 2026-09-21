@@ -20,21 +20,21 @@ class StackWorkspace : public QWidget {
 public:
     explicit StackWorkspace(QWidget *parent = nullptr);
 
-    int                 addFrames(const QStringList &paths);
-    QVector<StackFrame> frames() const;
+    int                    addFrames(const QStringList &paths);
+    QVector<StackFrame>    frames() const;
     StackAggregationConfig aggregationConfig() const;
-    void setProjectState(const QVector<StackFrame> &frames, const QString &referencePath,
-                         const StackAggregationConfig &aggregation);
-    QString             referencePath() const;
-    void                setReferencePath(const QString &path);
-    QString             currentFramePath() const;
-    void                setFramePreview(const QString &path, const QImage &preview);
-    void                setResult(const QImage &result);
-    QImage              result() const;
-    void                setBuilding(bool building, int totalFrames = 0);
-    void                setProgress(int completedFrames, int totalFrames, const QString &path);
-    void                setStatus(const QString &message);
-    void                setMasterAvailable(bool available);
+    void                   setProjectState(const QVector<StackFrame> &frames, const QString &referencePath,
+                                           const StackAggregationConfig &aggregation);
+    QString                referencePath() const;
+    void                   setReferencePath(const QString &path);
+    QString                currentFramePath() const;
+    void                   setFramePreview(const QString &path, const QImage &preview);
+    void                   setResult(const QImage &result);
+    QImage                 result() const;
+    void                   setBuilding(bool building, int totalFrames = 0);
+    void                   setProgress(int completedFrames, int totalFrames, const QString &path);
+    void                   setStatus(const QString &message);
+    void                   setMasterAvailable(bool available);
 
 signals:
     void addFramesRequested();
@@ -72,7 +72,7 @@ private:
     QPushButton  *m_save           = nullptr;
     QPushButton  *m_showFrame      = nullptr;
     QPushButton  *m_showResult     = nullptr;
-    QPushButton  *m_sendToDevelop = nullptr;
+    QPushButton  *m_sendToDevelop  = nullptr;
     QComboBox    *m_method         = nullptr;
     QString       m_referencePath;
     QString       m_currentFramePath;

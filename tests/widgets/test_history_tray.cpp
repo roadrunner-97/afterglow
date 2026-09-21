@@ -116,7 +116,7 @@ private slots:
         tray.setHistory(makeRows({"A", "B"}), 1);
         QListWidget *list = listOf(&tray);
 
-        QPalette palette = tray.palette();
+        QPalette     palette = tray.palette();
         const QColor disabledText(12, 34, 56);
         palette.setColor(QPalette::Disabled, QPalette::Text, disabledText);
         tray.setPalette(palette);

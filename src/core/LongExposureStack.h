@@ -32,9 +32,9 @@ class IStackAggregationStrategy {
 public:
     virtual ~IStackAggregationStrategy() = default; // GCOVR_EXCL_LINE — compiler-emitted deleting destructor
 
-    virtual QString id() const           = 0;
-    virtual QString displayName() const  = 0;
-    virtual QString cacheVersion() const = 0;
+    virtual QString id() const                            = 0;
+    virtual QString displayName() const                   = 0;
+    virtual QString cacheVersion() const                  = 0;
     virtual bool    supportsAssociativeBlockCache() const = 0;
     virtual int     preferredBlockSize() const {
         return 16;
@@ -43,9 +43,9 @@ public:
 
     virtual bool initialize(cl::Context &context, cl::Device &device, QString *error = nullptr) = 0;
     virtual bool enqueue(cl::CommandQueue &queue, cl::Buffer &accumulator, const cl::Buffer &frame, int width,
-                         int height, bool seeded, QString *error = nullptr) = 0;
-    virtual bool resolve(cl::CommandQueue &queue, const cl::Buffer &accumulator, cl::Buffer &linearResult,
-                         int width, int height, QString *error = nullptr) = 0;
+                         int height, bool seeded, QString *error = nullptr)                     = 0;
+    virtual bool resolve(cl::CommandQueue &queue, const cl::Buffer &accumulator, cl::Buffer &linearResult, int width,
+                         int height, QString *error = nullptr)                                  = 0;
 };
 
 namespace LongExposureStack {
@@ -56,10 +56,10 @@ namespace LongExposureStack {
 // differently-sized input and leaves an existing accumulator untouched.
 bool blendLighten(QImage *accumulator, const QImage &frame, QString *error = nullptr);
 
-QStringList aggregationMethodIds();
-QString     aggregationMethodDisplayName(const QString &methodId);
+QStringList                                aggregationMethodIds();
+QString                                    aggregationMethodDisplayName(const QString &methodId);
 std::unique_ptr<IStackAggregationStrategy> createAggregationStrategy(const StackAggregationConfig &config,
-                                                                      QString *error = nullptr);
+                                                                     QString                      *error = nullptr);
 
 } // namespace LongExposureStack
 

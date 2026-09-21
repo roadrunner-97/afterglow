@@ -228,7 +228,7 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
                                      false, 0);
         return;
     }
-    QString strategyError;
+    QString    strategyError;
     const auto strategyProbe = LongExposureStack::createAggregationStrategy(aggregation, &strategyError);
     if (!strategyProbe) {
         emit stackProcessingComplete({}, strategyError, false, 0);
@@ -271,90 +271,88 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
                 emit stackProcessingComplete(result.image, result.error, result.cancelled, result.cachedFrames);
             });
 
-    watcher->setFuture(QtConcurrent::run(
-        [frames, calls = std::move(calls), locals = std::move(locals), geometry, pipeline = std::move(pipeline),
-         generation, myGeneration, target, total, settingsSignature = std::move(settingsSignature),
-         strategySignature, aggregation, projectFolder, masterPath, blockSize]() -> StackProcessingResult {
-            QString workerError;
-            auto strategy = LongExposureStack::createAggregationStrategy(aggregation, &workerError);
-            if (!strategy) return {{}, workerError, false};
+    watcher->setFuture(QtConcurrent::run([frames, calls = std::move(calls), locals = std::move(locals), geometry,
+                                          pipeline = std::move(pipeline), generation, myGeneration, target, total,
+                                          settingsSignature = std::move(settingsSignature), strategySignature,
+                                          aggregation, projectFolder, masterPath,
+                                          blockSize]() -> StackProcessingResult {
+        QString workerError;
+        auto    strategy = LongExposureStack::createAggregationStrategy(aggregation, &workerError);
+        if (!strategy) return {{}, workerError, false};
 
-            GpuStackAccumulator finalAccumulator;
-            int                 cachedFrames = 0;
-            int                 completed    = 0;
-            for (int start = 0, blockIndex = 0; start < frames.size(); start += blockSize, ++blockIndex) {
-                if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
-                const QVector<StackFrame> block = frames.mid(start, blockSize);
-                int blockIncluded = 0;
-                for (const StackFrame &frame : block)
-                    if (frame.decision == StackFrameDecision::Include) ++blockIncluded;
-                if (blockIncluded == 0) continue;
+        GpuStackAccumulator finalAccumulator;
+        int                 cachedFrames = 0;
+        int                 completed    = 0;
+        for (int start = 0, blockIndex = 0; start < frames.size(); start += blockSize, ++blockIndex) {
+            if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
+            const QVector<StackFrame> block         = frames.mid(start, blockSize);
+            int                       blockIncluded = 0;
+            for (const StackFrame &frame : block)
+                if (frame.decision == StackFrameDecision::Include) ++blockIncluded;
+            if (blockIncluded == 0) continue;
 
-                const QByteArray fingerprint =
-                    StackFrameCache::blockFingerprint(block, settingsSignature, strategySignature);
-                QImage blockImage =
-                    StackFrameCache::loadBlock(projectFolder, aggregation.methodId, blockIndex, fingerprint);
-                if (!blockImage.isNull()) {
-                    cachedFrames += blockIncluded;
-                    for (const StackFrame &frame : block) {
-                        if (frame.decision != StackFrameDecision::Include) continue;
-                        ++completed;
-                        if (target)
-                            QMetaObject::invokeMethod(
-                                target,
-                                [target, completed, total, path = frame.path]() {
-                                    if (target) emit target->stackProcessingProgress(completed, total, path);
-                                },
-                                Qt::QueuedConnection);
-                    }
-                } else {
-                    GpuStackAccumulator blockAccumulator;
-                    for (const StackFrame &stackFrame : block) {
-                        if (stackFrame.decision != StackFrameDecision::Include) continue;
-                        if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
-                        QImage frame = decodeStackFrame(stackFrame.path);
-                        if (frame.isNull())
-                            return {{}, QStringLiteral("Could not decode %1.").arg(stackFrame.path), false};
-                        frame = applyCommittedGeometry(frame, geometry.committed);
-                        QString processingError;
-                        if (!pipeline->processAndAccumulate(frame, calls, locals, *strategy, &blockAccumulator,
-                                                            &processingError))
-                            return {{}, QStringLiteral("Could not add %1: %2").arg(stackFrame.path, processingError),
-                                    false};
-                        ++completed;
-                        if (target)
-                            QMetaObject::invokeMethod(
-                                target,
-                                [target, completed, total, path = stackFrame.path]() {
-                                    if (target) emit target->stackProcessingProgress(completed, total, path);
-                                },
-                                Qt::QueuedConnection);
-                    }
-                    blockImage = pipeline->readStackAccumulator(blockAccumulator, *strategy, &workerError);
-                    if (blockImage.isNull()) return {{}, workerError, false};
-                    StackFrameCache::storeBlock(projectFolder, aggregation.methodId, blockIndex, fingerprint,
-                                                blockImage);
+            const QByteArray fingerprint =
+                StackFrameCache::blockFingerprint(block, settingsSignature, strategySignature);
+            QImage blockImage =
+                StackFrameCache::loadBlock(projectFolder, aggregation.methodId, blockIndex, fingerprint);
+            if (!blockImage.isNull()) {
+                cachedFrames += blockIncluded;
+                for (const StackFrame &frame : block) {
+                    if (frame.decision != StackFrameDecision::Include) continue;
+                    ++completed;
+                    if (target)
+                        QMetaObject::invokeMethod(
+                            target,
+                            [target, completed, total, path = frame.path]() {
+                                if (target) emit target->stackProcessingProgress(completed, total, path);
+                            },
+                            Qt::QueuedConnection);
                 }
-
-                if (!pipeline->processAndAccumulate(blockImage, {}, {}, *strategy, &finalAccumulator,
-                                                    &workerError))
-                    return {{}, workerError, false};
+            } else {
+                GpuStackAccumulator blockAccumulator;
+                for (const StackFrame &stackFrame : block) {
+                    if (stackFrame.decision != StackFrameDecision::Include) continue;
+                    if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
+                    QImage frame = decodeStackFrame(stackFrame.path);
+                    if (frame.isNull()) return {{}, QStringLiteral("Could not decode %1.").arg(stackFrame.path), false};
+                    frame = applyCommittedGeometry(frame, geometry.committed);
+                    QString processingError;
+                    if (!pipeline->processAndAccumulate(frame, calls, locals, *strategy, &blockAccumulator,
+                                                        &processingError))
+                        return {
+                            {}, QStringLiteral("Could not add %1: %2").arg(stackFrame.path, processingError), false};
+                    ++completed;
+                    if (target)
+                        QMetaObject::invokeMethod(
+                            target,
+                            [target, completed, total, path = stackFrame.path]() {
+                                if (target) emit target->stackProcessingProgress(completed, total, path);
+                            },
+                            Qt::QueuedConnection);
+                }
+                blockImage = pipeline->readStackAccumulator(blockAccumulator, *strategy, &workerError);
+                if (blockImage.isNull()) return {{}, workerError, false};
+                StackFrameCache::storeBlock(projectFolder, aggregation.methodId, blockIndex, fingerprint, blockImage);
             }
 
-            QImage linearMaster = pipeline->readStackAccumulator(finalAccumulator, *strategy, &workerError);
-            if (linearMaster.isNull()) return {{}, workerError, false};
-            const QRectF fullFrame(0.0, 0.0, 1.0, 1.0);
-            if (geometry.applyPending && (geometry.crop != fullFrame || std::abs(geometry.angle) > 0.0001))
-                linearMaster = applyGeometry(linearMaster, geometry.crop, geometry.angle);
-            if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
-            QString writeError;
-            if (!LinearImageIO::writeExr(masterPath, linearMaster, &writeError)) return {{}, writeError, false};
+            if (!pipeline->processAndAccumulate(blockImage, {}, {}, *strategy, &finalAccumulator, &workerError))
+                return {{}, workerError, false};
+        }
 
-            if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
-            const QImage preview = pipeline->run(linearMaster, {}, {}, RunMode::Commit).image;
-            if (preview.isNull()) return {{}, QStringLiteral("Could not create the stack preview."), false};
-            return {preview, {}, false, cachedFrames};
-        }));
+        QImage linearMaster = pipeline->readStackAccumulator(finalAccumulator, *strategy, &workerError);
+        if (linearMaster.isNull()) return {{}, workerError, false};
+        const QRectF fullFrame(0.0, 0.0, 1.0, 1.0);
+        if (geometry.applyPending && (geometry.crop != fullFrame || std::abs(geometry.angle) > 0.0001))
+            linearMaster = applyGeometry(linearMaster, geometry.crop, geometry.angle);
+        if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
+        QString writeError;
+        if (!LinearImageIO::writeExr(masterPath, linearMaster, &writeError)) return {{}, writeError, false};
+
+        if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
+        const QImage preview = pipeline->run(linearMaster, {}, {}, RunMode::Commit).image;
+        if (preview.isNull()) return {{}, QStringLiteral("Could not create the stack preview."), false};
+        return {preview, {}, false, cachedFrames};
+    }));
 }
 
 void ImageProcessor::cancelStackProcessing() {

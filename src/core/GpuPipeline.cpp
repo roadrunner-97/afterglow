@@ -482,7 +482,7 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
         return false;
     }
     std::lock_guard<std::mutex> lock(m_mutex);
-    const int rev = GpuDeviceRegistry::instance().revision();
+    const int                   rev = GpuDeviceRegistry::instance().revision();
     if (!m_available || m_revision != rev) {
         m_available    = false;
         m_lastImageKey = 0;
@@ -533,8 +533,8 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
             accumulator->width    = m_width;
             accumulator->height   = m_height;
             accumulator->revision = m_revision;
-            const size_t bytes = strategy.accumulatorBytes(m_width, m_height);
-            accumulator->buffer = cl::Buffer(m_context, CL_MEM_READ_WRITE, bytes);
+            const size_t bytes    = strategy.accumulatorBytes(m_width, m_height);
+            accumulator->buffer   = cl::Buffer(m_context, CL_MEM_READ_WRITE, bytes);
         } else if (accumulator->width != m_width || accumulator->height != m_height) {
             if (error)
                 *error = QStringLiteral("Frame dimensions %1 × %2 do not match the stack's %3 × %4.")
@@ -553,29 +553,27 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
     // GCOVR_EXCL_START — OpenCL runtime failure paths
     catch (const cl::Error &e) {
         if (error)
-            *error = QStringLiteral("GPU stack processing failed: %1 (%2)")
-                         .arg(QString::fromLatin1(e.what()))
-                         .arg(e.err());
+            *error =
+                QStringLiteral("GPU stack processing failed: %1 (%2)").arg(QString::fromLatin1(e.what())).arg(e.err());
         m_available = false;
         return false;
     }
     // GCOVR_EXCL_STOP
 }
 
-QImage GpuPipeline::readStackAccumulator(const GpuStackAccumulator &accumulator,
-                                         IStackAggregationStrategy &strategy, QString *error) {
+QImage GpuPipeline::readStackAccumulator(const GpuStackAccumulator &accumulator, IStackAggregationStrategy &strategy,
+                                         QString *error) {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!accumulator.seeded || accumulator.revision != m_revision) {
         if (error) *error = QStringLiteral("The stack accumulator is empty or belongs to an old GPU context.");
         return {};
     }
     try {
-        QImage result(accumulator.width, accumulator.height, QImage::Format_RGBA32FPx4);
-        const size_t bytes = static_cast<size_t>(accumulator.width) * static_cast<size_t>(accumulator.height) *
-                             sizeof(cl_float4);
+        QImage       result(accumulator.width, accumulator.height, QImage::Format_RGBA32FPx4);
+        const size_t bytes =
+            static_cast<size_t>(accumulator.width) * static_cast<size_t>(accumulator.height) * sizeof(cl_float4);
         cl::Buffer linearResult(m_context, CL_MEM_READ_WRITE, bytes);
-        if (!strategy.resolve(m_queue, accumulator.buffer, linearResult, accumulator.width, accumulator.height,
-                              error))
+        if (!strategy.resolve(m_queue, accumulator.buffer, linearResult, accumulator.width, accumulator.height, error))
             return {};
         m_queue.enqueueReadBuffer(linearResult, CL_TRUE, 0, bytes, result.bits());
         result.setText(QStringLiteral("color_space"), QStringLiteral("linear"));
@@ -785,8 +783,7 @@ bool GpuPipeline::initDownsampleKernels() {
 
 void GpuPipeline::uploadImageLocked(const QImage &image) {
     const bool is16bit = (image.format() == QImage::Format_RGBX64);
-    const bool isFloat = (image.format() == QImage::Format_RGBA32FPx4 ||
-                          image.format() == QImage::Format_RGBX32FPx4);
+    const bool isFloat = (image.format() == QImage::Format_RGBA32FPx4 || image.format() == QImage::Format_RGBX32FPx4);
     const int  bpp     = isFloat ? 16 : (is16bit ? 8 : 4);
 
     QImage src = (is16bit || isFloat) ? image : image.convertToFormat(QImage::Format_RGB32);

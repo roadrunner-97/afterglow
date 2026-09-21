@@ -33,11 +33,11 @@ bool isExrPath(const QString &path) {
 
 QImage readExr(const QString &path, QString *error) {
     try {
-        const QByteArray encoded = QFile::encodeName(path);
-        Imf::InputFile  file(encoded.constData());
+        const QByteArray   encoded = QFile::encodeName(path);
+        Imf::InputFile     file(encoded.constData());
         const Imath::Box2i window = file.header().dataWindow();
-        const int width  = window.max.x - window.min.x + 1;
-        const int height = window.max.y - window.min.y + 1;
+        const int          width  = window.max.x - window.min.x + 1;
+        const int          height = window.max.y - window.min.y + 1;
         // OpenEXR rejects inverted/empty data windows before InputFile opens.
         // GCOVR_EXCL_START
         if (width <= 0 || height <= 0) {
@@ -59,11 +59,11 @@ QImage readExr(const QString &path, QString *error) {
             return {};
         }
         // GCOVR_EXCL_STOP
-        const size_t xStride = FLOATS_PER_PIXEL * sizeof(float);
-        const size_t yStride = static_cast<size_t>(image.bytesPerLine());
-        const qptrdiff xOffset = static_cast<qptrdiff>(window.min.x) * static_cast<qptrdiff>(xStride);
-        const qptrdiff yOffset = static_cast<qptrdiff>(window.min.y) * static_cast<qptrdiff>(yStride);
-        char          *base    = reinterpret_cast<char *>(image.bits()) - xOffset - yOffset;
+        const size_t     xStride = FLOATS_PER_PIXEL * sizeof(float);
+        const size_t     yStride = static_cast<size_t>(image.bytesPerLine());
+        const qptrdiff   xOffset = static_cast<qptrdiff>(window.min.x) * static_cast<qptrdiff>(xStride);
+        const qptrdiff   yOffset = static_cast<qptrdiff>(window.min.y) * static_cast<qptrdiff>(yStride);
+        char            *base    = reinterpret_cast<char *>(image.bits()) - xOffset - yOffset;
         Imf::FrameBuffer frameBuffer;
         frameBuffer.insert("R", Imf::Slice(Imf::FLOAT, base, xStride, yStride));
         frameBuffer.insert("G", Imf::Slice(Imf::FLOAT, base + sizeof(float), xStride, yStride));
@@ -92,9 +92,8 @@ bool writeExr(const QString &path, const QImage &image, QString *error) {
         setError(error, QStringLiteral("The linear image is empty."));
         return false;
     }
-    QImage linear = image.format() == QImage::Format_RGBA32FPx4
-                        ? image
-                        : image.convertToFormat(QImage::Format_RGBA32FPx4);
+    QImage linear =
+        image.format() == QImage::Format_RGBA32FPx4 ? image : image.convertToFormat(QImage::Format_RGBA32FPx4);
     const QFileInfo destination(path);
     if (!QDir().mkpath(destination.absolutePath())) {
         setError(error, QStringLiteral("Could not create %1.").arg(destination.absolutePath()));
@@ -110,10 +109,10 @@ bool writeExr(const QString &path, const QImage &image, QString *error) {
             header.insert("afterglowColorSpace", Imf::StringAttribute("scene-linear-sRGB"));
 
             const QByteArray encoded = QFile::encodeName(temporary);
-            Imf::OutputFile file(encoded.constData(), header);
-            const size_t xStride = FLOATS_PER_PIXEL * sizeof(float);
-            const size_t yStride = static_cast<size_t>(linear.bytesPerLine());
-            char *base = reinterpret_cast<char *>(linear.bits());
+            Imf::OutputFile  file(encoded.constData(), header);
+            const size_t     xStride = FLOATS_PER_PIXEL * sizeof(float);
+            const size_t     yStride = static_cast<size_t>(linear.bytesPerLine());
+            char            *base    = reinterpret_cast<char *>(linear.bits());
             Imf::FrameBuffer frameBuffer;
             frameBuffer.insert("R", Imf::Slice(Imf::FLOAT, base, xStride, yStride));
             frameBuffer.insert("G", Imf::Slice(Imf::FLOAT, base + sizeof(float), xStride, yStride));

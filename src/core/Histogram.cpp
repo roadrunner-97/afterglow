@@ -79,10 +79,10 @@ void fillFloat(const QImage &img, std::vector<uint32_t> &bins) {
     for (int y = 0; y < h; ++y) {
         const auto *row = reinterpret_cast<const float *>(img.constScanLine(y));
         for (int x = 0; x < w; ++x) {
-            const float *p = row + 4 * x;
-            const float lin = kRLum * p[0] + kGLum * p[1] + kBLum * p[2];
-            const float L   = linearToSrgb(lin);
-            int         bin = static_cast<int>(L * 256.0f);
+            const float *p   = row + 4 * x;
+            const float  lin = kRLum * p[0] + kGLum * p[1] + kBLum * p[2];
+            const float  L   = linearToSrgb(lin);
+            int          bin = static_cast<int>(L * 256.0f);
             if (bin < 0) bin = 0;
             else if (bin > 255) bin = 255;
             ++bins[static_cast<std::size_t>(bin)];

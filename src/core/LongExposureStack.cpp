@@ -41,7 +41,7 @@ public:
         try {
             cl::Program program(context, MAXIMUM_KERNEL);
             program.build({device});
-            m_kernel = cl::Kernel(program, "aggregate_maximum");
+            m_kernel        = cl::Kernel(program, "aggregate_maximum");
             m_contextHandle = context();
             return true;
         }
@@ -102,7 +102,7 @@ public:
     }
 
 private:
-    cl::Kernel  m_kernel;
+    cl::Kernel m_kernel;
     cl_context m_contextHandle = nullptr;
 };
 
@@ -158,9 +158,8 @@ QString aggregationMethodDisplayName(const QString &methodId) {
 }
 
 std::unique_ptr<IStackAggregationStrategy> createAggregationStrategy(const StackAggregationConfig &config,
-                                                                      QString *error) {
-    if (config.methodId == QStringLiteral("per-channel-maximum"))
-        return std::make_unique<PerChannelMaximumStrategy>();
+                                                                     QString                      *error) {
+    if (config.methodId == QStringLiteral("per-channel-maximum")) return std::make_unique<PerChannelMaximumStrategy>();
     if (error) *error = QStringLiteral("Unknown stack aggregation method: %1").arg(config.methodId);
     return {};
 }

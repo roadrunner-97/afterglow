@@ -75,7 +75,7 @@ private slots:
         QCOMPARE(LongExposureStack::aggregationMethodDisplayName("per-channel-maximum"),
                  QString("Per-channel maximum"));
         QString error;
-        auto strategy = LongExposureStack::createAggregationStrategy({}, &error);
+        auto    strategy = LongExposureStack::createAggregationStrategy({}, &error);
         QVERIFY2(strategy, qPrintable(error));
         QCOMPARE(strategy->id(), QString("per-channel-maximum"));
         QCOMPARE(strategy->displayName(), QString("Per-channel maximum"));
@@ -83,8 +83,7 @@ private slots:
         QVERIFY(strategy->supportsAssociativeBlockCache());
         QCOMPARE(strategy->accumulatorBytes(2, 3), size_t(2 * 3 * sizeof(cl_float4)));
         QCOMPARE(strategy->preferredBlockSize(), 16);
-        QCOMPARE(LongExposureStack::aggregationMethodDisplayName("future-percentile"),
-                 QString("future-percentile"));
+        QCOMPARE(LongExposureStack::aggregationMethodDisplayName("future-percentile"), QString("future-percentile"));
 
         StackAggregationConfig unknown;
         unknown.methodId = "future-percentile";
