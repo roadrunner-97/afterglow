@@ -80,6 +80,8 @@ public:
 
 class StubAggregationStrategy final : public IStackAggregationStrategy {
 public:
+    bool switchDeviceOnResolve = false;
+
     StubAggregationStrategy(bool initializeResult, bool enqueueResult, bool resolveResult = true)
         : m_initializeResult(initializeResult), m_enqueueResult(enqueueResult), m_resolveResult(resolveResult) {}
     QString id() const override {
@@ -112,6 +114,12 @@ public:
             return false;
         }
         queue.enqueueCopyBuffer(accumulator, linearResult, 0, 0, accumulatorBytes(width, height));
+        if (switchDeviceOnResolve) {
+            auto     &registry = GpuDeviceRegistry::instance();
+            const int original = registry.currentIndex();
+            registry.setDevice(original + 1);
+            registry.setDevice(original);
+        }
         return true;
     }
 
@@ -802,6 +810,88 @@ private slots:
         const QColor left  = output.pixelColor(2, 16);
         const QColor right = output.pixelColor(61, 16);
         QVERIFY(right.red() - right.blue() > left.red() - left.blue());
+    }
+
+    void stackDeviceChangeRejectsExistingAccumulator_data() {
+        QTest::addColumn<bool>("reinitializePipeline");
+        QTest::newRow("before-context-reinit") << false;
+        QTest::newRow("after-context-reinit") << true;
+    }
+
+    void stackDeviceChangeRejectsExistingAccumulator() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        QFETCH(bool, reinitializePipeline);
+        GpuPipeline         pipeline;
+        GpuStackAccumulator accumulator;
+        auto                strategy = LongExposureStack::createAggregationStrategy({});
+        const QImage        red      = makeSolid(2, 2, 255, 0, 0);
+        const QImage        green    = makeSolid(2, 2, 0, 255, 0);
+        QString             error;
+        QVERIFY2(pipeline.processAndAccumulate(red, {}, {}, *strategy, &accumulator, &error), qPrintable(error));
+        QVERIFY(!pipeline.readStackAccumulator(accumulator, *strategy, &error).isNull());
+        const cl_mem buffer   = accumulator.buffer();
+        const int    revision = accumulator.revision;
+
+        auto     &registry = GpuDeviceRegistry::instance();
+        const int original = registry.currentIndex();
+        registry.setDevice(original + 1);
+        registry.setDevice(original);
+        if (reinitializePipeline) QVERIFY(!pipeline.run(green, {}, fullViewport(green)).image.isNull());
+
+        // Readback must notice a device switch even before another pipeline
+        // operation has reinitialized its context.
+        QVERIFY(pipeline.readStackAccumulator(accumulator, *strategy, &error).isNull());
+        QVERIFY(error.contains("GPU context"));
+        QVERIFY(!pipeline.processAndAccumulate(green, {}, {}, *strategy, &accumulator, &error));
+        QVERIFY(error.contains("changed during stacking"));
+        QCOMPARE(accumulator.buffer(), buffer);
+        QCOMPARE(accumulator.revision, revision);
+        QCOMPARE(accumulator.width, red.width());
+        QCOMPARE(accumulator.height, red.height());
+        QVERIFY(accumulator.seeded);
+
+        // An explicit restart creates a complete stack on the newly selected
+        // device; the failed attempt must not poison future builds.
+        accumulator = {};
+        QVERIFY2(pipeline.processAndAccumulate(red, {}, {}, *strategy, &accumulator, &error), qPrintable(error));
+        QVERIFY2(pipeline.processAndAccumulate(green, {}, {}, *strategy, &accumulator, &error), qPrintable(error));
+        const QImage result = pipeline.readStackAccumulator(accumulator, *strategy, &error);
+        QVERIFY2(!result.isNull(), qPrintable(error));
+        const auto *pixel = reinterpret_cast<const float *>(result.constScanLine(0));
+        QVERIFY(std::abs(pixel[0] - 1.0f) < 1e-6f);
+        QVERIFY(std::abs(pixel[1] - 1.0f) < 1e-6f);
+        QVERIFY(std::abs(pixel[2]) < 1e-6f);
+    }
+
+    void stackRejectsAccumulatorFromAnotherContext() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        GpuPipeline         owner, other;
+        GpuStackAccumulator accumulator;
+        auto                strategy = LongExposureStack::createAggregationStrategy({});
+        const QImage        red      = makeSolid(2, 2, 255, 0, 0);
+        QString             error;
+        QVERIFY(owner.processAndAccumulate(red, {}, {}, *strategy, &accumulator, &error));
+        const QImage before = owner.readStackAccumulator(accumulator, *strategy, &error);
+        QVERIFY(!before.isNull());
+        QVERIFY(!other.run(red, {}, fullViewport(red)).image.isNull());
+        QVERIFY(other.readStackAccumulator(accumulator, *strategy, &error).isNull());
+        QVERIFY(error.contains("different GPU context"));
+        QVERIFY(!other.processAndAccumulate(red, {}, {}, *strategy, &accumulator, &error));
+        QVERIFY(error.contains("different GPU context"));
+        QCOMPARE(owner.readStackAccumulator(accumulator, *strategy, &error), before);
+    }
+
+    void stackDeviceChangeDuringReadbackRejectsResult() {
+        if (!m_hasGpu) QSKIP("No GPU");
+        GpuPipeline         pipeline;
+        GpuStackAccumulator accumulator;
+        auto                strategy = LongExposureStack::createAggregationStrategy({});
+        QString             error;
+        QVERIFY(pipeline.processAndAccumulate(makeSolid(2, 2, 255, 0, 0), {}, {}, *strategy, &accumulator, &error));
+        StubAggregationStrategy switchingStrategy(true, true);
+        switchingStrategy.switchDeviceOnResolve = true;
+        QVERIFY(pipeline.readStackAccumulator(accumulator, switchingStrategy, &error).isNull());
+        QVERIFY(error.contains("changed during stacking"));
     }
 
     void aggregatesLinearFloatFramesWithoutClipping() {

@@ -92,7 +92,7 @@ bool writeExr(const QString &path, const QImage &image, QString *error) {
         setError(error, QStringLiteral("The linear image is empty."));
         return false;
     }
-    QImage linear =
+    const QImage linear =
         image.format() == QImage::Format_RGBA32FPx4 ? image : image.convertToFormat(QImage::Format_RGBA32FPx4);
     const QFileInfo destination(path);
     if (!QDir().mkpath(destination.absolutePath())) {
@@ -112,7 +112,9 @@ bool writeExr(const QString &path, const QImage &image, QString *error) {
             Imf::OutputFile  file(encoded.constData(), header);
             const size_t     xStride = FLOATS_PER_PIXEL * sizeof(float);
             const size_t     yStride = static_cast<size_t>(linear.bytesPerLine());
-            char            *base    = reinterpret_cast<char *>(linear.bits());
+            // OutputFile only reads the pixels, but Slice requires a mutable pointer.
+            // constBits() preserves QImage sharing and avoids copying the full image.
+            char            *base = const_cast<char *>(reinterpret_cast<const char *>(linear.constBits()));
             Imf::FrameBuffer frameBuffer;
             frameBuffer.insert("R", Imf::Slice(Imf::FLOAT, base, xStride, yStride));
             frameBuffer.insert("G", Imf::Slice(Imf::FLOAT, base + sizeof(float), xStride, yStride));

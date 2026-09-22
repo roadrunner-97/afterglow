@@ -14,12 +14,15 @@
 #include "SettingsImporter.h"
 
 template <typename T> class QFutureWatcher;
+struct StagedStackMaster;
 
 struct StackProcessingResult {
     QImage  image;
     QString error;
     bool    cancelled    = false;
     int     cachedFrames = 0;
+    // Keeps the unpublished file alive until delivery (or processor teardown).
+    std::shared_ptr<StagedStackMaster> stagedMaster = {};
 };
 
 /**

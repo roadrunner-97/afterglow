@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QFile>
+#include <QFutureWatcher>
 #include <QFontComboBox>
 #include <QSignalSpy>
 #include <QStackedWidget>
@@ -93,6 +94,18 @@ private:
         for (QAction *candidate : app.findChildren<QAction *>())
             if (candidate->text() == text) return candidate;
         return nullptr;
+    }
+
+    static QFutureWatcher<StackProcessingResult> *stackWatcher(ImageProcessor *processor) {
+        for (auto *watcher : processor->findChildren<QFutureWatcherBase *>())
+            if (auto *stack = dynamic_cast<QFutureWatcher<StackProcessingResult> *>(watcher)) return stack;
+        return nullptr;
+    }
+
+    static QByteArray readFile(const QString &path) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) return {};
+        return file.readAll();
     }
 
 private slots:
@@ -212,6 +225,134 @@ private slots:
         app.findChild<QPushButton *>("rebuildStackButton")->click();
         QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 2, 15000);
         QCOMPARE(completed.at(1).at(3).toInt(), 2);
+    }
+
+    void stackMasterIsPublishedOnlyOnAcceptedDelivery_data() {
+        QTest::addColumn<QString>("action");
+        QTest::newRow("publish") << QString("publish");
+        QTest::newRow("cancel-after-worker-finishes") << QString("cancel");
+        QTest::newRow("destroy-before-delivery") << QString("destroy");
+    }
+
+    void stackMasterIsPublishedOnlyOnAcceptedDelivery() {
+        QFETCH(QString, action);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString source = dir.filePath("source.png");
+        const QString master = StackProjectStore::masterPath(dir.path());
+        QImage        image(16, 12, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QVERIFY(image.save(source));
+        QImage oldMaster(2, 3, QImage::Format_RGBA32FPx4);
+        oldMaster.fill(QColor::fromRgbF(0.125, 0.25, 0.5));
+        QVERIFY(LinearImageIO::writeExr(master, oldMaster));
+        const QByteArray originalBytes = readFile(master);
+        QVERIFY(!originalBytes.isEmpty());
+
+        EffectManager effects;
+        auto          processor = std::make_unique<ImageProcessor>();
+        QSignalSpy    complete(processor.get(), &ImageProcessor::stackProcessingComplete);
+        QSignalSpy    progress(processor.get(), &ImageProcessor::stackProcessingProgress);
+        processor->processStackAsync({{source, StackFrameDecision::Include}}, effects, {}, {}, dir.path(), master);
+        auto *watcher = stackWatcher(processor.get());
+        QVERIFY(watcher);
+        // Deliberately leave the finished event queued on the owner thread.
+        watcher->waitForFinished();
+        QVERIFY2(watcher->result().error.isEmpty(), qPrintable(watcher->result().error));
+        QVERIFY(!watcher->result().image.isNull());
+        QCOMPARE(complete.count(), 0);
+        QVERIFY(processor->isStackProcessing());
+        QCOMPARE(readFile(master), originalBytes);
+        const QDir masterDir = QFileInfo(master).absoluteDir();
+        QCOMPARE(masterDir.entryList({"master.exr.pending-*"}, QDir::Files).size(), 1);
+
+        if (action == "destroy") {
+            processor.reset();
+            QCOMPARE(complete.count(), 0);
+        } else {
+            if (action == "cancel") processor->cancelStackProcessing();
+            QTRY_COMPARE_WITH_TIMEOUT(complete.count(), 1, 15000);
+            QVERIFY(!processor->isStackProcessing());
+            QCOMPARE(complete.at(0).at(2).toBool(), action == "cancel");
+            QVERIFY(complete.at(0).at(1).toString().isEmpty());
+            if (action == "cancel") {
+                QVERIFY(qvariant_cast<QImage>(complete.at(0).at(0)).isNull());
+                QCOMPARE(progress.count(), 0);
+            }
+        }
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY(masterDir.entryList({"master.exr.pending-*"}, QDir::Files).isEmpty());
+        if (action == "publish") {
+            QCOMPARE(LinearImageIO::readExr(master).size(), image.size());
+            QVERIFY(readFile(master) != originalBytes);
+        } else QCOMPARE(readFile(master), originalBytes);
+    }
+
+    void folderChangeBeforeStackDeliveryPreservesProjectMastersAndEdits() {
+        QTemporaryDir firstDir, secondDir;
+        QVERIFY(firstDir.isValid());
+        QVERIFY(secondDir.isValid());
+        QImage source(16, 12, QImage::Format_RGB32);
+        source.fill(Qt::red);
+        const QString first  = firstDir.filePath("first.png");
+        const QString second = secondDir.filePath("second.png");
+        QVERIFY(source.save(first));
+        QVERIFY(source.save(second));
+        StackProject secondProject;
+        secondProject.frames        = {{second, StackFrameDecision::Include}};
+        secondProject.referencePath = second;
+        QVERIFY(StackProjectStore::save(secondDir.path(), secondProject));
+
+        const QString firstMaster  = StackProjectStore::masterPath(firstDir.path());
+        const QString secondMaster = StackProjectStore::masterPath(secondDir.path());
+        QImage        oldMaster(2, 3, QImage::Format_RGBA32FPx4);
+        oldMaster.fill(QColor::fromRgbF(0.125, 0.25, 0.5));
+        for (const QString &master : {firstMaster, secondMaster}) {
+            QVERIFY(LinearImageIO::writeExr(master, oldMaster));
+            for (const QString &name : {QString("master.yml"), QString("master.history.yml")}) {
+                QFile sidecar(QFileInfo(master).absoluteDir().filePath(name));
+                QVERIFY(sidecar.open(QIODevice::WriteOnly));
+                QCOMPARE(sidecar.write("existing project edits\n"), qint64(23));
+            }
+        }
+        const QByteArray firstBytes  = readFile(firstMaster);
+        const QByteArray secondBytes = readFile(secondMaster);
+        FakeUiServices   ui;
+        ui.openFilesResult = {first};
+        ui.directoryResult = secondDir.path();
+        EffectManager  effects;
+        PhotoEditorApp app(&effects);
+        app.setUiServices(&ui);
+        app.findChild<QAction *>("actionOpenStack")->trigger();
+        auto *processor = app.findChild<ImageProcessor *>();
+        auto *workspace = app.findChild<StackWorkspace *>();
+        QVERIFY(processor);
+        QVERIFY(workspace);
+        QSignalSpy complete(processor, &ImageProcessor::stackProcessingComplete);
+        app.findChild<QPushButton *>("rebuildStackButton")->click();
+        auto *watcher = stackWatcher(processor);
+        QVERIFY(watcher);
+        watcher->waitForFinished();
+        QVERIFY2(watcher->result().error.isEmpty(), qPrintable(watcher->result().error));
+        QVERIFY(!watcher->result().image.isNull());
+        QCOMPARE(complete.count(), 0);
+
+        app.findChild<QAction *>("actionOpenFolder")->trigger();
+        QCOMPARE(workspace->referencePath(), second);
+        const QString restoredStatus = app.findChild<QLabel *>("stackStatusLabel")->text();
+        QTRY_COMPARE_WITH_TIMEOUT(complete.count(), 1, 15000);
+        QVERIFY(complete.at(0).at(2).toBool());
+        QVERIFY(workspace->result().isNull());
+        QCOMPARE(app.findChild<QLabel *>("stackStatusLabel")->text(), restoredStatus);
+        QVERIFY(app.findChild<QPushButton *>("rebuildStackButton")->isEnabled());
+        QVERIFY(!app.findChild<QPushButton *>("cancelStackButton")->isEnabled());
+        QCOMPARE(readFile(firstMaster), firstBytes);
+        QCOMPARE(readFile(secondMaster), secondBytes);
+        for (const QString &master : {firstMaster, secondMaster})
+            for (const QString &name : {QString("master.yml"), QString("master.history.yml")})
+                QCOMPARE(readFile(QFileInfo(master).absoluteDir().filePath(name)),
+                         QByteArray("existing project edits\n"));
+        QVERIFY(ui.warningTitles.isEmpty());
     }
 
     void currentGalleryFolderAddsOnlyRawFramesWithoutDuplicates() {

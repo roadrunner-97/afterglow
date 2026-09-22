@@ -85,7 +85,9 @@ bool store(const QString &sourcePath, const QByteArray &renderFingerprint, const
 QByteArray blockFingerprint(const QVector<StackFrame> &frames, const QByteArray &settingsSignature,
                             const QByteArray &strategySignature) {
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    hash.addData("afterglow-stack-block-v1");
+    // Older blocks may have silently dropped frames after a GPU switch.
+    // Rebuild them once instead of trusting a potentially partial composite.
+    hash.addData("afterglow-stack-block-v2");
     hash.addData(settingsSignature);
     hash.addData(strategySignature);
     for (const StackFrame &frame : frames) {

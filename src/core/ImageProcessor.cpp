@@ -17,8 +17,18 @@
 #include <QPainter>
 #include <QPointer>
 #include <QTransform>
+#include <QFile>
+#include <QUuid>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+
+struct StagedStackMaster {
+    QString path;
+    ~StagedStackMaster() {
+        QFile::remove(path);
+    }
+};
 
 ImageProcessor::ImageProcessor(QObject *parent) : QObject(parent) {}
 
@@ -257,19 +267,32 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
                               ? std::max(1, strategyProbe->preferredBlockSize())
                               : std::max(1, static_cast<int>(frames.size()));
 
-    emit stackProcessingStarted(total);
     m_stackWatcher = new QFutureWatcher<StackProcessingResult>(this);
     auto *watcher  = m_stackWatcher;
     connect(watcher, &QFutureWatcher<StackProcessingResult>::finished, this,
-            [this, watcher, generation, myGeneration]() {
-                const StackProcessingResult result = watcher->result();
-                if (m_stackWatcher == watcher) m_stackWatcher = nullptr;
+            [this, watcher, generation, myGeneration, masterPath]() {
+                StackProcessingResult result = watcher->result();
                 watcher->deleteLater();
-                // A newer request owns the UI; an older worker finishing must
-                // not replace its progress or result.
-                if (generation->load(std::memory_order_relaxed) != myGeneration && !result.cancelled) return;
+                if (m_stackWatcher != watcher) return;
+                m_stackWatcher = nullptr;
+                // Cancellation remains effective until this owner-thread
+                // commit, including when the worker has already finished.
+                if (generation->load(std::memory_order_relaxed) != myGeneration) {
+                    result.image = {};
+                    result.error.clear();
+                    result.cancelled = true;
+                } else if (result.stagedMaster) {
+                    const QByteArray source      = QFile::encodeName(result.stagedMaster->path);
+                    const QByteArray destination = QFile::encodeName(masterPath);
+                    if (::rename(source.constData(), destination.constData()) != 0) {
+                        result.image = {};
+                        result.error = QStringLiteral("Could not replace %1.").arg(masterPath);
+                    }
+                }
                 emit stackProcessingComplete(result.image, result.error, result.cancelled, result.cachedFrames);
             });
+
+    emit stackProcessingStarted(total);
 
     watcher->setFuture(QtConcurrent::run([frames, calls = std::move(calls), locals = std::move(locals), geometry,
                                           pipeline = std::move(pipeline), generation, myGeneration, target, total,
@@ -303,8 +326,9 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
                     if (target)
                         QMetaObject::invokeMethod(
                             target,
-                            [target, completed, total, path = frame.path]() {
-                                if (target) emit target->stackProcessingProgress(completed, total, path);
+                            [target, generation, myGeneration, completed, total, path = frame.path]() {
+                                if (target && generation->load(std::memory_order_relaxed) == myGeneration)
+                                    emit target->stackProcessingProgress(completed, total, path);
                             },
                             Qt::QueuedConnection);
                 }
@@ -325,8 +349,9 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
                     if (target)
                         QMetaObject::invokeMethod(
                             target,
-                            [target, completed, total, path = stackFrame.path]() {
-                                if (target) emit target->stackProcessingProgress(completed, total, path);
+                            [target, generation, myGeneration, completed, total, path = stackFrame.path]() {
+                                if (target && generation->load(std::memory_order_relaxed) == myGeneration)
+                                    emit target->stackProcessingProgress(completed, total, path);
                             },
                             Qt::QueuedConnection);
                 }
@@ -345,13 +370,15 @@ void ImageProcessor::processStackAsync(const QVector<StackFrame> &frames, const 
         if (geometry.applyPending && (geometry.crop != fullFrame || std::abs(geometry.angle) > 0.0001))
             linearMaster = applyGeometry(linearMaster, geometry.crop, geometry.angle);
         if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
+        auto stagedMaster  = std::make_shared<StagedStackMaster>();
+        stagedMaster->path = masterPath + QStringLiteral(".pending-") + QUuid::createUuid().toString(QUuid::Id128);
         QString writeError;
-        if (!LinearImageIO::writeExr(masterPath, linearMaster, &writeError)) return {{}, writeError, false};
+        if (!LinearImageIO::writeExr(stagedMaster->path, linearMaster, &writeError)) return {{}, writeError, false};
 
         if (generation->load(std::memory_order_relaxed) != myGeneration) return {{}, {}, true};
         const QImage preview = pipeline->run(linearMaster, {}, {}, RunMode::Commit).image;
         if (preview.isNull()) return {{}, QStringLiteral("Could not create the stack preview."), false};
-        return {preview, {}, false, cachedFrames};
+        return {preview, {}, false, cachedFrames, std::move(stagedMaster)};
     }));
 }
 
@@ -361,5 +388,7 @@ void ImageProcessor::cancelStackProcessing() {
 }
 
 bool ImageProcessor::isStackProcessing() const {
-    return m_stackWatcher && m_stackWatcher->isRunning();
+    // A finished future still owns an unpublished result until its queued
+    // completion reaches the UI thread.
+    return m_stackWatcher != nullptr;
 }

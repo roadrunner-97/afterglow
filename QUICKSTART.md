@@ -114,12 +114,16 @@ Select a frame and choose **Set Selected as Reference**, then use **Edit
 Reference in Develop** to tune it. Return to Stack and press **Rebuild Stack**
 when ready. Rebuilds run as a streaming full-resolution lighten blend, show
 per-frame progress, and can be cancelled. The previous result remains available
-until a rebuild completes successfully. Use **Save Stack…** to export it.
+until a rebuild completes successfully. Cancelled or failed builds preserve the
+previous master as well. If you change processing devices during a build and it
+stops, press **Rebuild Stack** to start again on the selected device.
+Use **Save Stack…** to export the preview, or **Send to Develop** to edit the
+32-bit linear EXR master.
 
-The first rebuild writes each developed frame as a lossless PNG below
-`.afterglow/stack-frames/` beside the shoot. Later rebuilds reuse those disk
-renders when only frame inclusion changes. Changing the golden reference's
-Develop settings or modifying a source photo invalidates the affected cache.
+The first rebuild caches groups of frames as float EXR composites below
+`.afterglow/stack-cache/` in the project folder. Later rebuilds reuse unchanged
+groups. Changing frame inclusion, the golden reference's Develop settings, or
+a source photo invalidates the affected cache.
 **Debug → Purge Photo Caches…** removes stack renders along with thumbnails and
 proofs.
 

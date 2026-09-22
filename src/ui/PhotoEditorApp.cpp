@@ -318,7 +318,7 @@ PhotoEditorApp::PhotoEditorApp(EffectManager *effectManager, QWidget *parent)
     });
     connect(m_processor, &ImageProcessor::stackProcessingProgress, this,
             [this](int completed, int total, const QString &path) {
-                m_stackWorkspace->setProgress(completed, total, path);
+                if (!m_stackBuildMasterPath.isEmpty()) m_stackWorkspace->setProgress(completed, total, path);
             });
     connect(m_processor, &ImageProcessor::stackProcessingComplete, this, &PhotoEditorApp::onStackProcessingComplete);
 
@@ -1685,7 +1685,8 @@ void PhotoEditorApp::rebuildStack() {
         return;
     }
     persistStackProject();
-    m_stackMasterPath = StackProjectStore::masterPath(projectFolder);
+    m_stackMasterPath      = StackProjectStore::masterPath(projectFolder);
+    m_stackBuildMasterPath = m_stackMasterPath;
     m_processor->processStackAsync(m_stackWorkspace->frames(), *m_effects, settings,
                                    m_stackWorkspace->aggregationConfig(), projectFolder, m_stackMasterPath);
 }
@@ -1762,6 +1763,9 @@ void PhotoEditorApp::sendStackToDevelop() {
 
 void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QString &error, bool cancelled,
                                                int cachedFrames) {
+    const QString builtMasterPath = m_stackBuildMasterPath;
+    m_stackBuildMasterPath.clear();
+    if (builtMasterPath.isEmpty() || builtMasterPath != m_stackMasterPath) return;
     m_uiState.setProcessing(false);
     m_processingLabel->setText("Processing…");
     m_processingLabel->setVisible(false);
@@ -1779,9 +1783,9 @@ void PhotoEditorApp::onStackProcessingComplete(const QImage &result, const QStri
     // A newly-built master starts a fresh neutral Develop pass. The project
     // manifest and master are persistent; these are only the previous pass's
     // settings/history sidecars.
-    QFile::remove(sidecarPathFor(m_stackMasterPath));
-    QFile::remove(historySidecarPathFor(m_stackMasterPath));
-    m_stackWorkspace->setMasterAvailable(QFileInfo::exists(m_stackMasterPath));
+    QFile::remove(sidecarPathFor(builtMasterPath));
+    QFile::remove(historySidecarPathFor(builtMasterPath));
+    m_stackWorkspace->setMasterAvailable(QFileInfo::exists(builtMasterPath));
     m_stackWorkspace->setStatus(QStringLiteral("Stack complete · %1 × %2 pixels · reused %3 cached frame(s)")
                                     .arg(result.width())
                                     .arg(result.height())
@@ -1823,7 +1827,15 @@ static const QStringList &imageExtensions() {
 }
 
 void PhotoEditorApp::loadFolderIntoGrid(const QString &folder) {
-    if (m_processor->isStackProcessing()) m_processor->cancelStackProcessing();
+    if (m_processor->isStackProcessing()) {
+        m_processor->cancelStackProcessing();
+        m_stackBuildMasterPath.clear();
+        m_uiState.setProcessing(false);
+        m_processingLabel->setText("Processing…");
+        m_processingLabel->setVisible(false);
+        m_stackWorkspace->setBuilding(false);
+    }
+    ++m_stackPreviewGeneration;
     QStringList  allPaths;
     QDirIterator it(folder, QDir::Files | QDir::Readable, QDirIterator::NoIteratorFlags);
     while (it.hasNext()) {

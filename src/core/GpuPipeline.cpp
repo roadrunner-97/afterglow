@@ -483,6 +483,12 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
     }
     std::lock_guard<std::mutex> lock(m_mutex);
     const int                   rev = GpuDeviceRegistry::instance().revision();
+    // A seeded accumulator cannot migrate to a new context: resetting it here
+    // would silently discard all the frames already included in the stack.
+    if (accumulator->seeded && (!m_available || accumulator->revision != rev || accumulator->revision != m_revision)) {
+        if (error) *error = QStringLiteral("The GPU device or context changed during stacking. Rebuild the stack.");
+        return false;
+    }
     if (!m_available || m_revision != rev) {
         m_available    = false;
         m_lastImageKey = 0;
@@ -499,6 +505,10 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
     }
 
     try {
+        if (accumulator->seeded && accumulator->buffer.getInfo<CL_MEM_CONTEXT>() != m_context) {
+            if (error) *error = QStringLiteral("The stack accumulator belongs to a different GPU context.");
+            return false;
+        }
         for (const auto &call : calls) {
             if (m_initializedEffects.find(call.gpu) != m_initializedEffects.end()) continue;
             if (!call.gpu->initGpuKernels(m_context, m_device)) {
@@ -528,7 +538,6 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
                                       static_cast<float>(m_width), static_cast<float>(m_height), calls,
                                       localAdjustments);
 
-        if (accumulator->revision != m_revision) *accumulator = {};
         if (!accumulator->seeded) {
             accumulator->width    = m_width;
             accumulator->height   = m_height;
@@ -564,11 +573,16 @@ bool GpuPipeline::processAndAccumulate(const QImage &image, const QVector<GpuPip
 QImage GpuPipeline::readStackAccumulator(const GpuStackAccumulator &accumulator, IStackAggregationStrategy &strategy,
                                          QString *error) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!accumulator.seeded || accumulator.revision != m_revision) {
+    if (!accumulator.seeded || !m_available || accumulator.revision != m_revision ||
+        accumulator.revision != GpuDeviceRegistry::instance().revision()) {
         if (error) *error = QStringLiteral("The stack accumulator is empty or belongs to an old GPU context.");
         return {};
     }
     try {
+        if (accumulator.buffer.getInfo<CL_MEM_CONTEXT>() != m_context) {
+            if (error) *error = QStringLiteral("The stack accumulator belongs to a different GPU context.");
+            return {};
+        }
         QImage       result(accumulator.width, accumulator.height, QImage::Format_RGBA32FPx4);
         const size_t bytes =
             static_cast<size_t>(accumulator.width) * static_cast<size_t>(accumulator.height) * sizeof(cl_float4);
@@ -576,6 +590,10 @@ QImage GpuPipeline::readStackAccumulator(const GpuStackAccumulator &accumulator,
         if (!strategy.resolve(m_queue, accumulator.buffer, linearResult, accumulator.width, accumulator.height, error))
             return {};
         m_queue.enqueueReadBuffer(linearResult, CL_TRUE, 0, bytes, result.bits());
+        if (accumulator.revision != GpuDeviceRegistry::instance().revision()) {
+            if (error) *error = QStringLiteral("The GPU device changed during stacking. Rebuild the stack.");
+            return {};
+        }
         result.setText(QStringLiteral("color_space"), QStringLiteral("linear"));
         return result;
     }
@@ -786,7 +804,7 @@ void GpuPipeline::uploadImageLocked(const QImage &image) {
     const bool isFloat = (image.format() == QImage::Format_RGBA32FPx4 || image.format() == QImage::Format_RGBX32FPx4);
     const int  bpp     = isFloat ? 16 : (is16bit ? 8 : 4);
 
-    QImage src = (is16bit || isFloat) ? image : image.convertToFormat(QImage::Format_RGB32);
+    const QImage src = (is16bit || isFloat) ? image : image.convertToFormat(QImage::Format_RGB32);
 
     m_width    = src.width();
     m_height   = src.height();
@@ -805,7 +823,10 @@ void GpuPipeline::uploadImageLocked(const QImage &image) {
     m_processedCalls.clear();
 
     try {
-        m_srcBuf       = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, m_bufBytes, src.bits());
+        // CL_MEM_COPY_HOST_PTR only reads this pointer, despite OpenCL's void*
+        // API. Writable QImage access would detach and copy the entire frame.
+        m_srcBuf       = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, m_bufBytes,
+                                    const_cast<uchar *>(src.constBits()));
         m_lastImageKey = image.cacheKey();
     }
     // GCOVR_EXCL_START
